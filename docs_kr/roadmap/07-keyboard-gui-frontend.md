@@ -17,6 +17,7 @@
 - `run_acidnet_gui.py`
 - `run_dev_world.ps1`
 - `run_monkey_world.py`
+- `run_tail_event_log.ps1`
 
 ## 실행 방법
 
@@ -38,6 +39,18 @@ powershell -ExecutionPolicy Bypass -File run_dev_world.ps1 -Detached
 ```
 
 이 dev launcher 는 이제 기본적으로 GUI monkey mode 를 켜서, 수동 입력이 없어도 월드가 계속 움직이게 한다.
+
+별도 창에서 plain-text event log tail:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File run_tail_event_log.ps1 -Path data/logs/dev-world.log
+```
+
+GUI 와 tail 을 같이 실행:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File run_dev_world.ps1 -Detached -TailLog
+```
 
 prompt-only local model 관찰:
 

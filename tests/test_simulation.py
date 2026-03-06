@@ -51,3 +51,17 @@ def test_snapshot_contains_serializable_runtime_state() -> None:
     assert snapshot["player"]["location_id"] == "square"
     assert "npc.mara" in snapshot["npcs"]
     assert "rumor.shortage.wheat" in snapshot["rumors"]
+
+
+def test_vendor_with_food_eats_instead_of_trying_to_trade_with_self() -> None:
+    simulation = Simulation.create_demo()
+    hobb = simulation.npcs["npc.hobb"]
+    hobb.location_id = "farm"
+    hobb.hunger = 54.0
+    hobb.inventory = {"bread": 4}
+
+    simulation.advance_turn(1)
+
+    assert hobb.current_intent is not None
+    assert hobb.current_intent.intent_type.value == "eat"
+    assert hobb.inventory.get("bread", 0) == 3

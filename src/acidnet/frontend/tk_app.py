@@ -7,7 +7,7 @@ from pathlib import Path
 
 from acidnet.engine import Simulation
 from acidnet.eval import SimulationMonkeyRunner
-from acidnet.storage import SQLiteWorldStore
+from acidnet.storage import EventLogFile, SQLiteWorldStore
 
 FONT_BODY = ("Consolas", 11)
 FONT_TITLE = ("Consolas", 12, "bold")
@@ -51,6 +51,7 @@ class AcidNetApp(tk.Tk):
         monkey_steps: int = 160,
         monkey_delay_ms: int = 350,
         monkey_seed: int = 7,
+        event_log_path: str | Path | None = Path("data") / "logs" / "acidnet-events.log",
     ) -> None:
         super().__init__()
         self.title("acidnet village")
@@ -64,6 +65,7 @@ class AcidNetApp(tk.Tk):
             dialogue_endpoint=dialogue_endpoint,
         )
         self.store = SQLiteWorldStore(db_path) if persist else None
+        self.event_log = EventLogFile(event_log_path) if event_log_path is not None else None
         self.selected_location_id = self.simulation.player.location_id
         self.status_var = tk.StringVar()
         self.footer_var = tk.StringVar()
@@ -94,6 +96,14 @@ class AcidNetApp(tk.Tk):
 
         if self.store is not None:
             self._save_snapshot("session_start", "GUI session started.", {"entrypoint": "gui"})
+        if self.event_log is not None:
+            self.event_log.write(
+                kind="session_start",
+                message="GUI session started.",
+                day=self.simulation.world.day,
+                tick=self.simulation.world.tick,
+                payload={"entrypoint": "gui", "dialogue_backend": dialogue_backend},
+            )
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         if self.monkey_enabled:
@@ -382,6 +392,13 @@ class AcidNetApp(tk.Tk):
         self.log_text.configure(state="normal")
         for line in lines:
             self.log_text.insert(tk.END, prefix + line + "\n")
+            if self.event_log is not None:
+                self.event_log.write(
+                    kind=kind,
+                    message=line,
+                    day=self.simulation.world.day,
+                    tick=self.simulation.world.tick,
+                )
         self.log_text.see(tk.END)
         self.log_text.configure(state="disabled")
 
@@ -476,6 +493,16 @@ class AcidNetApp(tk.Tk):
             self._save_snapshot("session_end", "GUI session ended.", {"entrypoint": "gui"})
             self.store.close()
             self.store = None
+        if self.event_log is not None:
+            self.event_log.write(
+                kind="session_end",
+                message="GUI session ended.",
+                day=self.simulation.world.day,
+                tick=self.simulation.world.tick,
+                payload={"entrypoint": "gui"},
+            )
+            self.event_log.close()
+            self.event_log = None
         self.destroy()
 
     def _run_monkey_step(self) -> None:
@@ -522,6 +549,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="OpenAI-compatible endpoint for runtime dialogue generation.",
     )
     parser.add_argument(
+        "--event-log",
+        default=str(Path("data") / "logs" / "acidnet-events.log"),
+        help="Plain-text event log path for tailing runtime events.",
+    )
+    parser.add_argument(
+        "--no-event-log",
+        action="store_true",
+        help="Disable plain-text event log file output.",
+    )
+    parser.add_argument(
         "--monkey",
         action="store_true",
         help="Enable automated GUI monkey actions for observation.",
@@ -555,6 +592,7 @@ def main() -> None:
         dialogue_backend=args.dialogue_backend,
         dialogue_model=args.dialogue_model,
         dialogue_endpoint=args.dialogue_endpoint,
+        event_log_path=None if args.no_event_log else args.event_log,
         monkey=args.monkey,
         monkey_steps=args.monkey_steps,
         monkey_delay_ms=args.monkey_delay_ms,

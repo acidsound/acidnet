@@ -17,6 +17,7 @@ Entry point:
 - `run_acidnet_gui.py`
 - `run_dev_world.ps1`
 - `run_monkey_world.py`
+- `run_tail_event_log.ps1`
 
 ## How To Run
 
@@ -38,6 +39,18 @@ powershell -ExecutionPolicy Bypass -File run_dev_world.ps1 -Detached
 ```
 
 The dev launcher now enables GUI monkey mode by default, so the world keeps moving even without manual input.
+
+Tail the plain-text event log in a separate window:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File run_tail_event_log.ps1 -Path data/logs/dev-world.log
+```
+
+Launch GUI and tail together:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File run_dev_world.ps1 -Detached -TailLog
+```
 
 Prompt-only local model observation:
 

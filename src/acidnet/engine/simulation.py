@@ -387,7 +387,7 @@ class Simulation:
     def _build_planner_context(self, npc: NPCState) -> PlannerContext:
         top_goals: list[str] = []
         food_item = self._best_food_in_inventory(npc.inventory)
-        if npc.hunger >= 55 and food_item is not None:
+        if npc.hunger >= 45 and food_item is not None:
             top_goals.append(f"eat:{food_item}")
         elif npc.hunger >= 45:
             vendor = self._nearest_food_vendor(npc)
@@ -407,7 +407,10 @@ class Simulation:
         if rumor_target is not None:
             top_goals.append(f"share_rumor:{rumor_target.npc_id}")
 
-        if npc.workplace_id is not None and npc.location_id != npc.workplace_id:
+        supply_goal = self._profession_supply_goal(npc)
+        if supply_goal is not None:
+            top_goals.append(supply_goal)
+        elif npc.workplace_id is not None and npc.location_id != npc.workplace_id:
             top_goals.append(f"move:{npc.workplace_id}")
         else:
             top_goals.append(f"work:{npc.workplace_id or npc.location_id}")
@@ -469,8 +472,11 @@ class Simulation:
             if npc.inventory.get("wheat", 0) <= 0:
                 farmer = self.npcs["npc.anik"]
                 if npc.location_id == farmer.location_id:
-                    self._npc_buy_specific_item(npc, farmer, "wheat", 1)
-                    return f"{npc.name} buys wheat from {farmer.name}."
+                    bought = self._npc_buy_specific_item(npc, farmer, "wheat", 3)
+                    if bought is not None:
+                        return f"{npc.name} buys wheat from {farmer.name}."
+                    self._adjust_item(npc.inventory, "wheat", 2)
+                    return f"{npc.name} gathers emergency wheat stores."
                 destination = self._next_hop(npc.location_id, farmer.location_id)
                 if destination and destination != npc.location_id:
                     npc.location_id = destination
@@ -483,8 +489,11 @@ class Simulation:
             if npc.inventory.get("fish", 0) <= 0:
                 fisher = self.npcs["npc.toma"]
                 if npc.location_id == fisher.location_id:
-                    self._npc_buy_specific_item(npc, fisher, "fish", 1)
-                    return f"{npc.name} buys fish from {fisher.name}."
+                    bought = self._npc_buy_specific_item(npc, fisher, "fish", 2)
+                    if bought is not None:
+                        return f"{npc.name} buys fish from {fisher.name}."
+                    self._adjust_item(npc.inventory, "fish", 1)
+                    return f"{npc.name} secures a small backup fish stock."
                 destination = self._next_hop(npc.location_id, fisher.location_id)
                 if destination and destination != npc.location_id:
                     npc.location_id = destination
@@ -500,6 +509,8 @@ class Simulation:
         return None
 
     def _npc_buy_food(self, npc: NPCState, vendor: NPCState) -> str | None:
+        if npc.npc_id == vendor.npc_id:
+            return None
         food = self._best_food_in_inventory(vendor.inventory)
         if food is None or npc.money <= 0:
             return None
@@ -680,24 +691,33 @@ class Simulation:
         stocked_food = sum(npc.inventory.get(item, 0) for item in ("bread", "stew", "fish"))
         if stocked_food >= 5:
             return None
-        suppliers = [self.npcs["npc.hobb"], self.npcs["npc.bina"], self.npcs["npc.toma"]]
-        suppliers = [supplier for supplier in suppliers if self._best_food_in_inventory(supplier.inventory) is not None]
-        if not suppliers:
-            return None
-        suppliers.sort(key=lambda supplier: (self._path_length(npc.location_id, supplier.location_id), -supplier.money))
-        supplier = suppliers[0]
-        item = self._best_food_in_inventory(supplier.inventory)
-        if item is None:
-            return None
-        if npc.location_id == supplier.location_id:
-            result = self._npc_buy_specific_item(npc, supplier, item, 1)
+        for supplier in self._merchant_suppliers():
+            if supplier.location_id != npc.location_id:
+                continue
+            item = self._best_food_in_inventory(supplier.inventory)
+            if item is None:
+                continue
+            result = self._npc_buy_specific_item(npc, supplier, item, 2)
             if result is not None:
                 return result
-        destination = self._next_hop(npc.location_id, supplier.location_id)
-        if destination and destination != npc.location_id:
-            npc.location_id = destination
-            return f"{npc.name} heads out to restock food supplies."
         return None
+
+    def _profession_supply_goal(self, npc: NPCState) -> str | None:
+        if npc.profession == "baker" and npc.inventory.get("wheat", 0) <= 0:
+            supplier = self.npcs["npc.anik"]
+            if npc.location_id == supplier.location_id:
+                return f"work:{npc.location_id}"
+            return f"move:{supplier.location_id}"
+        if npc.profession == "cook" and npc.inventory.get("fish", 0) <= 0:
+            supplier = self.npcs["npc.toma"]
+            if npc.location_id == supplier.location_id:
+                return f"work:{npc.location_id}"
+            return f"move:{supplier.location_id}"
+        return None
+
+    def _merchant_suppliers(self) -> list[NPCState]:
+        suppliers = [self.npcs["npc.hobb"], self.npcs["npc.bina"], self.npcs["npc.toma"]]
+        return [supplier for supplier in suppliers if self._best_food_in_inventory(supplier.inventory) is not None]
 
     def _wild_food_fallback_location(self, npc: NPCState) -> str | None:
         for location_id in (npc.location_id, "farm", "riverside"):
@@ -742,7 +762,11 @@ class Simulation:
         return None
 
     def _nearest_food_vendor(self, npc: NPCState) -> NPCState | None:
-        candidates = [other for other in self.npcs.values() if other.is_vendor and self._best_food_in_inventory(other.inventory)]
+        candidates = [
+            other
+            for other in self.npcs.values()
+            if other.npc_id != npc.npc_id and other.is_vendor and self._best_food_in_inventory(other.inventory)
+        ]
         if not candidates:
             return None
         candidates.sort(key=lambda other: self._path_length(npc.location_id, other.location_id))

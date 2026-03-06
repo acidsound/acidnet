@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 
 from acidnet.engine import Simulation
-from acidnet.storage import SQLiteWorldStore
+from acidnet.storage import EventLogFile, SQLiteWorldStore
 
 INTRO = """acidnet playable village MVP
 
@@ -24,6 +24,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-persist",
         action="store_true",
         help="Disable SQLite snapshot persistence for this session.",
+    )
+    parser.add_argument(
+        "--event-log",
+        default=str(Path("data") / "logs" / "acidnet-events.log"),
+        help="Plain-text event log path for tailing runtime events.",
+    )
+    parser.add_argument(
+        "--no-event-log",
+        action="store_true",
+        help="Disable plain-text event log file output.",
     )
     parser.add_argument(
         "--dialogue-backend",
@@ -52,6 +62,7 @@ def main() -> None:
         dialogue_endpoint=args.dialogue_endpoint,
     )
     store = None if args.no_persist else SQLiteWorldStore(args.db)
+    event_log = None if args.no_event_log else EventLogFile(args.event_log)
 
     if store is not None:
         store.save_simulation(
@@ -60,10 +71,20 @@ def main() -> None:
             message="CLI session started.",
             payload={"entrypoint": "cli"},
         )
+    if event_log is not None:
+        event_log.write(
+            kind="session_start",
+            message="CLI session started.",
+            day=simulation.world.day,
+            tick=simulation.world.tick,
+            payload={"entrypoint": "cli", "dialogue_backend": args.dialogue_backend},
+        )
 
     print(INTRO)
     if store is not None:
         print(f"Persistence: {Path(args.db)}")
+    if event_log is not None:
+        print(f"Event log: {Path(args.event_log)}")
     print(f"Dialogue backend: {args.dialogue_backend}")
     print(simulation.help_text())
     print()
@@ -91,6 +112,14 @@ def main() -> None:
                     message=raw,
                     payload={"result_lines": result.lines},
                 )
+            if event_log is not None:
+                event_log.write(
+                    kind="command",
+                    message=raw,
+                    day=simulation.world.day,
+                    tick=simulation.world.tick,
+                    payload={"result_lines": result.lines},
+                )
             if result.lines:
                 print("\n".join(line for line in result.lines if line))
     finally:
@@ -102,3 +131,12 @@ def main() -> None:
                 payload={"entrypoint": "cli"},
             )
             store.close()
+        if event_log is not None:
+            event_log.write(
+                kind="session_end",
+                message="CLI session ended.",
+                day=simulation.world.day,
+                tick=simulation.world.tick,
+                payload={"entrypoint": "cli"},
+            )
+            event_log.close()

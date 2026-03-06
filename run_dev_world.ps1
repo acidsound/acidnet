@@ -9,7 +9,10 @@ param(
     [switch]$NoMonkey,
     [int]$MonkeySteps = 160,
     [int]$MonkeyDelayMs = 350,
-    [int]$MonkeySeed = 7
+    [int]$MonkeySeed = 7,
+    [string]$EventLogPath = "data/logs/dev-world.log",
+    [switch]$NoEventLog,
+    [switch]$TailLog
 )
 
 $ErrorActionPreference = "Stop"
@@ -28,6 +31,12 @@ if ($DialogueModel) {
 if ($DialogueEndpoint) {
     $GuiArgs += "--dialogue-endpoint"
     $GuiArgs += $DialogueEndpoint
+}
+if ($NoEventLog) {
+    $GuiArgs += "--no-event-log"
+} else {
+    $GuiArgs += "--event-log"
+    $GuiArgs += $EventLogPath
 }
 if (-not $NoMonkey) {
     $GuiArgs += "--monkey"
@@ -57,6 +66,12 @@ if ($RunPromptOnlyEval) {
     & python @EvalArgs
 }
 
+if ($TailLog -and -not $NoEventLog) {
+    Start-Process -FilePath "powershell" `
+        -ArgumentList @("-ExecutionPolicy", "Bypass", "-File", ".\run_tail_event_log.ps1", "-Path", $EventLogPath) `
+        -WorkingDirectory $ScriptRoot | Out-Null
+}
+
 if ($Detached) {
     $Process = Start-Process -FilePath "python" -ArgumentList $GuiArgs -WorkingDirectory $ScriptRoot -PassThru
     Write-Host ("Started acidnet GUI (PID {0}) with backend '{1}'." -f $Process.Id, $DialogueBackend)
@@ -65,6 +80,9 @@ if ($Detached) {
     }
     if (-not $NoMonkey) {
         Write-Host ("Monkey mode enabled: {0} steps, {1}ms delay, seed {2}." -f $MonkeySteps, $MonkeyDelayMs, $MonkeySeed)
+    }
+    if (-not $NoEventLog) {
+        Write-Host ("Event log: {0}" -f $EventLogPath)
     }
     exit 0
 }
@@ -75,5 +93,8 @@ if (-not $Persist) {
 }
 if (-not $NoMonkey) {
     Write-Host ("Monkey mode enabled: {0} steps, {1}ms delay, seed {2}." -f $MonkeySteps, $MonkeyDelayMs, $MonkeySeed)
+}
+if (-not $NoEventLog) {
+    Write-Host ("Event log: {0}" -f $EventLogPath)
 }
 & python @GuiArgs
