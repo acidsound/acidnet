@@ -53,6 +53,12 @@ The current project baseline is:
 - make every destructive chain include a plausible recovery path
 - the first weather -> field stress -> harvest shortfall -> rain recovery chain is now in place
 
+### Phase 5.5: Entropy Sinks
+
+- add internal sinks so inventories and production do not stay perfectly stable forever
+- keep sinks legible and recoverable instead of punitive noise
+- food spoilage and repeated tool wear are now in place; next work is storage pressure, delayed production, and monkey validation of exploit resistance
+
 ### Phase 6: Multi-Settlement Scaling
 
 - add summarized regional nodes
@@ -63,11 +69,10 @@ The current project baseline is:
 
 The current immediate queue is:
 
-1. `23`: lock the API contract
-2. backend parity audit: heuristic vs openai-compatible vs local-peft
-3. `20B`: travel, rest, sleep, fatigue, and route progress
-4. `20C`: unified exchange
-5. `20E`: goal monkeys
+1. backend parity audit: heuristic vs openai-compatible vs local-peft
+2. complete `20G` with one more economy sink or buffer rule
+3. extend goal monkeys for shock and exploit observation
+4. continue toward `20H` summarized regional scaling
 
 ## Removal Work
 

@@ -18,6 +18,8 @@ def test_talking_to_npc_can_surface_a_rumor() -> None:
 
     assert any("dry wind" in line for line in result.lines)
     assert simulation.player.known_rumor_ids
+    assert not any("leans closer" in line for line in result.lines)
+    assert not any("adds quietly" in line for line in result.lines)
 
 
 def test_player_can_say_freeform_message_to_npc() -> None:
@@ -42,6 +44,32 @@ def test_heuristic_dialogue_honors_korean_language_request_in_system_prompt() ->
 
     assert any("\uac00" <= char <= "\ud7a3" for char in text)
     assert "Stories travel faster than thread in this village." not in text
+
+
+def test_asking_for_rumor_does_not_emit_english_npc_postfix_under_korean_prompt() -> None:
+    simulation = Simulation.create_demo(dialogue_backend="heuristic")
+    simulation.set_dialogue_system_prompt(
+        "You are a village NPC. Respond in exactly one language. That language must be Korean. ?쒓뎅?대쭔 ?ъ슜??"
+    )
+
+    result = simulation.handle_command("ask neri rumor")
+
+    assert not any("leans closer" in line for line in result.lines)
+    assert not any("adds quietly" in line for line in result.lines)
+    assert sum(1 for entry in result.entries if entry.kind == "npc") == 1
+    assert any(entry.kind == "system" and "소문" in entry.text for entry in result.entries)
+
+
+def test_ask_non_rumor_fallback_is_localized_under_korean_prompt() -> None:
+    simulation = Simulation.create_demo(dialogue_backend="heuristic")
+    simulation.set_dialogue_system_prompt(
+        "You are a village NPC. Respond in exactly one language. That language must be Korean. Korean only."
+    )
+
+    result = simulation.handle_command("ask neri weather")
+
+    assert any("소문" in line for line in result.lines)
+    assert not any("Ask about rumors" in line for line in result.lines)
 
 
 def test_demo_world_starts_with_multiple_distinct_rumors() -> None:
@@ -204,6 +232,39 @@ def test_player_can_give_items_without_payment() -> None:
     assert simulation.player.money == starting_money
     assert simulation.player.inventory.get("bread", 0) == 1
     assert simulation.npcs["npc.mara"].inventory.get("bread", 0) == starting_bread + 1
+
+
+def test_food_spoilage_reduces_player_inventory_over_time() -> None:
+    simulation = Simulation.create_demo()
+    simulation.world.market.items["fish"].spoilage_ticks = 24
+    simulation.player.inventory["fish"] = 2
+
+    result = simulation.advance_turn(2)
+
+    assert simulation.player.inventory.get("fish", 0) == 1
+    assert any("fish spoils in your pack" in line for line in result.lines)
+
+
+def test_tool_wear_breaks_player_tool_after_repeated_field_work() -> None:
+    simulation = Simulation.create_demo()
+    simulation.player.location_id = "farm"
+    simulation.player.inventory["tool"] = 1
+
+    for _ in range(4):
+        simulation.handle_command("work")
+
+    assert simulation.player.inventory.get("tool", 0) == 0
+
+
+def test_work_without_tool_reduces_farm_yield() -> None:
+    simulation = Simulation.create_demo()
+    simulation.player.location_id = "farm"
+    simulation.world.weather = "clear"
+    simulation.player.inventory.pop("tool", None)
+
+    result = simulation.handle_command("work")
+
+    assert any("gather 1 wheat" in line.lower() for line in result.lines)
 
 
 def test_talk_without_target_is_rejected_when_multiple_npcs_are_present() -> None:
@@ -387,6 +448,7 @@ def test_player_can_work_for_gold_and_resources() -> None:
     simulation.player.location_id = "farm"
     simulation.world.weather = "clear"
     simulation.world.field_stress = 0.0
+    simulation.player.inventory["tool"] = 1
     farm_wheat = simulation.player.inventory.get("wheat", 0)
     farm_result = simulation.handle_command("work")
 

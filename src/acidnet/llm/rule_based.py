@@ -106,15 +106,15 @@ def _profession_opener(context: DialogueContext, *, language: str) -> str:
             "tailor": "Stories travel faster than thread in this village.",
         },
         "ko": {
-            "merchant": "여긴 값이 사람 마음보다 빨리 움직여.",
+            "merchant": "장터 값은 사람 마음보다 빨리 흔들려.",
             "farmer": "밭은 소원보다 날씨에 먼저 대답해.",
-            "baker": "빵이랑 소문은 둘 다 금방 퍼져.",
-            "cook": "필요한 말이면 빨리 해.",
-            "blacksmith": "중요하면 돌려 말하지 마.",
-            "guard": "문제만 만들지 않으면 얘기해도 돼.",
-            "fisher": "강은 한 시간마다 표정이 달라져.",
+            "baker": "빵 굽는 일엔 손과 소식이 같이 들어와.",
+            "cook": "솥이 타기 전에 할 말부터 해.",
+            "blacksmith": "중요한 말이면 곧게 해.",
+            "guard": "문제만 만들지 않으면 이야기는 들을 수 있어.",
+            "fisher": "강물은 한 시간마다 뜻을 바꿔.",
             "priest": "숨부터 고르고 말해.",
-            "tailor": "이 마을에선 실보다 이야기가 더 빨라.",
+            "tailor": "이 마을에선 실보다 이야기가 먼저 돈다.",
         },
     }
     localized = openers.get(language, openers["en"])
@@ -128,7 +128,7 @@ def _profession_opener(context: DialogueContext, *, language: str) -> str:
         return f"{context.npc.name} recognizes you. \"{line}\""
     if context.relationship_score <= -0.2:
         if language == "ko":
-            return f'{context.npc.name}이 너를 유심히 본다. "{line}"'
+            return f'{context.npc.name}이 너를 조심스럽게 살핀다. "{line}"'
         return f"{context.npc.name} studies you carefully. \"{line}\""
     if language == "ko":
         return f'{context.npc.name}이 말한다. "{line}"'
@@ -141,7 +141,7 @@ def _memory_line(context: DialogueContext, *, language: str) -> str:
     memory = context.salient_memories[0]
     if "trade" in memory.tags:
         if language == "ko":
-            return "전에도 거래한 기억이 있어."
+            return "전에 거래한 기억은 남아 있어."
         return "You remember we have done business before."
     if "npc_talk" in memory.tags or "player_talk" in memory.tags:
         if language == "ko":
@@ -149,7 +149,7 @@ def _memory_line(context: DialogueContext, *, language: str) -> str:
         return "You are not entirely new to me anymore."
     if "heard_rumor" in memory.tags:
         if language == "ko":
-            return "요즘은 다들 평소보다 더 많이 떠들어."
+            return "요즘은 평소보다 입들이 더 바쁘더라."
         return "People have been talking more than usual."
     return ""
 
@@ -158,18 +158,18 @@ def _pressure_line(context: DialogueContext, *, language: str) -> str:
     parts: list[str] = []
     if context.npc.hunger >= 60:
         if language == "ko":
-            parts.append("먹을거리를 계속 신경 쓰고 있어.")
+            parts.append("먹을거리부터 챙겨야 해서 마음이 바쁘다.")
         else:
             parts.append("I am trying to keep one eye on food.")
     if context.world.market.scarcity_index >= 1.2:
         if language == "ko":
-            parts.append("마을 살림이 평소보다 팍팍해.")
+            parts.append("마을 공기가 평소보다 더 팽팽하다.")
         else:
             parts.append("The village feels tighter than usual.")
     for belief in context.salient_beliefs:
         if belief.predicate == "expects_grain_shortage" and belief.confidence >= 0.6:
             if language == "ko":
-                parts.append("이 날씨가 계속되면 곡물이 모자랄 거야.")
+                parts.append("이 날씨가 계속되면 곡물이 모자랄 거다.")
             else:
                 parts.append("Grain looks thin if this weather keeps up.")
             break
@@ -193,15 +193,15 @@ def _rumor_line(context: DialogueContext, *, language: str) -> tuple[str, list[s
 def _trade_line(context: DialogueContext, *, language: str) -> str:
     if not context.npc.is_vendor:
         if language == "ko":
-            return "지금은 내놓을 만한 물건이 없어."
+            return "지금은 내놓을 만한 물건이 없다."
         return "I am not selling anything worth your time."
     goods = [f"{item} x{qty}" for item, qty in context.npc.inventory.items() if qty > 0]
     if not goods:
         if language == "ko":
-            return "지금은 재고가 많이 비었어."
+            return "지금은 진열이 많이 비었다."
         return "Stock is thin right now."
     if language == "ko":
-        return f"지금은 {', '.join(goods[:3])} 정도는 내줄 수 있어."
+        return f"지금은 {', '.join(goods[:3])} 정도는 내어줄 수 있다."
     return f"I can move {', '.join(goods[:3])} if your coin is ready."
 
 
@@ -209,12 +209,12 @@ def _localized_rumor_summary(rumor: Rumor) -> str:
     if rumor.category.value == "shortage":
         return "식량이나 곡물이 곧 빠듯해질 거라는 말이 돌아."
     if rumor.category.value == "economy":
-        return "장터에선 값이 흔들릴 거라는 얘기가 많아."
+        return "장터에선 값과 흥정이 더 거칠어질 거라는 말이 돌아."
     if rumor.category.value == "danger":
-        return "마을 공기가 평소보다 거칠다는 소문이 있어."
+        return "마을 사람들이 주변 위험을 더 경계하고 있다는 말이 돌아."
     if rumor.category.value == "event":
-        return "날씨랑 현장 분위기가 일을 꼬이게 만들고 있다는 얘기가 돌아."
-    return "사람들 입에 오르는 이야기가 하나 있어."
+        return "날씨나 현장 분위기가 심상치 않다는 말이 돌아."
+    return "마을에 새 이야기가 돌고 있다."
 
 
 def _best_rumor(rumors: list[Rumor]) -> Rumor | None:

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Iterable
 
 from acidnet.llm import DialogueContext, DialogueModelAdapter, DialogueResult, RuleBasedDialogueAdapter, build_dialogue_adapter
-from acidnet.llm.prompt_builder import DEFAULT_SYSTEM_PROMPT, infer_interaction_mode
+from acidnet.llm.prompt_builder import DEFAULT_SYSTEM_PROMPT, infer_interaction_mode, preferred_output_language
 from acidnet.models import (
     Belief,
     EpisodicMemory,
@@ -78,6 +78,15 @@ FIELD_STRESS_WEATHER_DELTA = {
     "storm_front": 0.08,
 }
 HARVEST_SHORTFALL_EVENT_ID = "event.farm.harvest_shortfall"
+DEFAULT_SPOILAGE_TICKS = {
+    "fish": 24,
+    "stew": 36,
+    "bread": 72,
+    "wheat": 144,
+}
+TOOL_RELEVANT_LOCATIONS = {"farm", "riverside"}
+TOOL_RELEVANT_PROFESSIONS = {"farmer", "fisher"}
+TOOL_WEAR_INTERVAL = 4
 
 
 @dataclass(slots=True, frozen=True)
@@ -448,9 +457,9 @@ class Simulation:
         entries = [self._npc_dialogue_event(npc, self._generate_dialogue(npc, interaction_mode="talk", player_prompt=player_prompt))]
         self._record_dialogue_exchange(npc, player_prompt=player_prompt)
         self._change_relationship(npc, self.player.player_id, trust_delta=0.02, closeness_delta=0.04)
-        rumor_line = self._offer_rumor_to_player(npc, asked=False)
-        if rumor_line:
-            entries.extend(self._events("npc", [rumor_line]))
+        rumor_notice = self._offer_rumor_to_player(npc, asked=False)
+        if rumor_notice:
+            entries.extend(self._events("system", [rumor_notice]))
         entries.extend(self.advance_turn(1).entries)
         return TurnResult(entries)
 
@@ -473,9 +482,9 @@ class Simulation:
         self._record_dialogue_exchange(npc, player_prompt=player_prompt)
         self._change_relationship(npc, self.player.player_id, trust_delta=0.02, closeness_delta=0.05)
         if interaction_mode == "rumor_request":
-            rumor_line = self._offer_rumor_to_player(npc, asked=True)
-            if rumor_line:
-                entries.extend(self._events("npc", [rumor_line]))
+            rumor_notice = self._offer_rumor_to_player(npc, asked=True)
+            if rumor_notice:
+                entries.extend(self._events("system", [rumor_notice]))
         entries.extend(self.advance_turn(1).entries)
         return TurnResult(entries)
 
@@ -484,8 +493,14 @@ class Simulation:
         if npc is None:
             return TurnResult(self._events("system", [error]))
         if topic.lower() != "rumor":
+            language = preferred_output_language(self.dialogue_system_prompt)
+            fallback = (
+                '고개를 갸웃한다. "마을 소식이 궁금하면 소문을 물어봐."'
+                if language == "ko"
+                else 'tilts their head. "Ask about rumors if you want local news."'
+            )
             return TurnResult(
-                [self._npc_dialogue_event(npc, 'tilts their head. "Ask about rumors if you want local news."')]
+                [self._npc_dialogue_event(npc, fallback)]
             )
         player_prompt = "Have you heard any useful rumors?"
         result = [
@@ -495,9 +510,9 @@ class Simulation:
             )
         ]
         self._record_dialogue_exchange(npc, player_prompt=player_prompt)
-        rumor_line = self._offer_rumor_to_player(npc, asked=True)
-        if rumor_line is not None:
-            result.extend(self._events("npc", [rumor_line]))
+        rumor_notice = self._offer_rumor_to_player(npc, asked=True)
+        if rumor_notice is not None:
+            result.extend(self._events("system", [rumor_notice]))
         result.extend(self.advance_turn(1).entries)
         return TurnResult(result)
 
@@ -573,12 +588,17 @@ class Simulation:
         location = self.world.locations[self.player.location_id]
         lines: list[str] = []
         if location.location_id == "farm":
-            wheat_yield = self._farm_yield_amount()
+            wheat_yield = self._effective_work_amount(
+                self.player,
+                base_amount=self._farm_yield_amount(),
+                location_id=location.location_id,
+            )
             self._adjust_item(self.player.inventory, "wheat", wheat_yield)
             lines.append(f"You help in the south field and gather {wheat_yield} wheat.")
         elif location.location_id == "riverside":
-            self._adjust_item(self.player.inventory, "fish", 1)
-            lines.append("You spend a shift on the riverside and catch 1 fish.")
+            fish_yield = self._effective_work_amount(self.player, base_amount=1, location_id=location.location_id)
+            self._adjust_item(self.player.inventory, "fish", fish_yield)
+            lines.append(f"You spend a shift on the riverside and catch {fish_yield} fish.")
         elif location.location_id == "square":
             self.player.money += 4
             lines.append("You run market errands and earn 4 gold.")
@@ -603,6 +623,9 @@ class Simulation:
             summary=f"Worked at {location.name}.",
             importance=0.4,
         )
+        tool_wear_line = self._apply_tool_wear_if_due(self.player, location_id=location.location_id)
+        if tool_wear_line:
+            lines.append(tool_wear_line)
         self.player.fatigue = min(100.0, self.player.fatigue + 8.0)
         entries = self._events("system", lines)
         entries.extend(self.advance_turn(1).entries)
@@ -810,6 +833,9 @@ class Simulation:
         shock_events = self._advance_world_shocks()
         lines.extend(shock_events)
         self.tick_log.extend(shock_events)
+        spoilage_events = self._apply_spoilage()
+        lines.extend(spoilage_events)
+        self.tick_log.extend(spoilage_events)
         self._refresh_dynamic_rumors()
         self._decay_rumors()
         for npc in self.npcs.values():
@@ -930,6 +956,12 @@ class Simulation:
             return f"{npc.name} is too worn down to work and slows to a stop."
         if npc.profession in WORK_OUTPUT:
             item, amount = self._work_output_for(npc.profession)
+            amount = self._effective_work_amount(
+                npc,
+                base_amount=amount,
+                location_id=npc.location_id,
+                profession=npc.profession,
+            )
             self._adjust_item(npc.inventory, item, amount)
             income = self._work_income(npc)
             if income > 0:
@@ -945,9 +977,14 @@ class Simulation:
                 ),
                 importance=0.4,
             )
+            tool_wear_line = self._apply_tool_wear_if_due(npc, location_id=npc.location_id, profession=npc.profession)
             if income > 0:
-                return f"{npc.name} works and produces {amount} {item}, earning {income} gold."
-            return f"{npc.name} works and produces {amount} {item}."
+                line = f"{npc.name} works and produces {amount} {item}, earning {income} gold."
+            else:
+                line = f"{npc.name} works and produces {amount} {item}."
+            if tool_wear_line:
+                return f"{line} {tool_wear_line}"
+            return line
         if npc.profession == "merchant":
             return self._merchant_restock(npc)
         if npc.profession == "baker":
@@ -1055,13 +1092,39 @@ class Simulation:
         rumor = self._preferred_rumor_to_share_to_player(npc)
         if rumor is None:
             return None
-        if not self._knows_rumor(self.player.known_rumor_ids, rumor):
+        is_new = not self._knows_rumor(self.player.known_rumor_ids, rumor)
+        if is_new:
             self.player.known_rumor_ids.append(rumor.rumor_id)
         rumor.hop_count += 1
         rumor.last_shared_tick = self.world.tick
         rumor.confidence = max(0.15, rumor.confidence - 0.02)
-        prefix = "leans closer" if asked else "adds quietly"
-        return f'{npc.name} {prefix}: "{rumor.content}"'
+        return self._format_player_rumor_notice(npc, rumor, asked=asked, is_new=is_new)
+
+    def _format_player_rumor_notice(self, npc: NPCState, rumor: Rumor, *, asked: bool, is_new: bool) -> str:
+        language = preferred_output_language(self.dialogue_system_prompt)
+        if language == "ko":
+            summary = self._localized_rumor_notice(rumor)
+            if is_new:
+                return f"{npc.name}에게서 새 소문을 들었다. {summary}"
+            if asked:
+                return f"{npc.name}에게 같은 소문을 다시 확인했다. {summary}"
+            return f"{npc.name}의 말이 전에 들은 소문과 겹친다. {summary}"
+        if is_new:
+            return f"You learn a new rumor from {npc.name}: {rumor.content}"
+        if asked:
+            return f"{npc.name} repeats a rumor you already know: {rumor.content}"
+        return f"{npc.name}'s aside matches a rumor you already know: {rumor.content}"
+
+    def _localized_rumor_notice(self, rumor: Rumor) -> str:
+        if rumor.category is RumorCategory.SHORTAGE:
+            return "식량이나 재고가 빠듯해질 거라는 말이 돈다."
+        if rumor.category is RumorCategory.ECONOMY:
+            return "가격과 거래 분위기가 흔들릴 거라는 말이 돈다."
+        if rumor.category is RumorCategory.DANGER:
+            return "사람들이 주변 위험을 더 경계하고 있다는 말이 돈다."
+        if rumor.category is RumorCategory.EVENT:
+            return "날씨나 마을 분위기가 변하고 있다는 말이 돈다."
+        return "마을에 새로운 이야기가 돌고 있다."
 
     def _generate_dialogue(self, npc: NPCState, *, interaction_mode: str, player_prompt: str) -> str:
         return self._generate_dialogue_result(
@@ -1558,6 +1621,62 @@ class Simulation:
     def _consume_food(self, inventory: dict[str, int], item: str, actor: NPCState | PlayerState) -> None:
         self._adjust_item(inventory, item, -1)
         actor.hunger = max(0.0, actor.hunger - CONSUMPTION_VALUE[item])
+
+    def _effective_work_amount(
+        self,
+        actor: NPCState | PlayerState,
+        *,
+        base_amount: int,
+        location_id: str,
+        profession: str | None = None,
+    ) -> int:
+        if isinstance(actor, NPCState):
+            return base_amount
+        if self._needs_tool_for_work(location_id=location_id, profession=profession) and actor.inventory.get("tool", 0) <= 0:
+            return max(1, base_amount - 1)
+        return base_amount
+
+    def _needs_tool_for_work(self, *, location_id: str, profession: str | None = None) -> bool:
+        if location_id in TOOL_RELEVANT_LOCATIONS:
+            return True
+        if profession in TOOL_RELEVANT_PROFESSIONS:
+            return True
+        return False
+
+    def _apply_tool_wear_if_due(
+        self,
+        actor: NPCState | PlayerState,
+        *,
+        location_id: str,
+        profession: str | None = None,
+    ) -> str | None:
+        if isinstance(actor, NPCState):
+            return None
+        if not self._needs_tool_for_work(location_id=location_id, profession=profession):
+            return None
+        if actor.inventory.get("tool", 0) <= 0:
+            return None
+        actor_id = self._actor_identifier(actor)
+        completed_work_cycles = sum(1 for memory in self.memories[actor_id] if memory.event_type == "work")
+        if completed_work_cycles <= 0 or completed_work_cycles % TOOL_WEAR_INTERVAL != 0:
+            return None
+        self._adjust_item(actor.inventory, "tool", -1)
+        if isinstance(actor, NPCState):
+            return f"{actor.name}'s worn tool finally gives out."
+        return "One of your worn tools finally gives out."
+
+    def _apply_spoilage(self) -> list[str]:
+        events: list[str] = []
+        for item, market_state in self.world.market.items.items():
+            spoilage_ticks = market_state.spoilage_ticks or DEFAULT_SPOILAGE_TICKS.get(item)
+            if spoilage_ticks is None or spoilage_ticks <= 0:
+                continue
+            if self.world.tick % spoilage_ticks != 0:
+                continue
+            if self.player.inventory.get(item, 0) > self._reserve_floor(self.player, item) + 1:
+                self._adjust_item(self.player.inventory, item, -1)
+                events.append(f"1 {item} spoils in your pack.")
+        return events
 
     def _refresh_market_snapshot(self) -> None:
         totals = {item: 0 for item in ITEM_VALUES}
