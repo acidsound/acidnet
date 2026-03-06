@@ -212,6 +212,8 @@ class Simulation:
                 "  where                    Show nearby locations.",
                 "  map                      List all locations.",
                 "  go <location>            Move to a neighboring location.",
+                "  regions                  List summarized regions and routes.",
+                "  travel-region <region>   Travel along a regional route to another region anchor.",
                 "  focus <npc>              Set the current interaction target.",
                 "  focus clear              Clear the current interaction target.",
                 "  talk [npc]               Talk to the focused or named NPC.",
@@ -263,6 +265,24 @@ class Simulation:
         for location in self.world.locations.values():
             exits = ", ".join(self.world.locations[node].name for node in location.neighbors)
             lines.append(f"- {location.name}: {exits}")
+        return "\n".join(lines)
+
+    def list_regions(self) -> str:
+        current_region = self.current_region()
+        current_region_id = current_region.region_id if current_region is not None else None
+        lines = ["Regional overview:"]
+        for region in self.world.regions.values():
+            marker = " [current]" if region.region_id == current_region_id else ""
+            stocks = ", ".join(f"{item}:{qty}" for item, qty in sorted(region.stock_signals.items()))
+            lines.append(f"- {region.name}{marker} ({region.kind}) | risk {region.risk_level:.2f} | {stocks}")
+        if self.world.regional_routes:
+            lines.append("Routes:")
+            for route in self.world.regional_routes:
+                left = self.world.regions[route.from_region_id].name
+                right = self.world.regions[route.to_region_id].name
+                lines.append(
+                    f"- {left} <-> {right}: {self._travel_eta_turns(route.travel_ticks)} turns, risk {route.cargo_risk:.2f}"
+                )
         return "\n".join(lines)
 
     def player_status(self) -> str:
@@ -430,6 +450,31 @@ class Simulation:
         entries = self._events(
             "system",
             [f"You set out for {destination.name}. ETA {self._travel_eta_turns(total_ticks)} turns ({total_ticks} ticks)."],
+        )
+        entries.extend(self.advance_turn(1).entries)
+        return TurnResult(entries)
+
+    def move_player_to_region(self, region_query: str) -> TurnResult:
+        if self.player.travel_state.is_traveling:
+            return TurnResult(self._events("system", [self._travel_command_block_message()]))
+        destination_region = self._resolve_region(region_query)
+        if destination_region is None:
+            return TurnResult(self._events("system", [f'Unknown region "{region_query}".']))
+        current_region = self.current_region()
+        if current_region is None:
+            return TurnResult(self._events("system", ["Your current region is unknown."]))
+        if destination_region.region_id == current_region.region_id:
+            return TurnResult(self._events("system", [f"You are already in {destination_region.name}."]))
+        route = self._regional_route_between(current_region.region_id, destination_region.region_id)
+        if route is None:
+            return TurnResult(self._events("system", [f"There is no known regional route to {destination_region.name}."]))
+        if destination_region.anchor_location_id is None or destination_region.anchor_location_id not in self.world.locations:
+            return TurnResult(self._events("system", [f"{destination_region.name} does not yet have a travel anchor."]))
+        total_ticks = self._begin_regional_travel(self.player, route, destination_region.anchor_location_id)
+        self.player.focused_npc_id = None
+        entries = self._events(
+            "system",
+            [f"You set out for {destination_region.name}. ETA {self._travel_eta_turns(total_ticks)} turns ({total_ticks} ticks)."],
         )
         entries.extend(self.advance_turn(1).entries)
         return TurnResult(entries)
@@ -777,6 +822,8 @@ class Simulation:
             return self.inspect_npc(" ".join(parts[1:]) if len(parts) >= 2 else None)
         if command == "map":
             return TurnResult(self._events("system", [self.list_map()]))
+        if command == "regions":
+            return TurnResult(self._events("system", [self.list_regions()]))
         if command == "inventory":
             return TurnResult(
                 self._events("system", [f"Inventory: {self._format_inventory(self.player.inventory)} | Gold: {self.player.money}"])
@@ -815,6 +862,8 @@ class Simulation:
             return self.player_rest(turns, sleep=True)
         if command == "go" and len(parts) >= 2:
             return self.move_player(" ".join(parts[1:]))
+        if command == "travel-region" and len(parts) >= 2:
+            return self.move_player_to_region(" ".join(parts[1:]))
         if command == "talk":
             return self.talk_to_npc(" ".join(parts[1:]) if len(parts) >= 2 else None)
         if command in {"say", "tell"} and len(parts) >= 3:
@@ -2048,6 +2097,20 @@ class Simulation:
     def _travel_eta_turns(self, ticks_remaining: int) -> int:
         return max(1, (max(0, ticks_remaining) + self.turn_ticks - 1) // self.turn_ticks)
 
+    def _resolve_region(self, query: str):
+        lowered = query.lower()
+        for region in self.world.regions.values():
+            if region.region_id.lower() == lowered or region.name.lower() == lowered or region.name.lower().startswith(lowered):
+                return region
+        return None
+
+    def _regional_route_between(self, left_region_id: str, right_region_id: str):
+        for route in self.world.regional_routes:
+            route_pair = {route.from_region_id, route.to_region_id}
+            if route_pair == {left_region_id, right_region_id}:
+                return route
+        return None
+
     def _actor_load_ratio(self, actor: NPCState | PlayerState) -> float:
         if actor.carry_capacity <= 0:
             return 0.0
@@ -2079,6 +2142,31 @@ class Simulation:
             destination_location_id=destination_id,
             ticks_remaining=total_ticks,
             risk_budget=min(1.0, 0.1 + (weather_multiplier - 1.0) * 0.6 + load_ratio * 0.2),
+        )
+        return total_ticks
+
+    def _begin_regional_travel(self, actor: NPCState | PlayerState, route, destination_id: str) -> int:
+        self._refresh_actor_loads()
+        load_ratio = max(0.0, self._actor_load_ratio(actor))
+        weather_multiplier = WEATHER_TRAVEL_MULTIPLIERS.get(self.world.weather, 1.0)
+        total_ticks = max(
+            self.turn_ticks * 2,
+            int(
+                round(
+                    route.travel_ticks
+                    * weather_multiplier
+                    * (1.0 + load_ratio * 0.35)
+                    * (1.0 + actor.fatigue / 200.0)
+                )
+            ),
+        )
+        actor.travel_state = TravelState(
+            is_traveling=True,
+            route_id=route.route_id,
+            origin_location_id=actor.location_id,
+            destination_location_id=destination_id,
+            ticks_remaining=total_ticks,
+            risk_budget=min(1.0, route.cargo_risk + route.weather_sensitivity * 0.3 + load_ratio * 0.15),
         )
         return total_ticks
 

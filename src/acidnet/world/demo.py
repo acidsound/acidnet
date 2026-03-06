@@ -78,6 +78,20 @@ def build_demo_setup() -> DemoSetup:
             region_id="region.greenfall",
             neighbors=["square"],
         ),
+        "hollowmarket_gate": Location(
+            location_id="hollowmarket_gate",
+            name="Hollow Market Gate",
+            kind="route",
+            region_id="region.hollowmarket",
+            neighbors=[],
+        ),
+        "stonewatch_gate": Location(
+            location_id="stonewatch_gate",
+            name="Stonewatch Gate",
+            kind="route",
+            region_id="region.stonewatch",
+            neighbors=[],
+        ),
     }
 
     regions = {
@@ -86,7 +100,8 @@ def build_demo_setup() -> DemoSetup:
             name="Greenfall Village",
             kind="settlement",
             summary="The current high-resolution village where the player starts.",
-            local_location_ids=sorted(locations),
+            anchor_location_id="square",
+            local_location_ids=["bakery", "farm", "riverside", "shrine", "smithy", "square", "tavern"],
             stock_signals={"bread": 10, "fish": 8, "wheat": 18, "tool": 2},
             risk_level=0.22,
         ),
@@ -95,6 +110,8 @@ def build_demo_setup() -> DemoSetup:
             name="Hollow Market",
             kind="settlement",
             summary="A busier trade town farther south, simulated only as summarized state for now.",
+            anchor_location_id="hollowmarket_gate",
+            local_location_ids=["hollowmarket_gate"],
             stock_signals={"bread": 16, "fish": 5, "wheat": 9, "tool": 6},
             risk_level=0.28,
         ),
@@ -103,6 +120,8 @@ def build_demo_setup() -> DemoSetup:
             name="Stonewatch Outpost",
             kind="outpost",
             summary="A small ridge outpost with sparse food and better tools than grain.",
+            anchor_location_id="stonewatch_gate",
+            local_location_ids=["stonewatch_gate"],
             stock_signals={"bread": 4, "fish": 1, "wheat": 3, "tool": 8},
             risk_level=0.36,
         ),

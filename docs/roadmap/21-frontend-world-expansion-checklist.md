@@ -102,8 +102,9 @@ Current note:
   - world state now includes summarized `regions` and `regional_routes`
   - the demo world exposes Greenfall as the high-resolution home region plus two offscreen summarized neighbors
   - offscreen summarized regions now drift their stock signals over time at low cost
+  - `travel-region <region>` now follows summarized regional routes and lands at region anchor locations
   - web state now surfaces current region and summarized regional route metadata
-  - the remaining gap is actual inter-region travel and summarized offscreen updates
+  - the remaining gap is richer route risk/events and offscreen actor movement across regions
 
 ## Recommended Order After This
 

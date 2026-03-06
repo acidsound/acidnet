@@ -70,7 +70,8 @@ The current project baseline is:
 - make travel cost and information flow matter across settlements
 - summarized regional nodes and route metadata now exist in the world model and web state
 - low-cost offscreen regional stock drift now runs each turn for summarized neighboring regions
-- next work is actual inter-region travel and route-aware movement across regions
+- `travel-region <region>` now uses summarized route travel and region anchors
+- next work is route-aware events, offscreen actor movement, and broader regional information flow
 
 ## Immediate Next Work
 

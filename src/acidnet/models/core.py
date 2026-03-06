@@ -41,6 +41,7 @@ class RegionNode(BaseModel):
     name: str
     kind: str
     summary: str
+    anchor_location_id: str | None = None
     local_location_ids: list[str] = Field(default_factory=list)
     stock_signals: dict[str, int] = Field(default_factory=dict)
     risk_level: float = Field(default=0.0, ge=0.0, le=1.0)

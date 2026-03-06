@@ -107,3 +107,18 @@ def test_scene_payload_exposes_active_shock_state() -> None:
 
     assert state["world"]["field_stress"] >= 0.55
     assert any(event["event_type"] == "harvest_shortfall" for event in state["world"]["active_events"])
+
+
+def test_scene_payload_updates_region_after_inter_region_travel() -> None:
+    runtime = build_runtime("web_frontend_region_travel_test")
+    try:
+        runtime.simulation.world.weather = "clear"
+        runtime.run_command("travel-region hollow")
+        while runtime.simulation.player.travel_state.is_traveling:
+            runtime.run_command("next 1")
+        state = runtime.scene_payload()
+    finally:
+        runtime.close()
+
+    assert state["world"]["region_id"] == "region.hollowmarket"
+    assert state["world"]["region_name"] == "Hollow Market"

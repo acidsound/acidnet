@@ -548,6 +548,30 @@ def test_offscreen_regional_summaries_drift_over_time() -> None:
     assert after != before
 
 
+def test_regions_command_lists_current_region_and_routes() -> None:
+    simulation = Simulation.create_demo()
+
+    result = simulation.handle_command("regions")
+
+    assert any("Greenfall Village [current]" in line for line in result.lines)
+    assert any("Hollow Market" in line for line in result.lines)
+    assert any("Routes:" in line for line in result.lines)
+
+
+def test_player_can_travel_between_regions_via_anchor_locations() -> None:
+    simulation = Simulation.create_demo()
+    simulation.world.weather = "clear"
+
+    start = simulation.handle_command("travel-region hollow")
+    while simulation.player.travel_state.is_traveling:
+        simulation.handle_command("next 1")
+
+    assert any("You set out for Hollow Market." in line for line in start.lines)
+    assert simulation.player.location_id == "hollowmarket_gate"
+    assert simulation.current_region() is not None
+    assert simulation.current_region().region_id == "region.hollowmarket"
+
+
 def test_vendor_with_food_eats_instead_of_trying_to_trade_with_self() -> None:
     simulation = Simulation.create_demo()
     hobb = simulation.npcs["npc.hobb"]
