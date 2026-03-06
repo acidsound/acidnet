@@ -84,6 +84,9 @@ class WorldEvent(BaseModel):
     summary: str
     start_tick: int = Field(ge=0)
     end_tick: int | None = Field(default=None, ge=0)
+    region_id: str | None = None
+    route_id: str | None = None
+    location_id: str | None = None
 
 
 class GoalScore(BaseModel):

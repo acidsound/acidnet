@@ -24,6 +24,7 @@ The current project baseline is:
 - write and maintain the full web client API spec
 - remove ambiguity between system prompt, shared output contract, and persona context
 - make all dialogue backends honor the shared output contract, including language rules
+- `active_events` and route disruption state now flow through player-visible filtering instead of the raw omniscient event list
 
 ### Phase 2: Travel and Recovery
 

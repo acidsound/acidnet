@@ -219,7 +219,7 @@ Failure response:
 - `day`, `tick`, `weather`: current simulation time and broad environment
 - `field_stress`: current farm-yield pressure scalar used by the first shock chain
 - `location_id`, `location_name`: current player anchor location
-- `active_events`: currently active world shock/event summaries
+- `active_events`: currently visible shock or route-event summaries from the player's current region or current travel route, not the omniscient global list
 - when the player is traveling, the scene description and player travel state are the authoritative source for route progress
 
 ### `player`
@@ -321,6 +321,32 @@ Per-node shape:
 ```
 
 This is presentation guidance, not a physics system.
+
+### `scene.regional_routes`
+
+Summarized inter-settlement route metadata.
+
+Per-route shape:
+
+```json
+{
+  "route_id": "route.greenfall.hollowmarket",
+  "from_region_id": "region.greenfall",
+  "to_region_id": "region.hollowmarket",
+  "travel_ticks": 96,
+  "cargo_risk": 0.24,
+  "weather_sensitivity": 0.45,
+  "seasonal_capacity": 1.0,
+  "status": "delayed",
+  "status_summary": "The road toward Hollow Market is slowing under the storm front, and caravans are arriving late."
+}
+```
+
+Notes:
+
+- `status` is player-visible route knowledge, not an omniscient logistics channel
+- expected values are currently `stable`, `delayed`, or `unknown`
+- `unknown` means the route exists in the known regional graph but the player does not currently have direct visibility into its disruption state
 
 ### `target`
 

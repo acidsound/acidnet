@@ -289,7 +289,7 @@ class Simulation:
             for route in self.world.regional_routes:
                 left = self.world.regions[route.from_region_id].name
                 right = self.world.regions[route.to_region_id].name
-                route_event = self._route_delay_event(route.route_id)
+                route_event = self._visible_route_delay_event_for_player(route.route_id)
                 route_status = f" | {route_event.summary}" if route_event is not None else ""
                 lines.append(
                     f"- {left} <-> {right}: {self._travel_eta_turns(route.travel_ticks)} turns, risk {route.cargo_risk:.2f}{route_status}"
@@ -322,9 +322,10 @@ class Simulation:
         if self.player.travel_state.is_traveling:
             destination = self.player.travel_state.destination_location_id or "unknown"
             lines.append(f"Travel: en route to {destination} ({self.player.travel_state.ticks_remaining} ticks remaining)")
-        if self.world.active_events:
+        visible_events = self._visible_world_events_for_player()
+        if visible_events:
             lines.append("Active world events:")
-            lines.extend(f"- {event.summary}" for event in self.world.active_events)
+            lines.extend(f"- {event.summary}" for event in visible_events)
         if self.tick_log:
             lines.append("Recent world events:")
             lines.extend(f"- {entry}" for entry in list(self.tick_log)[-5:])
@@ -997,6 +998,7 @@ class Simulation:
                             event_type="route_delay",
                             summary=summary,
                             start_tick=self.world.tick,
+                            route_id=route.route_id,
                         )
                     )
                     events.append(summary)
@@ -1625,6 +1627,8 @@ class Simulation:
                         event_type="harvest_shortfall",
                         summary=summary,
                         start_tick=self.world.tick,
+                        region_id="region.greenfall",
+                        location_id="farm",
                     )
                 )
                 events.append(summary)
@@ -1664,11 +1668,46 @@ class Simulation:
                 return event
         return None
 
+    def _visible_world_events_for_player(self) -> list[WorldEvent]:
+        current_region = self.current_region()
+        current_region_id = current_region.region_id if current_region is not None else None
+        visible: list[WorldEvent] = []
+        for event in self.world.active_events:
+            if event.route_id is not None:
+                route = next((candidate for candidate in self.world.regional_routes if candidate.route_id == event.route_id), None)
+                if route is not None and self._is_route_visible_to_player(route):
+                    visible.append(event)
+                continue
+            if event.region_id is not None and event.region_id == current_region_id:
+                visible.append(event)
+                continue
+            if event.location_id is not None:
+                location = self.world.locations.get(event.location_id)
+                if location is not None and location.region_id == current_region_id:
+                    visible.append(event)
+                continue
+            if event.region_id is None and event.route_id is None and event.location_id is None:
+                visible.append(event)
+        return visible
+
     def _route_delay_event_id(self, route_id: str) -> str:
         return f"{ROUTE_DELAY_EVENT_PREFIX}{route_id}.delay"
 
     def _route_delay_event(self, route_id: str) -> WorldEvent | None:
         return self._world_event(self._route_delay_event_id(route_id))
+
+    def _visible_route_delay_event_for_player(self, route_id: str) -> WorldEvent | None:
+        for event in self._visible_world_events_for_player():
+            if event.route_id == route_id and event.event_type == "route_delay":
+                return event
+        return None
+
+    def _is_route_visible_to_player(self, route) -> bool:
+        if self.player.travel_state.is_traveling and self.player.travel_state.route_id == route.route_id:
+            return True
+        current_region = self.current_region()
+        current_region_id = current_region.region_id if current_region is not None else None
+        return current_region_id in {route.from_region_id, route.to_region_id}
 
     def _regional_route_pressure(self, route) -> float:
         weather_pressure = ROUTE_WEATHER_PRESSURE.get(self.world.weather, 0.0)

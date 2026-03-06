@@ -136,3 +136,22 @@ def test_scene_payload_exposes_route_delay_status() -> None:
     assert any(event["event_type"] == "route_delay" for event in state["world"]["active_events"])
     assert any(route["status"] == "delayed" for route in state["scene"]["regional_routes"])
     assert all("status_summary" in route for route in state["scene"]["regional_routes"])
+
+
+def test_scene_payload_hides_remote_route_delay_after_region_travel() -> None:
+    runtime = build_runtime("web_frontend_remote_route_visibility_test")
+    try:
+        runtime.simulation.world.weather = "storm_front"
+        runtime.run_command("travel-region hollow")
+        while runtime.simulation.player.travel_state.is_traveling:
+            runtime.run_command("next 1")
+        runtime.simulation.advance_turn(1)
+        state = runtime.scene_payload()
+    finally:
+        runtime.close()
+
+    delayed_routes = {route["route_id"] for route in state["scene"]["regional_routes"] if route["status"] == "delayed"}
+    unknown_routes = {route["route_id"] for route in state["scene"]["regional_routes"] if route["status"] == "unknown"}
+
+    assert "route.greenfall.hollowmarket" in delayed_routes
+    assert "route.greenfall.stonewatch" in unknown_routes

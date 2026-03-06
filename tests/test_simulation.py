@@ -1,4 +1,5 @@
 from acidnet.engine import Simulation
+from acidnet.models import WorldEvent
 
 
 def test_demo_simulation_boots_with_interactable_square() -> None:
@@ -619,6 +620,43 @@ def test_route_delay_spawns_regional_delay_rumor() -> None:
     simulation.advance_turn(6)
 
     assert any("road toward" in rumor.content and "dragging under the storm front" in rumor.content for rumor in simulation.rumors.values())
+
+
+def test_visible_world_events_hide_remote_route_delay_after_region_travel() -> None:
+    simulation = Simulation.create_demo()
+    simulation.world.weather = "storm_front"
+
+    simulation.handle_command("travel-region hollow")
+    while simulation.player.travel_state.is_traveling:
+        simulation.handle_command("next 1")
+    simulation.advance_turn(1)
+
+    visible_route_ids = {event.route_id for event in simulation._visible_world_events_for_player() if event.route_id is not None}
+
+    assert "route.greenfall.hollowmarket" in visible_route_ids
+    assert "route.greenfall.stonewatch" not in visible_route_ids
+
+
+def test_visible_world_events_hide_remote_local_region_events() -> None:
+    simulation = Simulation.create_demo()
+    simulation.world.active_events.append(
+        WorldEvent(
+            event_id="event.test.remote",
+            event_type="test_remote",
+            summary="Remote test event.",
+            start_tick=simulation.world.tick,
+            region_id="region.greenfall",
+            location_id="farm",
+        )
+    )
+
+    simulation.handle_command("travel-region hollow")
+    while simulation.player.travel_state.is_traveling:
+        simulation.handle_command("next 1")
+
+    visible_event_ids = {event.event_id for event in simulation._visible_world_events_for_player()}
+
+    assert "event.test.remote" not in visible_event_ids
 
 
 def test_regions_command_lists_current_region_and_routes() -> None:

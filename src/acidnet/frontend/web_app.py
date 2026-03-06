@@ -311,7 +311,7 @@ class WebSimulationRuntime:
                             "event_type": event.event_type,
                             "summary": event.summary,
                         }
-                        for event in self.simulation.world.active_events
+                        for event in self.simulation._visible_world_events_for_player()
                     ],
                 },
                 "player": {
@@ -364,12 +364,14 @@ class WebSimulationRuntime:
                             "cargo_risk": round(route.cargo_risk, 2),
                             "weather_sensitivity": round(route.weather_sensitivity, 2),
                             "seasonal_capacity": round(route.seasonal_capacity, 2),
-                            "status": "delayed"
-                            if self.simulation._route_delay_event(route.route_id) is not None
+                            "status": "unknown"
+                            if not self.simulation._is_route_visible_to_player(route)
+                            else "delayed"
+                            if self.simulation._visible_route_delay_event_for_player(route.route_id) is not None
                             else "stable",
                             "status_summary": None
-                            if self.simulation._route_delay_event(route.route_id) is None
-                            else self.simulation._route_delay_event(route.route_id).summary,
+                            if self.simulation._visible_route_delay_event_for_player(route.route_id) is None
+                            else self.simulation._visible_route_delay_event_for_player(route.route_id).summary,
                         }
                         for route in self.simulation.world.regional_routes
                     ],
