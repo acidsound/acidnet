@@ -21,4 +21,6 @@ def test_prompt_only_eval_produces_rows_for_demo_world() -> None:
     assert rows
     assert all(row.response_text for row in rows)
     assert any(row.interaction_mode == "rumor_request" for row in rows)
+    assert all(row.adapter_name == "rule_based" for row in rows)
+    assert all(row.latency_ms == 0.0 for row in rows)
     assert all(0.0 <= row.score <= 1.0 for row in rows)

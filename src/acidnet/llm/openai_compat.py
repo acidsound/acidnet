@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from dataclasses import dataclass
 from urllib import request
 
@@ -19,6 +20,7 @@ class OpenAICompatDialogueAdapter(DialogueModelAdapter):
     timeout_seconds: int = 30
 
     def generate(self, context: DialogueContext) -> DialogueResult:
+        started_at = time.perf_counter()
         payload = {
             "model": self.model,
             "messages": [
@@ -46,4 +48,5 @@ class OpenAICompatDialogueAdapter(DialogueModelAdapter):
         )
         if not text:
             raise RuntimeError("OpenAI-compatible server returned an empty dialogue response.")
-        return DialogueResult(text=text, adapter_name="openai_compat")
+        latency_ms = (time.perf_counter() - started_at) * 1000.0
+        return DialogueResult(text=text, adapter_name="openai_compat", latency_ms=round(latency_ms, 3))

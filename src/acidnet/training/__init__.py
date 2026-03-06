@@ -5,6 +5,12 @@ from acidnet.training.baseline_pipeline import (
     baseline_pipeline_artifacts_to_dict,
     prepare_qwen4b_baseline_artifacts,
 )
+from acidnet.training.bootstrap_teacher import (
+    BootstrapTeacherArtifacts,
+    bootstrap_teacher_artifacts_to_dict,
+    build_bootstrap_teacher_outputs,
+    export_bootstrap_teacher_outputs,
+)
 from acidnet.training.dataset_builder import (
     export_prompt_pack_jsonl,
     export_prompt_pack_parquet,
@@ -13,6 +19,12 @@ from acidnet.training.dataset_builder import (
 )
 from acidnet.training.experiment_registry import ModelCandidate, recommended_experiment_order
 from acidnet.training.finetune_manifest import FineTuneExperiment, build_finetune_manifest, export_finetune_manifest_json
+from acidnet.training.hf_peft_runner import (
+    HFPeftRunSpec,
+    build_hf_peft_run_spec,
+    export_hf_peft_run_spec,
+    export_hf_peft_training_script,
+)
 from acidnet.training.openai_batch import (
     OpenAIBatchRequest,
     TeacherOutputRow,
@@ -44,14 +56,22 @@ __all__ = [
     "OpenAIBatchRequest",
     "RunPaths",
     "BaselinePipelineArtifacts",
+    "BootstrapTeacherArtifacts",
+    "HFPeftRunSpec",
     "TeacherConfig",
     "TeacherOutputRow",
     "UnslothRunSpec",
+    "bootstrap_teacher_artifacts_to_dict",
     "baseline_pipeline_artifacts_to_dict",
+    "build_hf_peft_run_spec",
     "build_openai_batch_requests",
+    "build_bootstrap_teacher_outputs",
     "build_finetune_manifest",
     "build_unsloth_run_spec",
+    "export_hf_peft_run_spec",
+    "export_hf_peft_training_script",
     "export_openai_batch_jsonl",
+    "export_bootstrap_teacher_outputs",
     "export_prompt_pack_jsonl",
     "export_prompt_pack_parquet",
     "export_finetune_manifest_json",

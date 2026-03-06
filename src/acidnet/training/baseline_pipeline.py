@@ -5,6 +5,11 @@ from pathlib import Path
 from typing import Literal
 
 from acidnet.training.finetune_manifest import build_finetune_manifest
+from acidnet.training.hf_peft_runner import (
+    build_hf_peft_run_spec,
+    export_hf_peft_run_spec,
+    export_hf_peft_training_script,
+)
 from acidnet.training.sft_dataset import (
     export_sft_jsonl,
     export_sft_parquet,
@@ -33,6 +38,7 @@ class BaselinePipelineArtifacts:
     train_rows: int
     eval_rows: int
     experiment_key: str
+    trainer_backend: str
 
 
 def prepare_qwen4b_baseline_artifacts(
@@ -49,6 +55,7 @@ def prepare_qwen4b_baseline_artifacts(
     run_spec_path: str,
     training_script_path: str,
     export_format: Literal["jsonl", "parquet", "both"] = "both",
+    trainer_backend: Literal["unsloth", "hf_peft"] = "unsloth",
     seed: int = 7,
     train_rows_target: int = 50_000,
     eval_rows_target: int = 4_000,
@@ -81,16 +88,19 @@ def prepare_qwen4b_baseline_artifacts(
         train_rows_target=train_rows_target,
         eval_rows_target=eval_rows_target,
     )[0]
-    run_spec = build_unsloth_run_spec(
-        baseline,
-        RunPaths(
-            train_dataset_path=train_jsonl_path,
-            eval_dataset_path=eval_jsonl_path,
-            output_dir=training_output_dir,
-        ),
+    run_paths = RunPaths(
+        train_dataset_path=train_jsonl_path,
+        eval_dataset_path=eval_jsonl_path,
+        output_dir=training_output_dir,
     )
-    spec_path = export_unsloth_run_spec(run_spec_path, run_spec)
-    script_path = export_unsloth_training_script(training_script_path, run_spec)
+    if trainer_backend == "hf_peft":
+        run_spec = build_hf_peft_run_spec(baseline, run_paths)
+        spec_path = export_hf_peft_run_spec(run_spec_path, run_spec)
+        script_path = export_hf_peft_training_script(training_script_path, run_spec)
+    else:
+        run_spec = build_unsloth_run_spec(baseline, run_paths)
+        spec_path = export_unsloth_run_spec(run_spec_path, run_spec)
+        script_path = export_unsloth_training_script(training_script_path, run_spec)
 
     return BaselinePipelineArtifacts(
         merged_jsonl_path=str(Path(merged_jsonl_path)),
@@ -104,6 +114,7 @@ def prepare_qwen4b_baseline_artifacts(
         train_rows=len(train_examples),
         eval_rows=len(eval_examples),
         experiment_key=baseline.key,
+        trainer_backend=trainer_backend,
     )
 
 

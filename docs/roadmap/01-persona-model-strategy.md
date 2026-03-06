@@ -2,8 +2,8 @@
 
 ## Decision Summary
 
-- Primary training baseline on 24GB VRAM: `Qwen/Qwen3.5-4B-Base`
-- Challenger for comparison: `Qwen3.5-9B` class checkpoint, exported at runtime as `unsloth/Qwen3.5-9B-GGUF`
+- Primary training baseline on 24GB VRAM: `Qwen/Qwen3.5-4B`
+- Challenger for comparison: `Qwen/Qwen3.5-9B`
 - Preferred training method: bf16 LoRA
 - Preferred runtime quant: `Q4_K_M GGUF`
 - Scope: NPC persona, dialogue tone, rumor framing, and social biasing
@@ -20,6 +20,7 @@
 - It is the safer fit on a 24GB GPU.
 - It leaves more room for sequence length, evaluation runs, and iteration speed.
 - It is more likely to be cost-efficient for a tightly scoped NPC persona model.
+- It is the first model that should be forced through the full `dataset -> LoRA -> runtime -> model gate` loop.
 
 ## Why 9B Still Matters
 
@@ -29,16 +30,17 @@
 
 ## Training And Runtime Split
 
-- Train from a fine-tuning checkpoint.
-- Validate the tuned checkpoint before export.
-- Export the validated result to `GGUF q4_k_m`.
-- Do not attempt to fine-tune the `GGUF` deployment artifact directly.
+- Train from a fine-tuning checkpoint, not a GGUF runtime artifact.
+- Validate the tuned checkpoint inside the local OpenAI-compatible adapter runtime.
+- Export only validated results to `GGUF q4_k_m`.
+- Do not fine-tune the `GGUF` deployment artifact directly.
 
 ## Current Engineering Judgment
 
-- Use 4B first.
-- Run 9B second if the baseline data pipeline and evaluation harness are stable.
+- Use `Qwen/Qwen3.5-4B` first.
 - Keep the planner heuristic until the persona/dialogue model is proven useful.
+- Use the HF/PEFT LoRA path on Windows as the default training backend.
+- Treat external teacher completions as optional refinement, not as the primary bootstrap path.
 
 ## Data Contract
 
@@ -65,15 +67,17 @@ It should not produce:
 
 ## Dataset Plan
 
-- source 1: GPT-5.3 teacher prompt packs generated from synthetic village rollouts
+- source 1: bootstrap teacher outputs generated directly from synthetic village rollouts
 - source 2: runtime interaction transcripts from terminal and GUI sessions
-- source 3: future human review sets for preference and style correction
+- source 3: optional external teacher completions for targeted correction
+- source 4: future human review sets for preference and style correction
 
 ## Selection Criteria
 
 - persona consistency
 - world consistency
 - responsiveness under local runtime constraints
+- latency under the adapter server path
 - memory fit on the target machine
 - improvement over the 4B baseline, not just absolute quality
 - controllability and prompt stability over long sessions
@@ -84,6 +88,7 @@ It should not produce:
 - template mismatch between training and runtime
 - overfitting on flavor while losing utility
 - choosing 9B before the evaluation loop is stable
+- treating a smoke fine-tune as a promotion-ready checkpoint
 
 ## Sources
 

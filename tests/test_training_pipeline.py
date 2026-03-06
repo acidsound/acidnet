@@ -1,14 +1,18 @@
 from pathlib import Path
+from dataclasses import asdict
 
 from acidnet.training import (
     baseline_pipeline_artifacts_to_dict,
+    build_bootstrap_teacher_outputs,
     RunPaths,
     build_finetune_manifest,
+    build_hf_peft_run_spec,
     build_openai_batch_requests,
     build_unsloth_run_spec,
     coerce_sft_examples,
     export_prompt_pack_jsonl,
     export_finetune_manifest_json,
+    export_hf_peft_training_script,
     export_sft_jsonl,
     export_teacher_output_jsonl,
     export_unsloth_training_script,
@@ -137,6 +141,16 @@ def test_openai_batch_output_can_be_normalized() -> None:
     assert output_path.exists()
 
 
+def test_bootstrap_teacher_outputs_can_be_generated_from_prompt_rows() -> None:
+    prompt_rows = [asdict(row) for row in generate_demo_prompt_pack(num_turns=1) if row.task == "dialogue"][:2]
+
+    rows = build_bootstrap_teacher_outputs(prompt_rows, tasks=("dialogue",))
+
+    assert len(rows) == 2
+    assert rows[0].assistant_json["task"] == "dialogue"
+    assert rows[0].assistant_json["response"]
+
+
 def test_qwen4b_baseline_run_spec_can_render_unsloth_script() -> None:
     baseline = build_finetune_manifest(vram_gb=24)[0]
     run_spec = build_unsloth_run_spec(
@@ -152,10 +166,33 @@ def test_qwen4b_baseline_run_spec_can_render_unsloth_script() -> None:
     script_path = export_unsloth_training_script(artifact_dir / "train_qwen3_5_4b_baseline_test.py", run_spec)
     script_text = script_path.read_text(encoding="utf-8")
 
-    assert run_spec.model_name == "Qwen/Qwen3.5-4B-Base"
+    assert run_spec.model_name == "Qwen/Qwen3.5-4B"
     assert script_path.exists()
+    assert "ROOT = _project_root()" in script_text
     assert 'optim="adamw_8bit"' in script_text
     assert 'load_in_16bit=RUN_SPEC["bf16"]' in script_text
+
+
+def test_qwen4b_baseline_run_spec_can_render_hf_peft_script() -> None:
+    baseline = build_finetune_manifest(vram_gb=24)[0]
+    run_spec = build_hf_peft_run_spec(
+        baseline,
+        RunPaths(
+            train_dataset_path="data/sft/train_teacher_sft_dataset.jsonl",
+            eval_dataset_path="data/sft/eval_teacher_sft_dataset.jsonl",
+            output_dir="data/training/qwen3_5_4b_baseline",
+        ),
+    )
+    artifact_dir = Path("data") / "test_artifacts"
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    script_path = export_hf_peft_training_script(artifact_dir / "train_qwen3_5_4b_hf_peft_test.py", run_spec)
+    script_text = script_path.read_text(encoding="utf-8")
+
+    assert run_spec.model_name == "Qwen/Qwen3.5-4B"
+    assert script_path.exists()
+    assert "ROOT = _project_root()" in script_text
+    assert 'get_peft_model(model, peft_config)' in script_text
+    assert 'remove_columns=train_raw.column_names' in script_text
 
 
 def test_sft_examples_can_be_split_deterministically() -> None:
@@ -229,6 +266,7 @@ def test_qwen4b_baseline_pipeline_prepares_split_and_run_artifacts() -> None:
         run_spec_path=str(artifact_dir / "pipeline_qwen3_5_4b_baseline_run_spec.json"),
         training_script_path=str(artifact_dir / "pipeline_train_qwen3_5_4b_baseline.py"),
         export_format="jsonl",
+        trainer_backend="hf_peft",
         train_rows_target=2,
         eval_rows_target=1,
         seed=7,
@@ -243,3 +281,4 @@ def test_qwen4b_baseline_pipeline_prepares_split_and_run_artifacts() -> None:
     assert Path(artifacts.run_spec_path).exists()
     assert Path(artifacts.training_script_path).exists()
     assert artifact_map["experiment_key"] == "qwen3_5_4b_baseline"
+    assert artifact_map["trainer_backend"] == "hf_peft"

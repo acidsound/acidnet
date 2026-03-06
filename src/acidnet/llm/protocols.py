@@ -28,6 +28,7 @@ class DialogueResult(BaseModel):
 
     text: str
     adapter_name: str
+    latency_ms: float = Field(default=0.0, ge=0.0)
     used_memory_ids: list[str] = Field(default_factory=list)
     used_rumor_ids: list[str] = Field(default_factory=list)
 

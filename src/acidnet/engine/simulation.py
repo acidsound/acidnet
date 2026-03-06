@@ -4,7 +4,7 @@ from collections import defaultdict, deque
 from dataclasses import dataclass
 from typing import Any, Iterable
 
-from acidnet.llm import DialogueContext, DialogueModelAdapter, RuleBasedDialogueAdapter, build_dialogue_adapter
+from acidnet.llm import DialogueContext, DialogueModelAdapter, DialogueResult, RuleBasedDialogueAdapter, build_dialogue_adapter
 from acidnet.models import (
     Belief,
     EpisodicMemory,
@@ -236,8 +236,21 @@ class Simulation:
         return TurnResult(result)
 
     def probe_npc_dialogue(self, npc_id: str, *, interaction_mode: str, player_prompt: str) -> str:
+        return self.probe_npc_dialogue_result(
+            npc_id,
+            interaction_mode=interaction_mode,
+            player_prompt=player_prompt,
+        ).text
+
+    def probe_npc_dialogue_result(
+        self,
+        npc_id: str,
+        *,
+        interaction_mode: str,
+        player_prompt: str,
+    ) -> DialogueResult:
         npc = self.npcs[npc_id]
-        return self._generate_dialogue(npc, interaction_mode=interaction_mode, player_prompt=player_prompt)
+        return self._generate_dialogue_result(npc, interaction_mode=interaction_mode, player_prompt=player_prompt)
 
     def player_eat(self, item_query: str) -> TurnResult:
         item = self._resolve_item(item_query)
@@ -633,9 +646,15 @@ class Simulation:
         return f'{npc.name} {prefix}: "{rumor.content}"'
 
     def _generate_dialogue(self, npc: NPCState, *, interaction_mode: str, player_prompt: str) -> str:
+        return self._generate_dialogue_result(
+            npc,
+            interaction_mode=interaction_mode,
+            player_prompt=player_prompt,
+        ).text
+
+    def _generate_dialogue_result(self, npc: NPCState, *, interaction_mode: str, player_prompt: str) -> DialogueResult:
         context = self._build_dialogue_context(npc, interaction_mode=interaction_mode, player_prompt=player_prompt)
-        result = self.dialogue_adapter.generate(context)
-        return result.text
+        return self.dialogue_adapter.generate(context)
 
     def _derive_beliefs(self, npc: NPCState) -> list[Belief]:
         self._refresh_beliefs_for_npc(npc)

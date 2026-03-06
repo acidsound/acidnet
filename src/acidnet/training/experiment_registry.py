@@ -21,7 +21,7 @@ class ModelCandidate:
 QWEN35_4B = ModelCandidate(
     key="qwen3_5_4b",
     label="Qwen3.5-4B",
-    train_model_id="Qwen/Qwen3.5-4B-Base",
+    train_model_id="Qwen/Qwen3.5-4B",
     runtime_repo_id="unsloth/Qwen3.5-4B-GGUF",
     runtime_gguf_filename="Qwen3.5-4B-Q4_K_M.gguf",
     runtime_gguf_url="https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf",
@@ -35,7 +35,7 @@ QWEN35_4B = ModelCandidate(
 QWEN35_9B = ModelCandidate(
     key="qwen3_5_9b",
     label="Qwen3.5-9B",
-    train_model_id="unsloth/Qwen3.5-9B",
+    train_model_id="Qwen/Qwen3.5-9B",
     runtime_repo_id="unsloth/Qwen3.5-9B-GGUF",
     runtime_gguf_filename="Qwen3.5-9B-Q4_K_M.gguf",
     runtime_gguf_url="https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_K_M.gguf",
@@ -66,4 +66,3 @@ def selection_summary(vram_gb: int = 24) -> str:
         f"(estimated bf16 LoRA VRAM {first.estimated_bf16_lora_vram_gb}GB). "
         f"Secondary challenger: {second.label}."
     )
-

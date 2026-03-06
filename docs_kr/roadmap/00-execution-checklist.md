@@ -2,108 +2,108 @@
 
 ## 목표
 
-플레이어가 월드를 돌아다니며 NPC 와 대화하고 거래하고 rumor 를 모을 수 있는 simulation-first village RPG 를 만들고, 최종적으로는 이 세계에 맞게 조여진 local persona/dialogue model 을 붙인다.
+플레이어가 월드를 이동하고, NPC와 대화하고, 거래하고, 소문을 수집하며, 최종적으로는 작고 정밀한 로컬 persona/dialogue 모델을 붙여서 돌아가는 simulation-first village RPG를 만든다.
 
 ## 최우선 목표
 
-1. 월드 안에서 독립된 개체처럼 행동하면서 소형 로컬 언어 모델을 사용하는 NPC 를 완성한다.
-2. entropy, 생산, 거래, 허기, rumor, 회복이 순환하며 정체되지 않는 월드를 완성한다.
+1. 작은 로컬 언어모델을 사용하는 독립적인 NPC를 완성한다.
+2. 엔트로피, 생산, 거래, 배고픔, 소문, 회복이 순환하면서 정체되지 않는 월드 루프를 완성한다.
 
 ## 모델 선택 원칙
 
 - 충분하다면 더 작은 모델이 더 낫다.
-- 더 잘 통제된다면 더 단순한 모델이 더 낫다.
-- 표현력이 조금 높더라도 불안정한 모델보다, 더 정밀한 모델이 낫다.
-- 더 작은 모델이 실제 월드 행동에서 분명히 실패할 때만 더 큰 모델로 올라간다.
+- 더 통제 가능하다면 더 단순한 모델이 더 낫다.
+- 불안정하게 풍부한 모델보다 정밀한 모델이 더 낫다.
+- 더 큰 모델은 더 작은 모델이 실제 월드에서 명확히 실패할 때만 후보가 된다.
 
-## 지금 당장 후순위인 것
+## 당장 비우선 항목
 
-- simulation 과 local-model loop 가 검증되기 전의 대형 프론트엔드 확장
-- 소형 모델 경로가 실제 게임 루프 안에서 입증되기 전의 9B 확장
+- 시뮬레이션과 로컬 모델 루프가 검증되기 전의 대형 프론트엔드 확장
+- 소형 모델 경로가 증명되기 전의 9B 집착
 
 ## 작업 규칙
 
-- 주요 시스템이나 실행 경로가 바뀌면 `docs/roadmap/` 와 `docs_kr/roadmap/` 를 함께 갱신한다.
-- 문서 안의 경로는 프로젝트 루트 기준 상대경로만 사용하고, 절대경로는 쓰지 않는다.
-- world mutation 은 rule-based 로 유지한다. local model 은 intent 나 dialogue 를 제안할 수 있지만 physics 나 economy 를 직접 쓰지 않는다.
-- `GGUF q4_k_m` 는 deployment artifact 로 보고, primary fine-tuning artifact 로 다루지 않는다.
-- Windows 기본 persistence 는 SQLite 로 두고, `zvec` 는 Linux/macOS 배포 경로의 optional 선택지로 유지한다.
+- 큰 실행 경로가 바뀔 때마다 `docs/roadmap/`와 `docs_kr/roadmap/`를 같이 갱신한다.
+- 문서 안의 경로는 항상 프로젝트 루트 기준 상대경로만 사용한다.
+- 월드 변경은 계속 rule-based로 유지한다. 로컬 모델은 intent나 dialogue를 제안할 수는 있지만 physics나 economy를 직접 쓰지 않는다.
+- `GGUF q4_k_m`는 deployment artifact로 취급하고, 학습 원본으로 쓰지 않는다.
+- Windows 기본 영속화는 SQLite로 유지하고, `zvec`는 선택적 배포 경로로만 본다.
+- bootstrap teacher 생성 경로를 기본 dataset 경로로 사용한다. 외부 teacher completion은 선택적 보정 수단일 뿐 필수 경로가 아니다.
 
 ## 단계 체크리스트
 
 - [x] Step 00: 아키텍처 및 구현 계획 문서 작성
-- [x] Step 01: 프로젝트 스켈레톤 및 코어 스키마 작성
+- [x] Step 01: 프로젝트 골격과 핵심 스키마 생성
 - [x] Step 02: deterministic tick engine 및 scheduler 추가
-- [x] Step 03: map, location, movement rule 추가
+- [x] Step 03: 맵, location, 이동 규칙 추가
 - [x] Step 04: hunger, food inventory, consumption 추가
 - [x] Step 05: market price feedback 및 trade execution 추가
 - [x] Step 06: rumor lifecycle 및 relationship update 추가
-- [x] Step 07: 현재 lightweight hook 을 넘는 memory retrieval 및 belief reflection job 추가
+- [x] Step 07: lightweight hook을 넘는 memory retrieval 및 belief reflection 추가
 - [x] Step 08: heuristic planner 및 intent validation 추가
-- [x] Step 09: 플레이 가능한 터미널 MVP 추가
+- [x] Step 09: 플레이 가능한 terminal MVP 추가
 - [x] Step 10: SQLite world snapshot persistence 추가
-- [x] Step 11: keyboard-driven GUI frontend 추가
+- [x] Step 11: keyboard GUI frontend 추가
 - [x] Step 12: teacher prompt schema 및 synthetic dataset export 추가
-- [ ] Step 13: Qwen3.5 4B 대 9B fine-tuning experiment harness 추가
-- [ ] Step 14: 검증된 persona checkpoint 를 GGUF `q4_k_m` 로 export
-- [ ] Step 15: local persona/dialogue runtime adapter 추가
-- [ ] Step 16: evaluation harness 및 model selection report 추가
+- [x] Step 13: Qwen3.5 4B vs 9B fine-tuning experiment harness 추가
+- [ ] Step 14: 검증된 persona checkpoint를 GGUF `q4_k_m`로 export
+- [x] Step 15: local persona/dialogue runtime adapter 추가
+- [x] Step 16: evaluation harness 및 model selection report 추가
 - [ ] Step 17: dialogue/persona consistency 전용 optional RL 추가
 
-## 현재 집중 단계
+## 현재 초점
 
-현재 구현 초점은 Step 13 이다:
+현재 구현 초점은 Step 14다.
 
-- 첫 4B baseline run 정의
-- 9B challenger run 정의
-- GPT-5.3 teacher prompt pack 을 JSONL 과 Parquet 로 대량 생성
-- teacher completion 생성을 위한 OpenAI batch request artifact 준비
-- OpenAI batch output 을 `teacher_outputs.jsonl` 로 정규화
-- merged SFT data 를 deterministic train/eval artifact 로 split
-- 4B baseline 용 첫 Unsloth training script 준비
-- 9B 로 가기 전에 실행 가능한 4B baseline launcher 유지
-- 긴 fine-tuning run 전에 prompt-only base-model 동작 검증
-- 긴 fine-tuning run 전에 selection criteria 를 고정
+- bootstrap teacher dataset을 더 다듬어서 첫 실전 4B run이 model gate를 통과하게 만든다
+- `Qwen/Qwen3.5-4B`를 기본 학습 checkpoint로 유지한다
+- `Qwen/Qwen3.5-9B`는 4B가 안정화된 뒤 challenger로만 본다
+- Windows 기본 학습 backend는 HF/PEFT LoRA 경로로 유지한다
+- GGUF export 전에 local OpenAI-compatible adapter runtime에서 먼저 검증한다
+- 검증된 checkpoint만 runtime artifact로 승격한다
 
-실질적으로는 다음 뜻이다:
+실무적으로는 다음을 뜻한다.
 
-- 모델 크기 확장보다 소형 모델 기반 NPC 루프가 더 중요하다
-- UI 확장보다 월드 순환성과 entropy 안정성이 더 중요하다
-- player 의 생존과 earning loop 도 같은 rule-based economy 안에서 닫혀야 한다
+- 작은 모델 기반 NPC 루프가 모델 크기 확장보다 더 중요하다
+- 외부 API 의존보다 bootstrap teacher data가 더 중요하다
+- 월드 순환성과 entropy 안정성이 UI 확장보다 더 중요하다
+- player 생존과 earning loop는 계속 같은 rule-based economy 안에 있어야 한다
 
 ## 프로토타입 상태
 
-현재 저장소에는 다음이 있다:
+현재 저장소에는 다음이 있다.
 
-- 터미널 런타임: `run_acidnet.py`
-- 키보드 GUI 런타임: `run_acidnet_gui.py`
-- SQLite persistence 경로: `data/acidnet.sqlite`
-- teacher dataset export 경로: `run_teacher_prompt_export.py`
-- fine-tuning experiment manifest export: `run_finetune_manifest_export.py`
+- terminal runtime: `run_acidnet.py`
+- keyboard GUI runtime: `run_acidnet_gui.py`
+- SQLite persistence path: `data/acidnet.sqlite`
+- bootstrap teacher data path: `run_bootstrap_qwen4b_pipeline.py`
+- baseline launcher: `run_qwen4b_baseline_train.py`
+- local adapter runtime path: `run_local_adapter_server.py`
 
 구현된 시스템:
 
-- village map 과 movement
-- NPC dialogue 와 rumor sharing
-- player 가 gold 를 벌거나 food 를 모을 수 있는 work loop
-- vendor trading 과 food consumption
+- village map 및 movement
+- NPC dialogue 및 rumor sharing
+- player work loop
+- vendor trading 및 food consumption
 - deterministic tick progression
 - heuristic NPC planner
-- memory retrieval scoring 과 belief refresh
-- deterministic fallback 이 있는 openai-compatible dialogue adapter boundary
+- memory retrieval scoring 및 belief refresh
+- deterministic fallback이 있는 openai-compatible dialogue adapter 경계
 - world snapshot persistence
-- planner/dialogue 용 synthetic teacher prompt generation
-- prompt-only baseline evaluation harness
+- planner/dialogue용 synthetic teacher prompt generation
+- 외부 completion 없이 동작하는 bootstrap teacher output generation
+- latency/fallback 측정이 들어간 prompt-only evaluation harness
 - world circulation evaluation harness
-- dialogue 품질과 world circulation 을 함께 보는 combined model gate
-- teacher run 용 OpenAI batch request 준비
-- teacher-output JSONL 로의 OpenAI batch output 정규화
+- dialogue quality + world circulation combined model gate
 - deterministic train/eval SFT split export
-- Unsloth 4B baseline run-spec 과 training-script export
-- Unsloth 4B baseline launcher
+- Unsloth 및 HF/PEFT 4B baseline run-spec/training-script export
+- `Qwen/Qwen3.5-4B` 대상 HF/PEFT LoRA smoke fine-tune
+- fine-tuned checkpoint를 위한 local OpenAI-compatible adapter server
 
-## 다음 단계의 종료 조건
+## 다음 단계 종료 조건
 
-- 첫 fine-tuning run 정의에서 4B baseline 과 9B challenger 가 모호하지 않게 구분되어야 한다
-- export 된 dataset 은 고정 seed 로 재현 가능해야 한다
-- evaluation 은 persona consistency, world consistency, latency, memory fit 을 포함해야 한다
+- 첫 실전 4B checkpoint가 heuristic fallback 없이 model gate를 통과해야 한다
+- local adapter runtime이 world state와 persona 제약을 계속 지켜야 한다
+- 검증된 checkpoint가 최종 runtime artifact 경로로 export 또는 merge 가능해야 한다
+- evaluation은 계속 persona consistency, world consistency, latency, memory fit를 포함해야 한다

@@ -18,6 +18,8 @@ class PromptOnlyEvalRow:
     player_prompt: str
     response_text: str
     backend: str
+    adapter_name: str
+    latency_ms: float
     score: float
     passed_checks: list[str]
     failed_checks: list[str]
@@ -44,11 +46,12 @@ def run_prompt_only_baseline_eval(
             cases.append(("rumor_request", "Have you heard any useful rumors?"))
 
         for interaction_mode, player_prompt in cases:
-            response = simulation.probe_npc_dialogue(
+            result = simulation.probe_npc_dialogue_result(
                 npc_id,
                 interaction_mode=interaction_mode,
                 player_prompt=player_prompt,
             )
+            response = result.text
             passed, failed = _evaluate_response(simulation, npc_id, interaction_mode, response)
             total = len(passed) + len(failed)
             score = len(passed) / total if total else 0.0
@@ -60,6 +63,8 @@ def run_prompt_only_baseline_eval(
                     player_prompt=player_prompt,
                     response_text=response,
                     backend=dialogue_backend,
+                    adapter_name=result.adapter_name,
+                    latency_ms=round(result.latency_ms, 3),
                     score=round(score, 3),
                     passed_checks=passed,
                     failed_checks=failed,
@@ -78,7 +83,12 @@ def export_prompt_only_eval_json(path: str | Path, rows: list[PromptOnlyEvalRow]
 def summarize_scores(rows: list[PromptOnlyEvalRow]) -> str:
     average = sum(row.score for row in rows) / max(1, len(rows))
     failed = sum(1 for row in rows if row.failed_checks)
-    return f"rows={len(rows)} average_score={average:.3f} rows_with_failures={failed}"
+    average_latency = sum(row.latency_ms for row in rows) / max(1, len(rows))
+    fallback_rows = sum(1 for row in rows if row.backend == "openai_compat" and row.adapter_name != "openai_compat")
+    return (
+        f"rows={len(rows)} average_score={average:.3f} rows_with_failures={failed} "
+        f"average_latency_ms={average_latency:.1f} fallback_rows={fallback_rows}"
+    )
 
 
 def _evaluate_response(

@@ -29,6 +29,7 @@ class RuleBasedDialogueAdapter(DialogueModelAdapter):
         return DialogueResult(
             text=" ".join(parts).strip(),
             adapter_name="rule_based",
+            latency_ms=0.0,
             used_memory_ids=[memory.memory_id for memory in context.salient_memories[:2]],
             used_rumor_ids=rumor_ids,
         )

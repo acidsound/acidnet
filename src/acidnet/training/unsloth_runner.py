@@ -66,16 +66,33 @@ def export_unsloth_run_spec(path: str | Path, run_spec: UnslothRunSpec) -> Path:
 
 
 def render_unsloth_training_script(run_spec: UnslothRunSpec) -> str:
-    spec_json = json.dumps(asdict(run_spec), ensure_ascii=False, indent=2)
+    spec_repr = repr(asdict(run_spec))
     return f"""from __future__ import annotations
 
 import json
+import sys
+from pathlib import Path
+
+
+def _project_root() -> Path:
+    here = Path(__file__).resolve()
+    for candidate in [here.parent, *here.parents]:
+        if (candidate / "src").exists():
+            return candidate
+    return here.parent
+
+
+ROOT = _project_root()
+SRC = ROOT / "src"
+
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
 
 from datasets import load_dataset
 from trl import SFTConfig, SFTTrainer
 from unsloth import FastLanguageModel
 
-RUN_SPEC = {spec_json}
+RUN_SPEC = {spec_repr}
 
 
 def format_record(record, tokenizer):

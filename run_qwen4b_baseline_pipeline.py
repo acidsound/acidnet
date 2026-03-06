@@ -81,6 +81,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--train-rows", type=int, default=50_000, help="Target train rows.")
     parser.add_argument("--eval-rows", type=int, default=4_000, help="Target eval rows.")
+    parser.add_argument(
+        "--trainer-backend",
+        choices=("unsloth", "hf_peft"),
+        default="unsloth",
+        help="Training backend used for the exported run spec and training script.",
+    )
     parser.add_argument("--seed", type=int, default=7, help="Deterministic split seed.")
     parser.add_argument("--vram", type=int, default=24, help="Target VRAM used to choose the baseline manifest.")
     parser.add_argument(
@@ -107,6 +113,7 @@ def main() -> None:
         run_spec_path=args.run_spec_output,
         training_script_path=args.training_script_output,
         export_format=args.format,
+        trainer_backend=args.trainer_backend,
         seed=args.seed,
         train_rows_target=args.train_rows,
         eval_rows_target=args.eval_rows,

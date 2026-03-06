@@ -2,11 +2,11 @@
 
 ## Goal
 
-Build a simulation-first village RPG where the player can move through the world, talk with NPCs, trade, collect rumors, and eventually run a tightly tuned local persona/dialogue model.
+Build a simulation-first village RPG where the player can move through the world, talk with NPCs, trade, collect rumors, and run a tightly tuned small local persona/dialogue model.
 
 ## Primary Priorities
 
-1. Finish NPCs that can act as independent agents inside the world while using a small local language model for persona/dialogue.
+1. Finish NPCs that behave as independent agents inside the world while using a small local language model for persona/dialogue.
 2. Finish a world loop that keeps circulating through entropy, production, trade, hunger, rumor, and recovery instead of collapsing into a static state.
 
 ## Model Selection Principle
@@ -28,6 +28,7 @@ Build a simulation-first village RPG where the player can move through the world
 - Keep world mutation rule-based; local models may suggest intent or dialogue, but they do not write physics or economy directly.
 - Treat `GGUF q4_k_m` as a deployment artifact, not the primary fine-tuning artifact.
 - Keep SQLite as the default persistence layer on Windows; treat `zvec` as an optional Linux/macOS deployment path.
+- Treat bootstrap teacher generation as the default dataset path. External teacher completions are optional refinement, not a prerequisite.
 
 ## Step Checklist
 
@@ -44,30 +45,27 @@ Build a simulation-first village RPG where the player can move through the world
 - [x] Step 10: Add SQLite world snapshot persistence.
 - [x] Step 11: Add keyboard-driven GUI frontend.
 - [x] Step 12: Add teacher prompt schema and synthetic dataset export.
-- [ ] Step 13: Add Qwen3.5 4B vs 9B fine-tuning experiment harness.
+- [x] Step 13: Add Qwen3.5 4B vs 9B fine-tuning experiment harness.
 - [ ] Step 14: Export validated persona checkpoints to GGUF `q4_k_m`.
-- [ ] Step 15: Add local persona/dialogue runtime adapter.
-- [ ] Step 16: Add evaluation harness and model selection report.
+- [x] Step 15: Add local persona/dialogue runtime adapter.
+- [x] Step 16: Add evaluation harness and model selection report.
 - [ ] Step 17: Add optional RL for dialogue/persona consistency only.
 
 ## Current Focus
 
-Current implementation focus is Step 13:
+Current implementation focus is Step 14:
 
-- define the first 4B baseline run
-- define the 9B challenger run
-- generate large GPT-5.3 teacher prompt packs in JSONL and Parquet
-- prepare OpenAI batch request artifacts for teacher completion generation
-- normalize OpenAI batch outputs into `teacher_outputs.jsonl`
-- split merged SFT data into deterministic train/eval artifacts
-- prepare the first Unsloth training script for the 4B baseline
-- keep a runnable 4B baseline launcher ready before touching 9B
-- validate prompt-only base-model behavior before any long fine-tuning run starts
-- prepare selection criteria before any long fine-tuning run starts
+- improve the bootstrap-teacher dataset so the first real 4B run clears the model gate
+- keep `Qwen/Qwen3.5-4B` as the primary training checkpoint
+- keep `Qwen/Qwen3.5-9B` as a challenger only after the 4B run is stable
+- run bf16 LoRA through the HF/PEFT Windows-safe path by default
+- validate adapters through the local OpenAI-compatible runtime before any GGUF export
+- promote only validated checkpoints into runtime artifacts
 
 In practical terms, this means:
 
 - the small-model NPC loop matters more than model-size escalation
+- bootstrap teacher data matters more than external API dependence
 - world circulation and entropy stability matter more than UI scale-up
 - player survival and earning loops must stay inside the same rule-based economy
 
@@ -78,8 +76,9 @@ There is now a playable prototype in the repo with:
 - terminal runtime: `run_acidnet.py`
 - keyboard GUI runtime: `run_acidnet_gui.py`
 - SQLite persistence path: `data/acidnet.sqlite`
-- teacher dataset export path: `run_teacher_prompt_export.py`
-- fine-tuning experiment manifest export: `run_finetune_manifest_export.py`
+- bootstrap teacher data path: `run_bootstrap_qwen4b_pipeline.py`
+- baseline launcher: `run_qwen4b_baseline_train.py`
+- local adapter runtime path: `run_local_adapter_server.py`
 
 Implemented systems:
 
@@ -93,17 +92,18 @@ Implemented systems:
 - openai-compatible dialogue adapter boundary with deterministic fallback
 - world snapshot persistence
 - synthetic teacher prompt generation for planner and dialogue tasks
-- prompt-only baseline evaluation harness
+- bootstrap teacher output generation without external completion dependency
+- prompt-only baseline evaluation harness with latency and fallback reporting
 - world circulation evaluation harness
 - combined model gate for dialogue quality plus world circulation
-- OpenAI batch request preparation for teacher runs
-- OpenAI batch output normalization into teacher-output JSONL
 - deterministic train/eval SFT split export
-- Unsloth 4B baseline run-spec and training-script export
-- Unsloth 4B baseline launcher
+- Unsloth and HF/PEFT 4B baseline run-spec/training-script export
+- HF/PEFT LoRA smoke fine-tune run on `Qwen/Qwen3.5-4B`
+- local OpenAI-compatible adapter server for fine-tuned checkpoints
 
 ## Exit Criteria For The Next Step
 
-- the first fine-tuning run definition must specify 4B baseline vs 9B challenger without ambiguity
-- the exported dataset must be reproducible from a fixed seed
-- evaluation must include persona consistency, world consistency, latency, and memory fit
+- the first substantial 4B checkpoint must clear the model gate with no heuristic fallback
+- the local adapter runtime must stay grounded in world state and persona constraints
+- the validated checkpoint must be exportable or mergeable into the final runtime artifact path
+- evaluation must continue to include persona consistency, world consistency, latency, and memory fit
