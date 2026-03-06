@@ -538,6 +538,16 @@ def test_player_status_surfaces_fatigue_and_load() -> None:
     assert "Region:" in status
 
 
+def test_offscreen_regional_summaries_drift_over_time() -> None:
+    simulation = Simulation.create_demo()
+    before = dict(simulation.world.regions["region.hollowmarket"].stock_signals)
+
+    simulation.advance_turn(5)
+
+    after = simulation.world.regions["region.hollowmarket"].stock_signals
+    assert after != before
+
+
 def test_vendor_with_food_eats_instead_of_trying_to_trade_with_self() -> None:
     simulation = Simulation.create_demo()
     hobb = simulation.npcs["npc.hobb"]

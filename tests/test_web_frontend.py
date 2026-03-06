@@ -32,6 +32,7 @@ def test_scene_payload_exposes_player_view_contract() -> None:
     assert state["world"]["region_name"] == "Greenfall Village"
     assert any(node["location_id"] == "square" and node["is_player_here"] for node in state["scene"]["map_nodes"])
     assert any(node["is_current_region"] for node in state["scene"]["regional_nodes"])
+    assert all("stock_signals" in node for node in state["scene"]["regional_nodes"])
     assert state["scene"]["regional_routes"]
     assert any(action["command"] == "look" for action in state["actions"]["common"])
     assert any(action["command"] == "meal" for action in state["actions"]["common"])

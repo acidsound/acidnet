@@ -351,6 +351,7 @@ class WebSimulationRuntime:
                             "risk_level": round(node.risk_level, 2),
                             "is_current_region": node.region_id == location.region_id,
                             "known_local_locations": list(node.local_location_ids),
+                            "stock_signals": dict(node.stock_signals),
                         }
                         for node in self.simulation.world.regions.values()
                     ],

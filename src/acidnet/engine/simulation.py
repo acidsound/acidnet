@@ -851,6 +851,7 @@ class Simulation:
         self.player.fatigue = min(100.0, self.player.fatigue + 0.45)
         lines.extend(self._advance_player_travel())
         self._advance_weather()
+        self._advance_regional_summaries()
         shock_events = self._advance_world_shocks()
         lines.extend(shock_events)
         self.tick_log.extend(shock_events)
@@ -881,6 +882,41 @@ class Simulation:
                 self.tick_log.append(event)
         self._refresh_market_snapshot()
         return lines
+
+    def _advance_regional_summaries(self) -> None:
+        current_region = self.current_region()
+        current_region_id = current_region.region_id if current_region is not None else None
+        weather_pressure = {
+            "clear": 0,
+            "cool_rain": 1,
+            "market_day": 0,
+            "dry_wind": -1,
+            "dusty_heat": -1,
+            "storm_front": -2,
+        }.get(self.world.weather, 0)
+        route_capacity: dict[str, float] = {}
+        for route in self.world.regional_routes:
+            route_capacity[route.from_region_id] = route_capacity.get(route.from_region_id, 0.0) + route.seasonal_capacity
+            route_capacity[route.to_region_id] = route_capacity.get(route.to_region_id, 0.0) + route.seasonal_capacity
+
+        for region in self.world.regions.values():
+            if region.region_id == current_region_id:
+                continue
+            throughput = route_capacity.get(region.region_id, 0.0)
+            drift = 1 if throughput >= 0.9 and self.turn_counter % 3 == 0 else 0
+            grain_delta = weather_pressure + drift
+            tool_delta = 1 if self.turn_counter % 5 == 0 and throughput >= 0.8 else 0
+            fish_delta = 1 if self.world.weather in {"cool_rain", "clear"} and self.turn_counter % 4 == 0 else 0
+
+            if "wheat" in region.stock_signals:
+                region.stock_signals["wheat"] = max(0, min(24, region.stock_signals["wheat"] + grain_delta))
+            if "bread" in region.stock_signals:
+                bread_shift = 1 if region.stock_signals.get("wheat", 0) >= 8 and self.turn_counter % 4 == 0 else -1 if grain_delta < 0 else 0
+                region.stock_signals["bread"] = max(0, min(24, region.stock_signals["bread"] + bread_shift))
+            if "fish" in region.stock_signals:
+                region.stock_signals["fish"] = max(0, min(18, region.stock_signals["fish"] + fish_delta))
+            if "tool" in region.stock_signals:
+                region.stock_signals["tool"] = max(0, min(18, region.stock_signals["tool"] + tool_delta))
 
     def _build_planner_context(self, npc: NPCState) -> PlannerContext:
         top_goals: list[str] = []
