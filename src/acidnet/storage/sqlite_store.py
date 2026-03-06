@@ -5,6 +5,11 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from acidnet.llm.prompt_builder import DEFAULT_SYSTEM_PROMPT
+
+SYSTEM_PROMPT_SETTING_KEY = "dialogue.system_prompt"
+SYSTEM_PROMPT_PRESET_ID = "system.default"
+
 
 class SQLiteWorldStore:
     def __init__(self, db_path: str | Path) -> None:
@@ -53,7 +58,45 @@ class SQLiteWorldStore:
                 message TEXT NOT NULL,
                 payload_json TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS runtime_settings (
+                key TEXT PRIMARY KEY,
+                value_text TEXT NOT NULL,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS prompt_presets (
+                prompt_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                prompt_text TEXT NOT NULL
+            );
+
+            CREATE TRIGGER IF NOT EXISTS prompt_presets_no_update
+            BEFORE UPDATE ON prompt_presets
+            BEGIN
+                SELECT RAISE(ABORT, 'prompt_presets is read-only');
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS prompt_presets_no_delete
+            BEFORE DELETE ON prompt_presets
+            BEGIN
+                SELECT RAISE(ABORT, 'prompt_presets is read-only');
+            END;
             """
+        )
+        self.connection.execute(
+            """
+            INSERT OR IGNORE INTO prompt_presets (prompt_id, name, prompt_text)
+            VALUES (?, ?, ?)
+            """,
+            (SYSTEM_PROMPT_PRESET_ID, "Default NPC Dialogue System Prompt", DEFAULT_SYSTEM_PROMPT),
+        )
+        self.connection.execute(
+            """
+            INSERT OR IGNORE INTO runtime_settings (key, value_text)
+            VALUES (?, ?)
+            """,
+            (SYSTEM_PROMPT_SETTING_KEY, DEFAULT_SYSTEM_PROMPT),
         )
         self.connection.commit()
 
@@ -137,6 +180,51 @@ class SQLiteWorldStore:
         if row is None:
             return None
         return json.loads(row["payload_json"])
+
+    def get_setting(self, key: str, default: str | None = None) -> str | None:
+        row = self.connection.execute(
+            """
+            SELECT value_text
+            FROM runtime_settings
+            WHERE key = ?
+            """,
+            (key,),
+        ).fetchone()
+        if row is None:
+            return default
+        return str(row["value_text"])
+
+    def set_setting(self, key: str, value: str) -> None:
+        self.connection.execute(
+            """
+            INSERT INTO runtime_settings (key, value_text)
+            VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET
+                value_text = excluded.value_text,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (key, value),
+        )
+        self.connection.commit()
+
+    def get_dialogue_system_prompt(self) -> str:
+        return self.get_setting(SYSTEM_PROMPT_SETTING_KEY, DEFAULT_SYSTEM_PROMPT) or DEFAULT_SYSTEM_PROMPT
+
+    def set_dialogue_system_prompt(self, prompt: str) -> None:
+        self.set_setting(SYSTEM_PROMPT_SETTING_KEY, prompt)
+
+    def get_default_dialogue_system_prompt(self) -> str:
+        row = self.connection.execute(
+            """
+            SELECT prompt_text
+            FROM prompt_presets
+            WHERE prompt_id = ?
+            """,
+            (SYSTEM_PROMPT_PRESET_ID,),
+        ).fetchone()
+        if row is None:
+            return DEFAULT_SYSTEM_PROMPT
+        return str(row["prompt_text"])
 
     def close(self) -> None:
         self.connection.close()

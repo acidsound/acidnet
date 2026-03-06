@@ -17,6 +17,7 @@ class DialogueContext(BaseModel):
     location: Location
     interaction_mode: str
     player_prompt: str
+    system_prompt: str | None = None
     relationship_score: float = 0.0
     salient_beliefs: list[Belief] = Field(default_factory=list)
     salient_memories: list[EpisodicMemory] = Field(default_factory=list)

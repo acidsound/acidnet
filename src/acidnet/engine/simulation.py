@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Iterable
 
 from acidnet.llm import DialogueContext, DialogueModelAdapter, DialogueResult, RuleBasedDialogueAdapter, build_dialogue_adapter
-from acidnet.llm.prompt_builder import infer_interaction_mode
+from acidnet.llm.prompt_builder import DEFAULT_SYSTEM_PROMPT, infer_interaction_mode
 from acidnet.models import (
     Belief,
     EpisodicMemory,
@@ -72,6 +72,7 @@ class Simulation:
         personas: dict[str, PersonaProfile],
         rumors: dict[str, Rumor],
         dialogue_adapter: DialogueModelAdapter | None = None,
+        dialogue_system_prompt: str | None = None,
     ) -> None:
         self.world = world
         self.player = player
@@ -82,6 +83,7 @@ class Simulation:
         self.tick_log: deque[str] = deque(maxlen=16)
         self.planner = HeuristicPlanner()
         self.dialogue_adapter = dialogue_adapter or RuleBasedDialogueAdapter()
+        self.dialogue_system_prompt = dialogue_system_prompt or DEFAULT_SYSTEM_PROMPT
         self.turn_ticks = 12
         self.turn_counter = 0
 
@@ -93,6 +95,7 @@ class Simulation:
         dialogue_model: str | None = None,
         dialogue_endpoint: str | None = None,
         dialogue_adapter_path: str | None = None,
+        dialogue_system_prompt: str | None = None,
     ) -> "Simulation":
         setup = build_demo_setup()
         return cls(
@@ -107,6 +110,7 @@ class Simulation:
                 endpoint=dialogue_endpoint,
                 adapter_path=dialogue_adapter_path,
             ),
+            dialogue_system_prompt=dialogue_system_prompt,
         )
 
     def snapshot(self) -> dict[str, Any]:
@@ -124,12 +128,16 @@ class Simulation:
                 for actor_id, memories in sorted(self.memories.items())
             },
             "dialogue_backend": type(self.dialogue_adapter).__name__,
+            "dialogue_system_prompt": self.dialogue_system_prompt,
             "tick_log": list(self.tick_log),
             "turn_counter": self.turn_counter,
         }
 
     def prepare_dialogue_adapter(self) -> str:
         return self.dialogue_adapter.prepare() or f"{type(self.dialogue_adapter).__name__} ready."
+
+    def set_dialogue_system_prompt(self, prompt: str) -> None:
+        self.dialogue_system_prompt = prompt or DEFAULT_SYSTEM_PROMPT
 
     def help_text(self) -> str:
         return "\n".join(
@@ -739,6 +747,7 @@ class Simulation:
             location=self.world.locations[npc.location_id],
             interaction_mode=interaction_mode,
             player_prompt=player_prompt,
+            system_prompt=self.dialogue_system_prompt,
             relationship_score=self._relationship_score(npc, self.player.player_id),
             salient_beliefs=self._derive_beliefs(npc),
             salient_memories=salient_memories,

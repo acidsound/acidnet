@@ -5,10 +5,11 @@ import threading
 import tkinter as tk
 from dataclasses import dataclass
 from pathlib import Path
+from tkinter import messagebox
 
 from acidnet.engine import Simulation
-from acidnet.eval import SimulationMonkeyRunner
 from acidnet.engine.simulation import TurnEvent
+from acidnet.eval import SimulationMonkeyRunner
 from acidnet.storage import EventLogFile, SQLiteWorldStore
 
 FONT_BODY = ("Consolas", 11)
@@ -75,8 +76,10 @@ class AcidNetApp(tk.Tk):
             dialogue_endpoint=dialogue_endpoint,
             dialogue_adapter_path=dialogue_adapter_path,
         )
-        self.store = SQLiteWorldStore(db_path) if persist else None
+        self.config_store = SQLiteWorldStore(db_path)
+        self.store = self.config_store if persist else None
         self.event_log = EventLogFile(event_log_path) if event_log_path is not None else None
+        self.simulation.set_dialogue_system_prompt(self.config_store.get_dialogue_system_prompt())
         self.selected_location_id = self.simulation.player.location_id
         self.status_var = tk.StringVar()
         self.dialogue_var = tk.StringVar()
@@ -93,6 +96,8 @@ class AcidNetApp(tk.Tk):
         self.dialogue_ready = False
         self.dialogue_loading = False
         self._monkey_waiting_for_dialogue = monkey
+        self.settings_window: tk.Toplevel | None = None
+        self.settings_text: tk.Text | None = None
         self.dialogue_var.set(f"Loading {dialogue_backend} dialogue model...")
 
         self._build_ui()
@@ -106,6 +111,7 @@ class AcidNetApp(tk.Tk):
                 "Use arrow keys or WASD to move. Click an adjacent location on the map to travel there.",
                 "T to talk, Y to focus direct speech, R for rumor, X to work, B to buy bread, E to eat, Space to wait.",
                 f"Dialogue backend: {dialogue_backend}",
+                "Dialogue system prompt loaded from database.",
             ],
             kind="system",
         )
@@ -201,9 +207,13 @@ class AcidNetApp(tk.Tk):
         )
         self.status_label.grid(row=1, column=0, sticky="ew", pady=(4, 12))
 
-        tk.Label(sidebar, text="Dialogue", font=FONT_TITLE, fg=FG_TEXT, bg=BG_PANEL, anchor="w").grid(
-            row=2, column=0, sticky="ew"
+        dialogue_header = tk.Frame(sidebar, bg=BG_PANEL)
+        dialogue_header.grid(row=2, column=0, sticky="ew")
+        dialogue_header.columnconfigure(0, weight=1)
+        tk.Label(dialogue_header, text="Dialogue", font=FONT_TITLE, fg=FG_TEXT, bg=BG_PANEL, anchor="w").grid(
+            row=0, column=0, sticky="w"
         )
+        self._make_button(dialogue_header, "Settings", self._open_prompt_settings).grid(row=0, column=1, sticky="e")
         self.dialogue_label = tk.Label(
             sidebar,
             textvariable=self.dialogue_var,
@@ -560,6 +570,95 @@ class AcidNetApp(tk.Tk):
             return
         self.store.save_simulation(self.simulation, kind=kind, message=message, payload=payload)
 
+    def _open_prompt_settings(self) -> None:
+        if self.settings_window is not None and self.settings_window.winfo_exists():
+            self.settings_window.deiconify()
+            self.settings_window.lift()
+            self.settings_window.focus_force()
+            return
+
+        window = tk.Toplevel(self)
+        window.title("Dialogue System Prompt")
+        window.geometry("760x620")
+        window.minsize(620, 460)
+        window.configure(bg=BG_PANEL)
+        window.transient(self)
+        window.grab_set()
+        window.rowconfigure(1, weight=1)
+        window.columnconfigure(0, weight=1)
+        window.protocol("WM_DELETE_WINDOW", self._close_prompt_settings)
+
+        tk.Label(
+            window,
+            text="Global System Prompt",
+            font=("Consolas", 14, "bold"),
+            fg=FG_TEXT,
+            bg=BG_PANEL,
+            anchor="w",
+        ).grid(row=0, column=0, sticky="ew", padx=16, pady=(16, 6))
+
+        editor = tk.Text(
+            window,
+            bg="#13171B",
+            fg=FG_TEXT,
+            insertbackground=FG_TEXT,
+            relief="flat",
+            highlightthickness=0,
+            font=FONT_BODY,
+            wrap="word",
+            padx=10,
+            pady=10,
+        )
+        editor.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 12))
+        editor.insert("1.0", self.simulation.dialogue_system_prompt)
+
+        button_row = tk.Frame(window, bg=BG_PANEL)
+        button_row.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 16))
+        button_row.columnconfigure(0, weight=1)
+        button_row.columnconfigure(1, weight=1)
+        button_row.columnconfigure(2, weight=1)
+
+        self._make_button(button_row, "Save", self._save_prompt_settings).grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        self._make_button(button_row, "Reset Default", self._reset_prompt_settings_default).grid(
+            row=0, column=1, sticky="ew", padx=3
+        )
+        self._make_button(button_row, "Close", self._close_prompt_settings).grid(row=0, column=2, sticky="ew", padx=(6, 0))
+
+        self.settings_window = window
+        self.settings_text = editor
+        editor.focus_set()
+
+    def _save_prompt_settings(self) -> None:
+        if self.settings_text is None or not self.settings_text.winfo_exists():
+            return
+        prompt = self.settings_text.get("1.0", tk.END).strip()
+        if not prompt:
+            messagebox.showerror("Empty Prompt", "The global system prompt cannot be empty.", parent=self.settings_window)
+            return
+        self.config_store.set_dialogue_system_prompt(prompt)
+        self.simulation.set_dialogue_system_prompt(prompt)
+        self._append_log(["Dialogue system prompt saved to the runtime settings table."], kind="system")
+        self._save_snapshot(
+            "settings",
+            "Updated dialogue system prompt.",
+            {"prompt_lines": len(prompt.splitlines()), "prompt_chars": len(prompt)},
+        )
+        self._close_prompt_settings()
+
+    def _reset_prompt_settings_default(self) -> None:
+        if self.settings_text is None or not self.settings_text.winfo_exists():
+            return
+        default_prompt = self.config_store.get_default_dialogue_system_prompt()
+        self.settings_text.delete("1.0", tk.END)
+        self.settings_text.insert("1.0", default_prompt)
+
+    def _close_prompt_settings(self) -> None:
+        if self.settings_window is not None and self.settings_window.winfo_exists():
+            self.settings_window.grab_release()
+            self.settings_window.destroy()
+        self.settings_window = None
+        self.settings_text = None
+
     def _submit_entry_command(self, _event=None) -> None:
         command = self.command_entry.get().strip()
         if command:
@@ -661,10 +760,15 @@ class AcidNetApp(tk.Tk):
         self._run_command(f"go {best_neighbor}")
 
     def _on_close(self) -> None:
+        settings_store = self.config_store
+        snapshot_store = self.store
         if self.store is not None:
             self._save_snapshot("session_end", "GUI session ended.", {"entrypoint": "gui"})
             self.store.close()
             self.store = None
+        if settings_store is not None and settings_store is not snapshot_store:
+            settings_store.close()
+        self.config_store = None
         if self.event_log is not None:
             self.event_log.write(
                 kind="session_end",

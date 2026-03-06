@@ -15,6 +15,8 @@ Implemented:
 - dedicated direct-speech input for the selected NPC
 - command entry for raw world commands
 - shared SQLite persistence with the terminal runtime
+- `Settings` modal for viewing and editing the global dialogue system prompt
+- DB-backed prompt storage with a read-only `prompt_presets` table and editable `runtime_settings`
 
 Entry point:
 
@@ -98,6 +100,7 @@ python run_monkey_world.py --steps 240 --dialogue-backend heuristic
 - `M`: toggle monkey mode on or off
 - `Space`: wait one turn
 - `L`: refresh the current scene
+- `Settings` button in the `Dialogue` panel: open the system-prompt modal
 - `Enter` in the direct-speech box: send `say <npc> <message>`
 - `Enter` in the command box: run any raw command
 - `Run (Enter)` button: submit the raw command entry
@@ -106,6 +109,7 @@ python run_monkey_world.py --steps 240 --dialogue-backend heuristic
 
 - left: world map with locations, links, and player marker
 - right: status, location text, NPC list, action buttons, direct-speech input, rumors, event log
+- dialogue status section includes model readiness plus a `Settings` button for the shared system prompt
 - bottom-right: raw command entry and `Run (Enter)` button for power-user commands
 
 ## Next Work

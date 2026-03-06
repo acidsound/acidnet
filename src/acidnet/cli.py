@@ -69,6 +69,8 @@ def main() -> None:
     )
     store = None if args.no_persist else SQLiteWorldStore(args.db)
     event_log = None if args.no_event_log else EventLogFile(args.event_log)
+    if store is not None:
+        simulation.set_dialogue_system_prompt(store.get_dialogue_system_prompt())
 
     if store is not None:
         store.save_simulation(

@@ -33,3 +33,44 @@ def test_sqlite_store_persists_world_snapshot() -> None:
     assert snapshot_count == 1
     assert event_count == 1
     assert rumor_count == len(simulation.rumors)
+
+
+def test_sqlite_store_round_trips_dialogue_system_prompt_setting() -> None:
+    artifact_dir = Path("data") / "test_artifacts"
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    db_path = artifact_dir / "acidnet_settings_test.sqlite"
+    if db_path.exists():
+        db_path.unlink()
+
+    store = SQLiteWorldStore(db_path)
+    try:
+        default_prompt = store.get_default_dialogue_system_prompt()
+        assert default_prompt
+        assert store.get_dialogue_system_prompt() == default_prompt
+
+        updated_prompt = default_prompt + "\nRespond in a low-key village tone."
+        store.set_dialogue_system_prompt(updated_prompt)
+
+        assert store.get_dialogue_system_prompt() == updated_prompt
+    finally:
+        store.close()
+
+
+def test_prompt_presets_table_is_read_only_for_updates() -> None:
+    artifact_dir = Path("data") / "test_artifacts"
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    db_path = artifact_dir / "acidnet_prompt_presets_test.sqlite"
+    if db_path.exists():
+        db_path.unlink()
+
+    store = SQLiteWorldStore(db_path)
+    try:
+        with sqlite3.connect(db_path) as connection:
+            try:
+                connection.execute("UPDATE prompt_presets SET prompt_text = 'mutated'")
+            except sqlite3.IntegrityError:
+                pass
+            else:
+                raise AssertionError("prompt_presets update unexpectedly succeeded")
+    finally:
+        store.close()

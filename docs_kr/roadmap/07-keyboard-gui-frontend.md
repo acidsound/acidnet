@@ -12,9 +12,11 @@
 - talk, direct-speech, rumor, buy, eat, wait 액션
 - 관찰용 monkey mode 를 GUI 안에서 켜고 끌 수 있는 toggle
 - event log panel
-- 선택된 NPC 에게 바로 말할 수 있는 direct-speech 입력창
+- 선택한 NPC 전용 direct-speech 입력창
 - raw command 입력창
 - 터미널 런타임과 공유되는 SQLite persistence
+- 전역 dialogue system prompt 를 보고 수정할 수 있는 `Settings` modal
+- 읽기 전용 `prompt_presets` 테이블과 수정 가능한 `runtime_settings` 테이블로 분리된 DB 기반 prompt 저장
 
 진입점:
 
@@ -42,7 +44,7 @@ acidnet-gui
 powershell -ExecutionPolicy Bypass -File run_dev_world.ps1 -Detached
 ```
 
-이 dev launcher 는 이제 기본적으로 GUI monkey mode 를 켜서, 수동 입력이 없어도 월드가 계속 움직이게 한다.
+이 dev launcher 는 기본적으로 GUI monkey mode 를 켜서, 수동 입력이 없어도 월드가 계속 움직이게 한다.
 
 별도 창에서 plain-text event log tail:
 
@@ -89,15 +91,16 @@ python run_monkey_world.py --steps 240 --dialogue-backend heuristic
 
 - 방향키 또는 `WASD`: 이동
 - 인접한 map node 클릭: 해당 location 으로 바로 이동
-- `T`: 선택된 NPC 와 대화
-- `Y`: 선택된 NPC 에 대한 direct-speech 입력창으로 포커스
-- `R`: 선택된 NPC 에게 rumor 질문
+- `T`: 선택한 NPC 와 대화
+- `Y`: 선택한 NPC 용 direct-speech 입력창으로 포커스 이동
+- `R`: 선택한 NPC 에게 rumor 질문
 - `X`: 현재 location 에서 local work 수행
-- `B`: 선택된 NPC 에게 bread 구매
-- `E`: 인벤토리에서 가장 좋은 음식 먹기
+- `B`: 선택한 NPC 에게 bread 구매
+- `E`: 인벤토리에서 가장 좋은 음식을 먹기
 - `M`: monkey mode 켜기/끄기
 - `Space`: 한 턴 대기
-- `L`: 현재 장면 다시 보기
+- `L`: 현재 화면 다시 보기
+- `Dialogue` 영역의 `Settings` 버튼: system prompt modal 열기
 - direct-speech 입력창에서 `Enter`: `say <npc> <message>` 전송
 - 명령창에서 `Enter`: raw command 실행
 - `Run (Enter)` 버튼: raw command 입력 실행
@@ -105,8 +108,9 @@ python run_monkey_world.py --steps 240 --dialogue-backend heuristic
 ## UI 구조
 
 - 왼쪽: location, 연결선, player marker 가 있는 world map
-- 오른쪽: status, location text, NPC list, 액션 버튼, direct-speech 입력, rumors, event log
-- 오른쪽 아래: power-user 용 raw command 입력창과 `Run (Enter)` 버튼
+- 오른쪽: status, dialogue 상태, location text, NPC list, 액션 버튼, direct-speech 입력, raw command 입력
+- map 아래: rumors, event log
+- dialogue status 영역에는 모델 준비 상태와 전역 system prompt 용 `Settings` 버튼이 같이 표시됨
 
 ## 다음 작업
 

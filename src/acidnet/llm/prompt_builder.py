@@ -26,10 +26,7 @@ INTERACTION_MODE_ALIASES = {
 RUMOR_KEYWORDS = ("rumor", "rumors", "heard", "hear", "gossip", "news")
 TRADE_KEYWORDS = ("buy", "sell", "trade", "price", "prices", "cost", "coin", "bread", "stew", "food", "stock")
 TALK_KEYWORDS = ("hello", "hi", "hey", "what is going on", "what's going on", "how are things", "what happened")
-
-
-def build_system_prompt(context: DialogueContext | None = None) -> str:
-    return """You are a small NPC dialogue model inside a village simulation.
+DEFAULT_SYSTEM_PROMPT = """You are a small NPC dialogue model inside a village simulation.
 
 Respond as exactly one NPC.
 Stay grounded in the supplied state.
@@ -41,6 +38,12 @@ Do not explain your reasoning.
 """
 
 
+def build_system_prompt(context: DialogueContext | None = None) -> str:
+    if context is not None and context.system_prompt:
+        return context.system_prompt
+    return DEFAULT_SYSTEM_PROMPT
+
+
 def build_user_prompt(context: DialogueContext) -> str:
     interaction_mode = normalize_interaction_mode(context.interaction_mode, player_prompt=context.player_prompt)
     return build_user_prompt_from_sample(
@@ -50,7 +53,9 @@ def build_user_prompt(context: DialogueContext) -> str:
                 "tick": context.world.tick,
                 "weather": context.world.weather,
                 "scarcity_index": context.world.market.scarcity_index,
-                "market_prices": {item_id: state.current_price for item_id, state in sorted(context.world.market.items.items())},
+                "market_prices": {
+                    item_id: state.current_price for item_id, state in sorted(context.world.market.items.items())
+                },
             },
             "location": {
                 "name": context.location.name,
@@ -73,7 +78,10 @@ def build_user_prompt(context: DialogueContext) -> str:
                 "player_prompt": context.player_prompt,
                 "player_goal": interaction_mode,
             },
-            "beliefs": [f"{belief.subject_id}:{belief.predicate}:{belief.confidence:.2f}" for belief in context.salient_beliefs[:4]],
+            "beliefs": [
+                f"{belief.subject_id}:{belief.predicate}:{belief.confidence:.2f}"
+                for belief in context.salient_beliefs[:4]
+            ],
             "recent_memories": [memory.summary for memory in context.salient_memories[:3]],
             "visible_rumors": [rumor.content for rumor in context.visible_rumors[:3]],
             "relationship_score": context.relationship_score,
@@ -168,7 +176,9 @@ def _format_beliefs(beliefs: list) -> list[str]:
         if isinstance(belief, str):
             lines.append(belief)
         elif isinstance(belief, dict):
-            lines.append(f'{belief.get("subject_id", "unknown")}:{belief.get("predicate", "unknown")}:{float(belief.get("confidence", 0.0)):.2f}')
+            lines.append(
+                f'{belief.get("subject_id", "unknown")}:{belief.get("predicate", "unknown")}:{float(belief.get("confidence", 0.0)):.2f}'
+            )
     return lines or ["none"]
 
 
