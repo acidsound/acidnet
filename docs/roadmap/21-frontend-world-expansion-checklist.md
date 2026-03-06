@@ -87,9 +87,9 @@ Current note:
   - verify that work and trade are still worth doing
   - confirm that the player cannot trivially farm infinite stability
   Progress:
-  - first sinks are now in place as food spoilage over time and tool wear on repeated field or riverside work
-  - work output now drops when a tool-relevant task is done without tools
-  - the remaining gap is broader sink coverage such as storage pressure or delayed production, plus monkey validation against exploit loops
+  - first sinks are now in place as food spoilage over time and player-side tool wear on repeated field or riverside work
+  - player resource work now loses some yield under storage pressure when the carried load is already near capacity
+  - the remaining gap is broader sink coverage such as delayed production, plus monkey validation against exploit loops
 
 - [ ] Step 20H: Add regional scaling.
   Exit criteria:

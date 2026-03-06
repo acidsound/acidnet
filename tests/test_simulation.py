@@ -267,6 +267,20 @@ def test_work_without_tool_reduces_farm_yield() -> None:
     assert any("gather 1 wheat" in line.lower() for line in result.lines)
 
 
+def test_storage_pressure_leaves_part_of_field_yield_behind() -> None:
+    simulation = Simulation.create_demo()
+    simulation.player.location_id = "farm"
+    simulation.world.weather = "clear"
+    simulation.world.field_stress = 0.0
+    simulation.player.carry_capacity = 2.0
+    simulation.player.inventory = {"wheat": 2, "tool": 1}
+
+    result = simulation.handle_command("work")
+
+    assert any("gather 0 wheat" in line.lower() or "gather 1 wheat" in line.lower() for line in result.lines)
+    assert any("leave" in line.lower() and "behind" in line.lower() for line in result.lines)
+
+
 def test_talk_without_target_is_rejected_when_multiple_npcs_are_present() -> None:
     simulation = Simulation.create_demo()
 

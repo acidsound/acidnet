@@ -585,6 +585,7 @@ class Simulation:
             return TurnResult(self._events("system", [self._travel_command_block_message()]))
         if self.player.fatigue >= 85:
             return TurnResult(self._events("system", ["You are too exhausted to work. Rest or sleep first."]))
+        self._refresh_actor_loads()
         location = self.world.locations[self.player.location_id]
         lines: list[str] = []
         if location.location_id == "farm":
@@ -593,12 +594,20 @@ class Simulation:
                 base_amount=self._farm_yield_amount(),
                 location_id=location.location_id,
             )
-            self._adjust_item(self.player.inventory, "wheat", wheat_yield)
-            lines.append(f"You help in the south field and gather {wheat_yield} wheat.")
+            kept_yield, lost_yield = self._apply_storage_pressure_to_gain(self.player, "wheat", wheat_yield)
+            if kept_yield > 0:
+                self._adjust_item(self.player.inventory, "wheat", kept_yield)
+            lines.append(f"You help in the south field and gather {kept_yield} wheat.")
+            if lost_yield > 0:
+                lines.append(f"You leave {lost_yield} wheat behind because your load is already too heavy.")
         elif location.location_id == "riverside":
             fish_yield = self._effective_work_amount(self.player, base_amount=1, location_id=location.location_id)
-            self._adjust_item(self.player.inventory, "fish", fish_yield)
-            lines.append(f"You spend a shift on the riverside and catch {fish_yield} fish.")
+            kept_yield, lost_yield = self._apply_storage_pressure_to_gain(self.player, "fish", fish_yield)
+            if kept_yield > 0:
+                self._adjust_item(self.player.inventory, "fish", kept_yield)
+            lines.append(f"You spend a shift on the riverside and catch {kept_yield} fish.")
+            if lost_yield > 0:
+                lines.append(f"You leave {lost_yield} fish behind because your load is already too heavy.")
         elif location.location_id == "square":
             self.player.money += 4
             lines.append("You run market errands and earn 4 gold.")
@@ -1621,6 +1630,24 @@ class Simulation:
     def _consume_food(self, inventory: dict[str, int], item: str, actor: NPCState | PlayerState) -> None:
         self._adjust_item(inventory, item, -1)
         actor.hunger = max(0.0, actor.hunger - CONSUMPTION_VALUE[item])
+
+    def _apply_storage_pressure_to_gain(
+        self,
+        actor: NPCState | PlayerState,
+        item: str,
+        amount: int,
+    ) -> tuple[int, int]:
+        if amount <= 0:
+            return 0, 0
+        item_weight = ITEM_WEIGHTS.get(item, 1.0)
+        if item_weight <= 0:
+            return amount, 0
+        max_safe_weight = actor.carry_capacity * 0.95
+        remaining_weight = max(0.0, max_safe_weight - actor.carried_weight)
+        keepable = int(remaining_weight // item_weight)
+        kept = max(0, min(amount, keepable))
+        lost = max(0, amount - kept)
+        return kept, lost
 
     def _effective_work_amount(
         self,

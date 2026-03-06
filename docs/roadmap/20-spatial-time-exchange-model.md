@@ -24,6 +24,7 @@ If travel, cost, and exchange are wrong, a richer frontend will only make the wr
 - offscreen simulation should stay summarized unless the player or a tracked actor gets close
 - entropy must come from both internal sinks and external shocks
 - destructive shocks should also open recovery paths instead of pushing the world in one direction forever
+- internal sinks should be legible to the player, such as spoilage, worn tools, or yield lost to storage pressure
 
 ## Space Model
 
