@@ -9,6 +9,8 @@ from acidnet.models import (
     NPCState,
     PersonaProfile,
     PlayerState,
+    RegionNode,
+    RegionalRoute,
     RelationshipState,
     Rumor,
     RumorCategory,
@@ -31,51 +33,108 @@ def build_demo_setup() -> DemoSetup:
             location_id="square",
             name="Market Square",
             kind="market",
+            region_id="region.greenfall",
             neighbors=["tavern", "bakery", "smithy", "farm", "shrine"],
         ),
         "tavern": Location(
             location_id="tavern",
             name="Copper Cup Tavern",
             kind="social",
+            region_id="region.greenfall",
             neighbors=["square", "riverside"],
         ),
         "bakery": Location(
             location_id="bakery",
             name="Warm Crust Bakery",
             kind="workshop",
+            region_id="region.greenfall",
             neighbors=["square"],
         ),
         "smithy": Location(
             location_id="smithy",
             name="Red Anvil Smithy",
             kind="workshop",
+            region_id="region.greenfall",
             neighbors=["square"],
         ),
         "farm": Location(
             location_id="farm",
             name="South Field Farm",
             kind="resource",
+            region_id="region.greenfall",
             neighbors=["square", "riverside"],
         ),
         "riverside": Location(
             location_id="riverside",
             name="Mossy Riverside",
             kind="resource",
+            region_id="region.greenfall",
             neighbors=["farm", "tavern"],
         ),
         "shrine": Location(
             location_id="shrine",
             name="Dawn Shrine",
             kind="rest",
+            region_id="region.greenfall",
             neighbors=["square"],
         ),
     }
+
+    regions = {
+        "region.greenfall": RegionNode(
+            region_id="region.greenfall",
+            name="Greenfall Village",
+            kind="settlement",
+            summary="The current high-resolution village where the player starts.",
+            local_location_ids=sorted(locations),
+            stock_signals={"bread": 10, "fish": 8, "wheat": 18, "tool": 2},
+            risk_level=0.22,
+        ),
+        "region.hollowmarket": RegionNode(
+            region_id="region.hollowmarket",
+            name="Hollow Market",
+            kind="settlement",
+            summary="A busier trade town farther south, simulated only as summarized state for now.",
+            stock_signals={"bread": 16, "fish": 5, "wheat": 9, "tool": 6},
+            risk_level=0.28,
+        ),
+        "region.stonewatch": RegionNode(
+            region_id="region.stonewatch",
+            name="Stonewatch Outpost",
+            kind="outpost",
+            summary="A small ridge outpost with sparse food and better tools than grain.",
+            stock_signals={"bread": 4, "fish": 1, "wheat": 3, "tool": 8},
+            risk_level=0.36,
+        ),
+    }
+    regional_routes = [
+        RegionalRoute(
+            route_id="route.greenfall.hollowmarket",
+            from_region_id="region.greenfall",
+            to_region_id="region.hollowmarket",
+            travel_ticks=8 * 12,
+            cargo_risk=0.24,
+            weather_sensitivity=0.45,
+            seasonal_capacity=1.0,
+        ),
+        RegionalRoute(
+            route_id="route.greenfall.stonewatch",
+            from_region_id="region.greenfall",
+            to_region_id="region.stonewatch",
+            travel_ticks=10 * 12,
+            cargo_risk=0.34,
+            weather_sensitivity=0.52,
+            seasonal_capacity=0.8,
+        ),
+    ]
 
     world = WorldState(
         tick=0,
         day=1,
         weather="dry_wind",
         locations=locations,
+        regions=regions,
+        regional_routes=regional_routes,
         market=MarketState(
             items={
                 "wheat": MarketItemState(item_id="wheat", stock=18, base_price=2, current_price=2),

@@ -68,6 +68,8 @@ The current project baseline is:
 - add summarized regional nodes
 - keep local simulation high-resolution only near the player or tracked actors
 - make travel cost and information flow matter across settlements
+- summarized regional nodes and route metadata now exist in the world model and web state
+- next work is actual inter-region travel and low-cost offscreen regional updates
 
 ## Immediate Next Work
 

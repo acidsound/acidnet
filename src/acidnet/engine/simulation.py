@@ -268,6 +268,7 @@ class Simulation:
     def player_status(self) -> str:
         self._refresh_actor_loads()
         focused_npc = self._focused_npc_here()
+        current_region = self.current_region()
         location_line = f"{self.player.name} is at {self.world.locations[self.player.location_id].name}."
         if self.player.travel_state.is_traveling:
             origin_name = self.world.locations[self.player.travel_state.origin_location_id or self.player.location_id].name
@@ -277,6 +278,7 @@ class Simulation:
         lines = [
             f"Day {self.world.day}, tick {self.world.tick}, weather: {self.world.weather}",
             location_line,
+            f"Region: {current_region.name if current_region is not None else 'unknown'}",
             f"Target: {focused_npc.name if focused_npc is not None else 'none'}",
             f"Hunger: {self.player.hunger:.1f}/100",
             f"Fatigue: {self.player.fatigue:.1f}/100",
@@ -296,6 +298,12 @@ class Simulation:
             lines.append("Recent world events:")
             lines.extend(f"- {entry}" for entry in list(self.tick_log)[-5:])
         return "\n".join(lines)
+
+    def current_region(self):
+        location = self.world.locations.get(self.player.location_id)
+        if location is None:
+            return None
+        return self.world.regions.get(location.region_id)
 
     def known_rumors_text(self) -> str:
         if not self.player.known_rumor_ids:

@@ -30,7 +30,32 @@ class Location(BaseModel):
     location_id: str
     name: str
     kind: str
+    region_id: str = "region.greenfall"
     neighbors: list[str] = Field(default_factory=list)
+
+
+class RegionNode(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    region_id: str
+    name: str
+    kind: str
+    summary: str
+    local_location_ids: list[str] = Field(default_factory=list)
+    stock_signals: dict[str, int] = Field(default_factory=dict)
+    risk_level: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class RegionalRoute(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    route_id: str
+    from_region_id: str
+    to_region_id: str
+    travel_ticks: int = Field(ge=1)
+    cargo_risk: float = Field(default=0.0, ge=0.0, le=1.0)
+    weather_sensitivity: float = Field(default=0.0, ge=0.0, le=1.0)
+    seasonal_capacity: float = Field(default=1.0, gt=0.0)
 
 
 class MarketItemState(BaseModel):
@@ -211,6 +236,8 @@ class WorldState(BaseModel):
     weather: str = "clear"
     field_stress: float = Field(default=0.0, ge=0.0, le=1.0)
     locations: dict[str, Location] = Field(default_factory=dict)
+    regions: dict[str, RegionNode] = Field(default_factory=dict)
+    regional_routes: list[RegionalRoute] = Field(default_factory=list)
     market: MarketState = Field(default_factory=MarketState)
     active_events: list[WorldEvent] = Field(default_factory=list)
     npc_ids: list[str] = Field(default_factory=list)

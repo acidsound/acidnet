@@ -98,6 +98,11 @@ Current note:
   - keep local areas high-resolution only when needed
   - route travel between settlements consumes meaningful time and risk
   - confirm acceptable runtime cost in observation runs
+  Progress:
+  - world state now includes summarized `regions` and `regional_routes`
+  - the demo world exposes Greenfall as the high-resolution home region plus two offscreen summarized neighbors
+  - web state now surfaces current region and summarized regional route metadata
+  - the remaining gap is actual inter-region travel and summarized offscreen updates
 
 ## Recommended Order After This
 

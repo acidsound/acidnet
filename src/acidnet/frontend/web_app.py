@@ -284,6 +284,7 @@ class WebSimulationRuntime:
             self.simulation._refresh_actor_loads()
             focused_npc = self.simulation._focused_npc_here()
             location = self.simulation.world.locations[self.simulation.player.location_id]
+            region = self.simulation.current_region()
             location_name = location.name
             if self.simulation.player.travel_state.is_traveling:
                 destination_id = self.simulation.player.travel_state.destination_location_id or self.simulation.player.location_id
@@ -302,6 +303,8 @@ class WebSimulationRuntime:
                     "field_stress": round(self.simulation.world.field_stress, 2),
                     "location_id": location.location_id,
                     "location_name": location_name,
+                    "region_id": location.region_id,
+                    "region_name": region.name if region is not None else None,
                     "active_events": [
                         {
                             "event_id": event.event_id,
@@ -339,6 +342,30 @@ class WebSimulationRuntime:
                         )
                     ],
                     "map_nodes": self._map_nodes(),
+                    "regional_nodes": [
+                        {
+                            "region_id": node.region_id,
+                            "name": node.name,
+                            "kind": node.kind,
+                            "summary": node.summary,
+                            "risk_level": round(node.risk_level, 2),
+                            "is_current_region": node.region_id == location.region_id,
+                            "known_local_locations": list(node.local_location_ids),
+                        }
+                        for node in self.simulation.world.regions.values()
+                    ],
+                    "regional_routes": [
+                        {
+                            "route_id": route.route_id,
+                            "from_region_id": route.from_region_id,
+                            "to_region_id": route.to_region_id,
+                            "travel_ticks": route.travel_ticks,
+                            "cargo_risk": round(route.cargo_risk, 2),
+                            "weather_sensitivity": round(route.weather_sensitivity, 2),
+                            "seasonal_capacity": round(route.seasonal_capacity, 2),
+                        }
+                        for route in self.simulation.world.regional_routes
+                    ],
                 },
                 "target": None
                 if focused_npc is None

@@ -523,6 +523,8 @@ def test_snapshot_contains_serializable_runtime_state() -> None:
     assert "travel_state" in snapshot["npcs"]["npc.mara"]
     assert "npc.mara" in snapshot["npcs"]
     assert "rumor.shortage.wheat" in snapshot["rumors"]
+    assert "region.greenfall" in snapshot["world"]["regions"]
+    assert snapshot["world"]["locations"]["square"]["region_id"] == "region.greenfall"
     assert snapshot["dialogue_system_prompt"] == "Custom system prompt for tests."
 
 
@@ -533,6 +535,7 @@ def test_player_status_surfaces_fatigue_and_load() -> None:
 
     assert "Fatigue:" in status
     assert "Load:" in status
+    assert "Region:" in status
 
 
 def test_vendor_with_food_eats_instead_of_trying_to_trade_with_self() -> None:

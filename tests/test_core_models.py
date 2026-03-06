@@ -1,6 +1,19 @@
 from pydantic import ValidationError
 
-from acidnet.models import Intent, IntentType, NPCState, PersonaProfile, PlayerState, Rumor, RumorCategory, TravelState
+from acidnet.models import (
+    Intent,
+    IntentType,
+    Location,
+    NPCState,
+    PersonaProfile,
+    PlayerState,
+    RegionNode,
+    RegionalRoute,
+    Rumor,
+    RumorCategory,
+    TravelState,
+    WorldState,
+)
 
 
 def test_persona_profile_supports_bias_fields() -> None:
@@ -104,3 +117,37 @@ def test_player_state_supports_travel_and_load_fields() -> None:
     assert player.fatigue == 14.0
     assert player.carried_weight == 3.5
     assert player.travel_state.destination_location_id == "bakery"
+
+
+def test_world_state_supports_regional_summary_fields() -> None:
+    world = WorldState(
+        locations={
+            "square": Location(location_id="square", name="Square", kind="market", region_id="region.a"),
+        },
+        regions={
+            "region.a": RegionNode(
+                region_id="region.a",
+                name="Region A",
+                kind="settlement",
+                summary="A local hub.",
+                local_location_ids=["square"],
+                stock_signals={"bread": 4},
+                risk_level=0.2,
+            )
+        },
+        regional_routes=[
+            RegionalRoute(
+                route_id="route.a.b",
+                from_region_id="region.a",
+                to_region_id="region.b",
+                travel_ticks=96,
+                cargo_risk=0.3,
+                weather_sensitivity=0.4,
+                seasonal_capacity=0.9,
+            )
+        ],
+    )
+
+    assert world.locations["square"].region_id == "region.a"
+    assert world.regions["region.a"].stock_signals["bread"] == 4
+    assert world.regional_routes[0].travel_ticks == 96
