@@ -4,6 +4,7 @@ import ast
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from acidnet.llm.prompt_builder import normalize_interaction_mode
 from acidnet.training.openai_batch import TeacherOutputRow, export_teacher_output_jsonl
 
 FOOD_VALUES = {"stew": 34.0, "bread": 26.0, "fish": 21.0, "wheat": 10.0}
@@ -190,6 +191,10 @@ def _style_tags(sample: dict) -> list[str]:
 def _dialogue_response(sample: dict) -> str:
     npc = sample["npc"]
     interaction = sample["interaction_context"]
+    interaction_mode = normalize_interaction_mode(
+        interaction.get("player_goal"),
+        player_prompt=interaction.get("player_prompt"),
+    )
     world = sample["world"]
     location = sample["location"]
     rumors = npc.get("known_rumors", [])
@@ -206,19 +211,19 @@ def _dialogue_response(sample: dict) -> str:
         "tailor": "Stories and status travel together in this place.",
     }.get(npc["profession"], f"{npc['name']} watches the room before answering.")
 
-    if interaction["player_goal"] == "ask_rumor" and rumors:
+    if interaction_mode == "rumor_request" and rumors:
         return f"{opening} The clearest thing going around is this: {rumors[0]}"
-    if interaction["player_goal"] == "trade_food":
+    if interaction_mode == "trade_request":
         if goods:
             return f"{opening} Right now I can move {', '.join(goods[:3])}, and the weather is already pushing the market."
         return f"{opening} Stock is thin right now, so I would not promise more than I have."
-    if interaction["player_goal"] == "ask_harvest":
+    if interaction_mode == "direct_say" and npc["profession"] == "farmer":
         return f"{opening} Around {location['name']}, the {world['weather']} is shaping every harvest decision."
-    if interaction["player_goal"] == "ask_safety":
+    if interaction_mode == "direct_say" and npc["profession"] == "guard":
         if rumors:
             return f"{opening} Tension follows rumor as much as hunger here, so mind the square and listen carefully."
         return f"{opening} Trouble starts when people ignore hunger, coin, and timing."
-    if interaction["player_goal"] == "ask_social_state":
+    if interaction_mode == "direct_say" and npc["profession"] == "priest":
         if npc["hunger"] >= 45:
             return f"{opening} People act shorter with each other when food gets tight, and today you can feel that strain."
         return f"{opening} Watch who looks tired, hungry, or too quiet. That usually tells the truth first."

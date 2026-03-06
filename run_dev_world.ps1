@@ -1,8 +1,9 @@
 param(
-    [ValidateSet("heuristic", "openai_compat")]
+    [ValidateSet("heuristic", "openai_compat", "local_peft")]
     [string]$DialogueBackend = "heuristic",
     [string]$DialogueModel = "",
     [string]$DialogueEndpoint = "",
+    [string]$DialogueAdapterPath = "",
     [switch]$Persist,
     [switch]$RunPromptOnlyEval,
     [switch]$RunModelGate,
@@ -22,6 +23,10 @@ $ErrorActionPreference = "Stop"
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ScriptRoot
 
+if ($DialogueBackend -eq "local_peft" -and -not $DialogueAdapterPath) {
+    throw "DialogueAdapterPath is required when DialogueBackend is 'local_peft'."
+}
+
 $GuiArgs = @("run_acidnet_gui.py", "--dialogue-backend", $DialogueBackend)
 if (-not $Persist) {
     $GuiArgs += "--no-persist"
@@ -33,6 +38,10 @@ if ($DialogueModel) {
 if ($DialogueEndpoint) {
     $GuiArgs += "--dialogue-endpoint"
     $GuiArgs += $DialogueEndpoint
+}
+if ($DialogueAdapterPath) {
+    $GuiArgs += "--dialogue-adapter-path"
+    $GuiArgs += $DialogueAdapterPath
 }
 if ($NoEventLog) {
     $GuiArgs += "--no-event-log"
@@ -64,6 +73,10 @@ if ($RunPromptOnlyEval) {
         $EvalArgs += "--dialogue-endpoint"
         $EvalArgs += $DialogueEndpoint
     }
+    if ($DialogueAdapterPath) {
+        $EvalArgs += "--dialogue-adapter-path"
+        $EvalArgs += $DialogueAdapterPath
+    }
     Write-Host "Running prompt-only baseline eval..."
     & python @EvalArgs
 }
@@ -82,6 +95,10 @@ if ($RunModelGate) {
     if ($DialogueEndpoint) {
         $GateArgs += "--dialogue-endpoint"
         $GateArgs += $DialogueEndpoint
+    }
+    if ($DialogueAdapterPath) {
+        $GateArgs += "--dialogue-adapter-path"
+        $GateArgs += $DialogueAdapterPath
     }
     Write-Host "Running combined model gate..."
     & python @GateArgs

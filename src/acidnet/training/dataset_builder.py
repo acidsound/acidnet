@@ -322,15 +322,20 @@ def _interaction_context(simulation: Simulation, npc_id: str, *, rng: random.Ran
     prompts: list[dict[str, str]] = [
         {
             "player_prompt": f"Hello {npc.name}. What is going on around {simulation.world.locations[npc.location_id].name}?",
-            "player_goal": "open_conversation",
+            "player_goal": "talk",
             "expected_focus": "Give a grounded in-world response that reflects current mood and social context.",
+        },
+        {
+            "player_prompt": "You look tense. What changed around here today?",
+            "player_goal": "direct_say",
+            "expected_focus": "Handle a natural player utterance without leaving the current world state.",
         }
     ]
     if npc.known_rumor_ids:
         prompts.append(
             {
                 "player_prompt": f"{npc.name}, have you heard any useful rumors today?",
-                "player_goal": "ask_rumor",
+                "player_goal": "rumor_request",
                 "expected_focus": "Surface the most relevant rumor without breaking world facts.",
             }
         )
@@ -338,7 +343,7 @@ def _interaction_context(simulation: Simulation, npc_id: str, *, rng: random.Ran
         prompts.append(
             {
                 "player_prompt": f"I need food. What can you sell me right now, {npc.name}?",
-                "player_goal": "trade_food",
+                "player_goal": "trade_request",
                 "expected_focus": "Mention available stock, price pressure, and the NPC's trade personality.",
             }
         )
@@ -346,7 +351,7 @@ def _interaction_context(simulation: Simulation, npc_id: str, *, rng: random.Ran
         prompts.append(
             {
                 "player_prompt": "How are the fields holding up?",
-                "player_goal": "ask_harvest",
+                "player_goal": "direct_say",
                 "expected_focus": "Talk about crop pressure, weather, and grain supply if relevant.",
             }
         )
@@ -354,7 +359,7 @@ def _interaction_context(simulation: Simulation, npc_id: str, *, rng: random.Ran
         prompts.append(
             {
                 "player_prompt": "Anything I should avoid causing trouble over?",
-                "player_goal": "ask_safety",
+                "player_goal": "direct_say",
                 "expected_focus": "Reflect order, danger, and any rumor-driven tension in the village.",
             }
         )
@@ -362,7 +367,7 @@ def _interaction_context(simulation: Simulation, npc_id: str, *, rng: random.Ran
         prompts.append(
             {
                 "player_prompt": "Who in the village seems to need help most?",
-                "player_goal": "ask_social_state",
+                "player_goal": "direct_say",
                 "expected_focus": "Respond with empathy and grounded social observation.",
             }
         )

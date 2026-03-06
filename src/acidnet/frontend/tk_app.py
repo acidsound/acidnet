@@ -90,7 +90,7 @@ class AcidNetApp(tk.Tk):
             [
                 "acidnet GUI loaded.",
                 "Use arrow keys or WASD to move. Click an adjacent location on the map to travel there.",
-                "T to talk, R for rumor, X to work, B to buy bread, E to eat, Space to wait.",
+                "T to talk, Y to focus direct speech, R for rumor, X to work, B to buy bread, E to eat, Space to wait.",
                 f"Dialogue backend: {dialogue_backend}",
             ],
             kind="system",
@@ -146,7 +146,7 @@ class AcidNetApp(tk.Tk):
         sidebar = tk.Frame(self, bg=BG_PANEL, padx=14, pady=14)
         sidebar.grid(row=0, column=1, sticky="nsew")
         sidebar.columnconfigure(0, weight=1)
-        sidebar.rowconfigure(5, weight=1)
+        sidebar.rowconfigure(9, weight=1)
 
         tk.Label(sidebar, text="Status", font=FONT_TITLE, fg=FG_TEXT, bg=BG_PANEL, anchor="w").grid(
             row=0, column=0, sticky="ew"
@@ -219,20 +219,41 @@ class AcidNetApp(tk.Tk):
             pady=6,
         ).grid(row=2, column=1, columnspan=2, sticky="ew", padx=(3, 0), pady=(6, 0))
 
-        tk.Label(sidebar, text="Rumors", font=FONT_TITLE, fg=FG_TEXT, bg=BG_PANEL, anchor="w").grid(
+        tk.Label(sidebar, text="Direct Speech", font=FONT_TITLE, fg=FG_TEXT, bg=BG_PANEL, anchor="w").grid(
             row=4, column=0, sticky="ew"
         )
-        self.rumor_text = self._make_text(sidebar, height=7)
-        self.rumor_text.grid(row=5, column=0, sticky="nsew", pady=(4, 10))
+        speak_frame = tk.Frame(sidebar, bg=BG_PANEL)
+        speak_frame.grid(row=5, column=0, sticky="ew", pady=(4, 10))
+        speak_frame.columnconfigure(0, weight=1)
+        self.say_entry = tk.Entry(
+            speak_frame,
+            bg="#13171B",
+            fg=FG_TEXT,
+            insertbackground=FG_TEXT,
+            relief="flat",
+            font=FONT_BODY,
+        )
+        self.say_entry.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+        self.say_entry.bind("<Return>", self._submit_say_selected)
+        self._make_button(speak_frame, "Say", self._submit_say_selected).grid(row=0, column=1, sticky="ew")
 
-        tk.Label(sidebar, text="Event Log", font=FONT_TITLE, fg=FG_TEXT, bg=BG_PANEL, anchor="w").grid(
+        tk.Label(sidebar, text="Rumors", font=FONT_TITLE, fg=FG_TEXT, bg=BG_PANEL, anchor="w").grid(
             row=6, column=0, sticky="ew"
         )
-        self.log_text = self._make_text(sidebar, height=12)
-        self.log_text.grid(row=7, column=0, sticky="nsew", pady=(4, 10))
+        self.rumor_text = self._make_text(sidebar, height=7)
+        self.rumor_text.grid(row=7, column=0, sticky="ew", pady=(4, 10))
 
+        tk.Label(sidebar, text="Event Log", font=FONT_TITLE, fg=FG_TEXT, bg=BG_PANEL, anchor="w").grid(
+            row=8, column=0, sticky="ew"
+        )
+        self.log_text = self._make_text(sidebar, height=12)
+        self.log_text.grid(row=9, column=0, sticky="nsew", pady=(4, 10))
+
+        tk.Label(sidebar, text="Raw Command", font=FONT_TITLE, fg=FG_TEXT, bg=BG_PANEL, anchor="w").grid(
+            row=10, column=0, sticky="ew"
+        )
         command_frame = tk.Frame(sidebar, bg=BG_PANEL)
-        command_frame.grid(row=8, column=0, sticky="ew")
+        command_frame.grid(row=11, column=0, sticky="ew", pady=(4, 0))
         command_frame.columnconfigure(0, weight=1)
         self.command_entry = tk.Entry(
             command_frame,
@@ -255,7 +276,7 @@ class AcidNetApp(tk.Tk):
             bg=BG_PANEL,
             font=("Consolas", 10),
         )
-        footer.grid(row=9, column=0, sticky="ew", pady=(12, 0))
+        footer.grid(row=12, column=0, sticky="ew", pady=(12, 0))
 
     def _make_text(self, parent: tk.Widget, *, height: int) -> tk.Text:
         widget = tk.Text(
@@ -290,22 +311,23 @@ class AcidNetApp(tk.Tk):
         )
 
     def _bind_shortcuts(self) -> None:
-        self.bind("<Up>", lambda _event: self._move_direction(0, -1))
-        self.bind("<Down>", lambda _event: self._move_direction(0, 1))
-        self.bind("<Left>", lambda _event: self._move_direction(-1, 0))
-        self.bind("<Right>", lambda _event: self._move_direction(1, 0))
-        self.bind("w", lambda _event: self._move_direction(0, -1))
-        self.bind("s", lambda _event: self._move_direction(0, 1))
-        self.bind("a", lambda _event: self._move_direction(-1, 0))
-        self.bind("d", lambda _event: self._move_direction(1, 0))
-        self.bind("t", lambda _event: self._talk_selected())
-        self.bind("r", lambda _event: self._ask_rumor_selected())
-        self.bind("b", lambda _event: self._buy_bread_selected())
-        self.bind("x", lambda _event: self._player_work())
-        self.bind("e", lambda _event: self._eat_best_food())
-        self.bind("l", lambda _event: self._look())
-        self.bind("m", lambda _event: self._toggle_monkey())
-        self.bind("<space>", lambda _event: self._wait_one_turn())
+        self.bind("<Up>", lambda _event: self._run_shortcut(lambda: self._move_direction(0, -1)))
+        self.bind("<Down>", lambda _event: self._run_shortcut(lambda: self._move_direction(0, 1)))
+        self.bind("<Left>", lambda _event: self._run_shortcut(lambda: self._move_direction(-1, 0)))
+        self.bind("<Right>", lambda _event: self._run_shortcut(lambda: self._move_direction(1, 0)))
+        self.bind("w", lambda _event: self._run_shortcut(lambda: self._move_direction(0, -1)))
+        self.bind("s", lambda _event: self._run_shortcut(lambda: self._move_direction(0, 1)))
+        self.bind("a", lambda _event: self._run_shortcut(lambda: self._move_direction(-1, 0)))
+        self.bind("d", lambda _event: self._run_shortcut(lambda: self._move_direction(1, 0)))
+        self.bind("t", lambda _event: self._run_shortcut(self._talk_selected))
+        self.bind("y", lambda _event: self._focus_say_entry())
+        self.bind("r", lambda _event: self._run_shortcut(self._ask_rumor_selected))
+        self.bind("b", lambda _event: self._run_shortcut(self._buy_bread_selected))
+        self.bind("x", lambda _event: self._run_shortcut(self._player_work))
+        self.bind("e", lambda _event: self._run_shortcut(self._eat_best_food))
+        self.bind("l", lambda _event: self._run_shortcut(self._look))
+        self.bind("m", lambda _event: self._run_shortcut(self._toggle_monkey))
+        self.bind("<space>", lambda _event: self._run_shortcut(self._wait_one_turn))
 
     def _render_world(self) -> None:
         self.canvas.delete("all")
@@ -382,10 +404,11 @@ class AcidNetApp(tk.Tk):
         )
 
     def _refresh_panels(self) -> None:
+        selected_npc_name = self._selected_npc_name()
         self.selected_location_id = self.simulation.player.location_id
         self.status_var.set(self.simulation.player_status())
         self.footer_var.set(
-            "Controls: arrows/WASD move | click adjacent node | T talk | R rumor | X work | B buy bread | E eat | M monkey | Space wait | L look"
+            "Controls: arrows/WASD move | click adjacent node | T talk | Y direct speech | R rumor | X work | B buy bread | E eat | M monkey | Space wait | L look"
         )
         self._set_text(self.location_text, self.simulation.describe_location())
         self._set_text(self.rumor_text, self.simulation.known_rumors_text())
@@ -398,7 +421,11 @@ class AcidNetApp(tk.Tk):
             self.npc_list.insert(tk.END, entry)
             self._npc_name_by_index.append(npc.name)
         if npcs_here:
-            self.npc_list.selection_set(0)
+            try:
+                selected_index = self._npc_name_by_index.index(selected_npc_name) if selected_npc_name else 0
+            except ValueError:
+                selected_index = 0
+            self.npc_list.selection_set(selected_index)
 
         self._render_world()
 
@@ -454,6 +481,20 @@ class AcidNetApp(tk.Tk):
             return self._npc_name_by_index[selection[0]]
         return self._npc_name_by_index[0] if self._npc_name_by_index else None
 
+    def _text_input_has_focus(self) -> bool:
+        return self.focus_get() in {self.command_entry, self.say_entry}
+
+    def _run_shortcut(self, callback) -> None:
+        if self._text_input_has_focus():
+            return
+        callback()
+
+    def _focus_say_entry(self) -> None:
+        if self.focus_get() is self.command_entry:
+            return
+        self.say_entry.focus_set()
+        self.say_entry.icursor(tk.END)
+
     def _run_command(self, command: str, *, kind: str = "gui_command") -> None:
         self._append_log([f"> {command}"], kind="input")
         result = self.simulation.handle_command(command)
@@ -472,6 +513,19 @@ class AcidNetApp(tk.Tk):
         command = self.command_entry.get().strip()
         if command:
             self._run_command(command)
+
+    def _submit_say_selected(self, _event=None) -> None:
+        npc_name = self._selected_npc_name()
+        if npc_name is None:
+            self._append_log(["No NPC is available here."], kind="ui")
+            return
+        message = self.say_entry.get().strip()
+        if not message:
+            self._append_log(["Type something to say first."], kind="ui")
+            self.say_entry.focus_set()
+            return
+        self.say_entry.delete(0, tk.END)
+        self._run_command(f"say {npc_name} {message}")
 
     def _talk_selected(self) -> None:
         npc_name = self._selected_npc_name()
@@ -532,7 +586,7 @@ class AcidNetApp(tk.Tk):
         self.after(self.monkey_delay_ms, self._run_monkey_step)
 
     def _move_direction(self, x_dir: int, y_dir: int) -> None:
-        if self.focus_get() is self.command_entry:
+        if self._text_input_has_focus():
             return
         current_id = self.simulation.player.location_id
         current_node = MAP_LAYOUT[current_id]

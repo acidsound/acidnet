@@ -20,6 +20,15 @@ def test_talking_to_npc_can_surface_a_rumor() -> None:
     assert simulation.player.known_rumor_ids
 
 
+def test_player_can_say_freeform_message_to_npc() -> None:
+    simulation = Simulation.create_demo()
+
+    result = simulation.handle_command("say neri Have you heard any useful rumors today?")
+
+    assert any("dry wind" in line.lower() for line in result.lines)
+    assert simulation.player.known_rumor_ids
+
+
 def test_player_can_buy_from_vendor() -> None:
     simulation = Simulation.create_demo()
     starting_money = simulation.player.money

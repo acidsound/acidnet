@@ -9,9 +9,10 @@ Implemented:
 - click-to-move for directly adjacent map nodes
 - player work action for earning gold or gathering food
 - NPC selection list
-- talk, rumor, buy, eat, and wait actions
+- talk, direct-speech, rumor, buy, eat, and wait actions
 - in-GUI monkey toggle for observation runs
 - event log panel
+- dedicated direct-speech input for the selected NPC
 - command entry for raw world commands
 - shared SQLite persistence with the terminal runtime
 
@@ -67,6 +68,17 @@ powershell -ExecutionPolicy Bypass -File run_dev_world.ps1 `
   -Detached
 ```
 
+Direct local adapter observation without an HTTP bridge:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File run_dev_world.ps1 `
+  -DialogueBackend local_peft `
+  -DialogueModel Qwen/Qwen3.5-4B `
+  -DialogueAdapterPath data/training/qwen3_5_4b_runtime_dialogue_full_adapter `
+  -RunModelGate `
+  -Detached
+```
+
 Headless monkey run for regression observation:
 
 ```bash
@@ -78,6 +90,7 @@ python run_monkey_world.py --steps 240 --dialogue-backend heuristic
 - arrow keys or `WASD`: move
 - click an adjacent map node: move directly to that location
 - `T`: talk to selected NPC
+- `Y`: focus the direct-speech box for the selected NPC
 - `R`: ask selected NPC for rumors
 - `X`: do local work at the current location
 - `B`: buy bread from the selected NPC
@@ -85,17 +98,18 @@ python run_monkey_world.py --steps 240 --dialogue-backend heuristic
 - `M`: toggle monkey mode on or off
 - `Space`: wait one turn
 - `L`: refresh the current scene
+- `Enter` in the direct-speech box: send `say <npc> <message>`
 - `Enter` in the command box: run any raw command
 - `Run (Enter)` button: submit the raw command entry
 
 ## UI Structure
 
 - left: world map with locations, links, and player marker
-- right: status, location text, NPC list, rumors, event log
-- bottom-right: raw command entry and `Run (Enter)` button
+- right: status, location text, NPC list, action buttons, direct-speech input, rumors, event log
+- bottom-right: raw command entry and `Run (Enter)` button for power-user commands
 
 ## Next Work
 
-- attach the future local persona/dialogue model to talk and rumor responses
+- expand the dialogue transcript UX once multi-turn conversations need more than the event log
 - add save/load slot handling on top of the SQLite snapshot log
 - add a proper tile renderer if the current node map stops being enough

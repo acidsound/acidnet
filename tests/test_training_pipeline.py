@@ -1,5 +1,8 @@
 from pathlib import Path
 from dataclasses import asdict
+from types import SimpleNamespace
+
+from run_qwen4b_baseline_train import _apply_hf_peft_overrides
 
 from acidnet.training import (
     baseline_pipeline_artifacts_to_dict,
@@ -140,6 +143,7 @@ World sample:
     assert examples[0].task == "dialogue_runtime"
     assert examples[0].messages[-1]["content"].startswith("Fresh bread")
     assert "Output one short in-character reply only." in examples[0].user_prompt
+    assert "- mode: trade_request" in examples[0].user_prompt
 
 
 def test_openai_batch_requests_are_built_from_prompt_rows() -> None:
@@ -239,10 +243,46 @@ def test_qwen4b_baseline_run_spec_can_render_hf_peft_script() -> None:
     script_text = script_path.read_text(encoding="utf-8")
 
     assert run_spec.model_name == "Qwen/Qwen3.5-4B"
+    assert run_spec.load_in_4bit is False
+    assert run_spec.optimizer == "adamw_torch"
     assert script_path.exists()
     assert "ROOT = _project_root()" in script_text
     assert 'get_peft_model(model, peft_config)' in script_text
+    assert "BitsAndBytesConfig" in script_text
+    assert "prepare_model_for_kbit_training" in script_text
     assert 'remove_columns=train_raw.column_names' in script_text
+
+
+def test_low_vram_profile_applies_hf_peft_memory_overrides() -> None:
+    baseline = build_finetune_manifest(vram_gb=24)[0]
+    run_spec = build_hf_peft_run_spec(
+        baseline,
+        RunPaths(
+            train_dataset_path="data/sft/train_teacher_sft_dataset.jsonl",
+            eval_dataset_path="data/sft/eval_teacher_sft_dataset.jsonl",
+            output_dir="data/training/qwen3_5_4b_baseline",
+        ),
+    )
+    args = SimpleNamespace(
+        memory_profile="low_vram",
+        max_seq_length=None,
+        batch_size=None,
+        grad_accum=None,
+        lora_rank=None,
+        lora_alpha=None,
+        optimizer=None,
+        load_in_4bit=False,
+    )
+
+    updated = _apply_hf_peft_overrides(run_spec, args)
+
+    assert updated.max_seq_length == 2048
+    assert updated.per_device_train_batch_size == 1
+    assert updated.gradient_accumulation_steps == 16
+    assert updated.lora_rank == 16
+    assert updated.lora_alpha == 16
+    assert updated.load_in_4bit is True
+    assert updated.optimizer == "paged_adamw_8bit"
 
 
 def test_dialogue_preference_examples_can_be_built_from_bootstrap_rows() -> None:
@@ -441,3 +481,5 @@ def test_qwen4b_baseline_pipeline_supports_runtime_dialogue_variant() -> None:
     assert artifacts.eval_rows == 0
     assert len(merged_rows) == 1
     assert '"task": "dialogue_runtime"' in merged_rows[0]
+    assert '"user_prompt": "NPC:' in merged_rows[0]
+    assert "mode: trade_request" in merged_rows[0]

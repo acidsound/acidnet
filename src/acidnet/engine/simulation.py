@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Iterable
 
 from acidnet.llm import DialogueContext, DialogueModelAdapter, DialogueResult, RuleBasedDialogueAdapter, build_dialogue_adapter
+from acidnet.llm.prompt_builder import infer_interaction_mode
 from acidnet.models import (
     Belief,
     EpisodicMemory,
@@ -114,6 +115,7 @@ class Simulation:
                 "  map                      List all locations.",
                 "  go <location>            Move to a neighboring location.",
                 "  talk <npc>               Talk to an NPC at your location.",
+                "  say <npc> <message>      Speak to an NPC using your own words.",
                 "  ask <npc> rumor          Ask an NPC for their latest rumor.",
                 "  work                     Do local work or gather resources here.",
                 "  eat <item>               Consume food from your inventory.",
@@ -200,25 +202,33 @@ class Simulation:
         if npc is None:
             return TurnResult([f'No NPC named "{npc_query}" is here.'])
 
-        lines = [self._generate_dialogue(npc, interaction_mode="talk", player_prompt="What is going on around here?")]
-        self._record_memory(
-            npc_id=npc.npc_id,
-            event_type="player_talk",
-            summary=f"Spoke with {self.player.name} at {self.player.location_id}.",
-            entities=[self.player.player_id],
-            importance=0.45,
-        )
-        self._record_memory(
-            npc_id=self.player.player_id,
-            event_type="npc_talk",
-            summary=f"Spoke with {npc.name} at {self.player.location_id}.",
-            entities=[npc.npc_id],
-            importance=0.45,
-        )
+        player_prompt = "What is going on around here?"
+        lines = [self._generate_dialogue(npc, interaction_mode="talk", player_prompt=player_prompt)]
+        self._record_dialogue_exchange(npc, player_prompt=player_prompt)
         self._change_relationship(npc, self.player.player_id, trust_delta=0.02, closeness_delta=0.04)
         rumor_line = self._offer_rumor_to_player(npc, asked=False)
         if rumor_line:
             lines.append(rumor_line)
+        lines.extend(self.advance_turn(1).lines)
+        return TurnResult(lines)
+
+    def say_to_npc(self, npc_query: str, player_message: str) -> TurnResult:
+        npc = self._resolve_npc_here(npc_query)
+        if npc is None:
+            return TurnResult([f'No NPC named "{npc_query}" is here.'])
+
+        player_prompt = " ".join(player_message.split())
+        if not player_prompt:
+            return TurnResult(["Say what?"])
+
+        interaction_mode = infer_interaction_mode(player_prompt)
+        lines = [self._generate_dialogue(npc, interaction_mode=interaction_mode, player_prompt=player_prompt)]
+        self._record_dialogue_exchange(npc, player_prompt=player_prompt)
+        self._change_relationship(npc, self.player.player_id, trust_delta=0.02, closeness_delta=0.05)
+        if interaction_mode == "rumor_request":
+            rumor_line = self._offer_rumor_to_player(npc, asked=True)
+            if rumor_line:
+                lines.append(rumor_line)
         lines.extend(self.advance_turn(1).lines)
         return TurnResult(lines)
 
@@ -228,7 +238,9 @@ class Simulation:
             return TurnResult([f'No NPC named "{npc_query}" is here.'])
         if topic.lower() != "rumor":
             return TurnResult([f'{npc.name} tilts their head. "Ask about rumors if you want local news."'])
-        result = [self._generate_dialogue(npc, interaction_mode="rumor_request", player_prompt="Have you heard any useful rumors?")]
+        player_prompt = "Have you heard any useful rumors?"
+        result = [self._generate_dialogue(npc, interaction_mode="rumor_request", player_prompt=player_prompt)]
+        self._record_dialogue_exchange(npc, player_prompt=player_prompt)
         rumor_line = self._offer_rumor_to_player(npc, asked=True)
         if rumor_line is not None:
             result.append(rumor_line)
@@ -402,6 +414,8 @@ class Simulation:
             return self.move_player(" ".join(parts[1:]))
         if command == "talk" and len(parts) >= 2:
             return self.talk_to_npc(" ".join(parts[1:]))
+        if command in {"say", "tell"} and len(parts) >= 3:
+            return self.say_to_npc(parts[1], " ".join(parts[2:]))
         if command == "ask" and len(parts) >= 3:
             return self.ask_npc(parts[1], " ".join(parts[2:]))
         if command == "trade" and len(parts) == 5:
@@ -969,6 +983,29 @@ class Simulation:
             tags=[event_type],
         )
         self.memories[npc_id].append(memory)
+
+    def _record_dialogue_exchange(self, npc: NPCState, *, player_prompt: str) -> None:
+        prompt_summary = self._summarize_player_prompt(player_prompt)
+        self._record_memory(
+            npc_id=npc.npc_id,
+            event_type="player_talk",
+            summary=f'Spoke with {self.player.name} about "{prompt_summary}" at {self.player.location_id}.',
+            entities=[self.player.player_id],
+            importance=0.48,
+        )
+        self._record_memory(
+            npc_id=self.player.player_id,
+            event_type="npc_talk",
+            summary=f'Spoke with {npc.name} about "{prompt_summary}" at {self.player.location_id}.',
+            entities=[npc.npc_id],
+            importance=0.48,
+        )
+
+    def _summarize_player_prompt(self, player_prompt: str, *, limit: int = 72) -> str:
+        compact = " ".join(player_prompt.split())
+        if len(compact) <= limit:
+            return compact
+        return compact[: limit - 3].rstrip() + "..."
 
     def _resolve_npc_here(self, query: str) -> NPCState | None:
         lowered = query.lower()

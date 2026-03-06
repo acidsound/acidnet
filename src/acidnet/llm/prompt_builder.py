@@ -4,6 +4,29 @@ from typing import Any
 
 from acidnet.llm.protocols import DialogueContext
 
+INTERACTION_MODE_ALIASES = {
+    "open_conversation": "talk",
+    "conversation": "talk",
+    "talk": "talk",
+    "ask_rumor": "rumor_request",
+    "rumor": "rumor_request",
+    "rumor_request": "rumor_request",
+    "trade_food": "trade_request",
+    "trade": "trade_request",
+    "trade_request": "trade_request",
+    "buy_food": "trade_request",
+    "player_say": "direct_say",
+    "free_talk": "direct_say",
+    "freeform": "direct_say",
+    "direct_say": "direct_say",
+    "ask_harvest": "direct_say",
+    "ask_safety": "direct_say",
+    "ask_social_state": "direct_say",
+}
+RUMOR_KEYWORDS = ("rumor", "rumors", "heard", "hear", "gossip", "news")
+TRADE_KEYWORDS = ("buy", "sell", "trade", "price", "prices", "cost", "coin", "bread", "stew", "food", "stock")
+TALK_KEYWORDS = ("hello", "hi", "hey", "what is going on", "what's going on", "how are things", "what happened")
+
 
 def build_system_prompt(context: DialogueContext | None = None) -> str:
     return """You are a small NPC dialogue model inside a village simulation.
@@ -19,6 +42,7 @@ Do not explain your reasoning.
 
 
 def build_user_prompt(context: DialogueContext) -> str:
+    interaction_mode = normalize_interaction_mode(context.interaction_mode, player_prompt=context.player_prompt)
     return build_user_prompt_from_sample(
         {
             "world": {
@@ -47,7 +71,7 @@ def build_user_prompt(context: DialogueContext) -> str:
             },
             "interaction_context": {
                 "player_prompt": context.player_prompt,
-                "player_goal": context.interaction_mode,
+                "player_goal": interaction_mode,
             },
             "beliefs": [f"{belief.subject_id}:{belief.predicate}:{belief.confidence:.2f}" for belief in context.salient_beliefs[:4]],
             "recent_memories": [memory.summary for memory in context.salient_memories[:3]],
@@ -64,6 +88,11 @@ def build_user_prompt_from_sample(sample: dict[str, Any]) -> str:
     player = sample.get("player", {})
     persona = sample.get("persona", {})
     interaction = sample.get("interaction_context", {})
+    player_prompt = interaction.get("player_prompt", "What is going on around here?")
+    interaction_mode = normalize_interaction_mode(
+        interaction.get("player_goal", interaction.get("mode", "talk")),
+        player_prompt=player_prompt,
+    )
     beliefs = sample.get("beliefs", npc.get("beliefs", []))
     memories = sample.get("recent_memories", npc.get("recent_memories", []))
     rumors = sample.get("visible_rumors", npc.get("known_rumors", []))
@@ -102,11 +131,33 @@ Rumors:
 {rumor_lines}
 
 Interaction:
-- mode: {interaction.get("player_goal", "talk")}
-- player_prompt: {interaction.get("player_prompt", "What is going on around here?")}
+- mode: {interaction_mode}
+- player_prompt: {player_prompt}
 
 Output one short in-character reply only.
 """
+
+
+def normalize_interaction_mode(mode: str | None, *, player_prompt: str | None = None) -> str:
+    normalized = str(mode or "").strip().lower().replace("-", "_")
+    if normalized in INTERACTION_MODE_ALIASES:
+        return INTERACTION_MODE_ALIASES[normalized]
+    if player_prompt:
+        inferred = infer_interaction_mode(player_prompt, fallback="")
+        if inferred:
+            return inferred
+    return "talk"
+
+
+def infer_interaction_mode(player_prompt: str, *, fallback: str = "direct_say") -> str:
+    normalized_prompt = " ".join(str(player_prompt).lower().split())
+    if any(keyword in normalized_prompt for keyword in RUMOR_KEYWORDS):
+        return "rumor_request"
+    if any(keyword in normalized_prompt for keyword in TRADE_KEYWORDS):
+        return "trade_request"
+    if any(keyword in normalized_prompt for keyword in TALK_KEYWORDS):
+        return "talk"
+    return fallback
 
 
 def _format_beliefs(beliefs: list) -> list[str]:

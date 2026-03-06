@@ -36,6 +36,27 @@ python run_bootstrap_qwen4b_pipeline.py ^
   --sft-variant runtime_dialogue
 ```
 
+full `50k / 4k` runtime-dialogue LoRA 본학습을 올리고, 끝나면 `local_peft` 기준 gate까지 바로 확인:
+
+```bash
+python run_bootstrap_qwen4b_pipeline.py ^
+  --mode synthetic ^
+  --scenarios 2048 ^
+  --turns 4 ^
+  --tasks dialogue ^
+  --format both ^
+  --train-rows 50000 ^
+  --eval-rows 4000 ^
+  --trainer-backend hf_peft ^
+  --sft-variant runtime_dialogue ^
+  --training-output-dir data/training/qwen3_5_4b_runtime_dialogue_full_adapter ^
+  --run-spec-output data/training/qwen3_5_4b_runtime_dialogue_full_run_spec.json ^
+  --training-script-output data/training/train_qwen3_5_4b_runtime_dialogue_full.py ^
+  --launch-train ^
+  --run-gate ^
+  --gate-output data/eval/qwen3_5_4b_runtime_dialogue_full_gate_report.json
+```
+
 현재 생성되는 주요 artifact:
 
 - `data/prompt_packs/bootstrap_teacher_requests.jsonl`
@@ -135,6 +156,17 @@ python run_acidnet_gui.py ^
   --dialogue-adapter-path data/test_artifacts/qwen3_5_4b_runtime_dialogue_smoke_adapter
 ```
 
+또는 dev launcher 에 직접 local adapter 를 연결:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File run_dev_world.ps1 `
+  -DialogueBackend local_peft `
+  -DialogueModel Qwen/Qwen3.5-4B `
+  -DialogueAdapterPath data/training/qwen3_5_4b_runtime_dialogue_full_adapter `
+  -RunModelGate `
+  -Detached
+```
+
 ## 현재 판단
 
 - end-to-end 기술 경로는 동작한다
@@ -142,11 +174,12 @@ python run_acidnet_gui.py ^
 - runtime-dialogue smoke adapter는 현재 로컬 모델 baseline으로 써도 될 수준이다
 - 작은 모델 경로에서는 training과 runtime 모두에서 thinking을 끈 상태를 유지해야 한다
 - NPC 대사 승격 경로의 기본은 runtime dialogue SFT다
+- runtime dialogue SFT 는 예전 bootstrap interaction label 을 실제 runtime 모드인 `talk`, `rumor_request`, `trade_request`, `direct_say` 로 정규화한다
 - 하지만 world mutation은 계속 rule-based simulation이 맡고 있어서 world circulation 자체는 안정적이다
 
 ## 바로 다음 작업
 
-- smoke gate가 통과된 지금, full bootstrap dataset 기반의 더 큰 4B LoRA run 실행
+- smoke gate가 통과된 지금, full bootstrap dataset 기반의 더 큰 4B LoRA run을 실행하고 direct `local_peft` gate 를 통과한 첫 checkpoint 를 승격
 - runtime transcript를 dataset mix에 다시 추가
 - direct `local_peft` 경로의 latency 감소
 - 더 큰 checkpoint가 자리 잡으면 GGUF export 경로 준비

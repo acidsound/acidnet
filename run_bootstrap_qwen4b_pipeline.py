@@ -85,6 +85,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="Python interpreter used to launch the baseline trainer.",
     )
     parser.add_argument(
+        "--training-output-dir",
+        default=str(Path("data") / "training" / "qwen3_5_4b_bootstrap_baseline"),
+        help="Output directory for the trained LoRA adapter.",
+    )
+    parser.add_argument(
+        "--run-spec-output",
+        default=str(Path("data") / "training" / "qwen3_5_4b_bootstrap_baseline_run_spec.json"),
+        help="Training run-spec JSON output path.",
+    )
+    parser.add_argument(
+        "--training-script-output",
+        default=str(Path("data") / "training" / "train_qwen3_5_4b_bootstrap_baseline.py"),
+        help="Generated training script output path.",
+    )
+    parser.add_argument(
         "--launch-train",
         action="store_true",
         help="Launch the baseline trainer after dataset and run artifacts are prepared.",
@@ -93,6 +108,44 @@ def build_parser() -> argparse.ArgumentParser:
         "--skip-dependency-check",
         action="store_true",
         help="Skip dependency checks when launching the baseline trainer.",
+    )
+    parser.add_argument(
+        "--memory-profile",
+        choices=("default", "low_vram"),
+        default="default",
+        help="Optional training override profile for constrained VRAM when launching the trainer.",
+    )
+    parser.add_argument("--max-seq-length", type=int, default=None, help="Optional max sequence length override for training launch.")
+    parser.add_argument("--batch-size", type=int, default=None, help="Optional per-device batch size override for training launch.")
+    parser.add_argument("--grad-accum", type=int, default=None, help="Optional gradient accumulation override for training launch.")
+    parser.add_argument("--lora-rank", type=int, default=None, help="Optional LoRA rank override for training launch.")
+    parser.add_argument("--lora-alpha", type=int, default=None, help="Optional LoRA alpha override for training launch.")
+    parser.add_argument("--optimizer", default=None, help="Optional optimizer override for training launch.")
+    parser.add_argument(
+        "--load-in-4bit",
+        action="store_true",
+        help="Launch HF/PEFT training in 4-bit QLoRA mode.",
+    )
+    parser.add_argument(
+        "--run-gate",
+        action="store_true",
+        help="Run the combined prompt-quality and circulation gate against the resulting local_peft adapter.",
+    )
+    parser.add_argument("--gate-turns", type=int, default=120, help="Number of circulation turns for the post-train gate.")
+    parser.add_argument(
+        "--gate-output",
+        default=str(Path("data") / "eval" / "qwen3_5_4b_bootstrap_baseline_gate_report.json"),
+        help="Post-train model gate JSON report path.",
+    )
+    parser.add_argument(
+        "--launch-gui",
+        action="store_true",
+        help="Launch the Tk GUI directly against the resulting local_peft adapter after preparation or training.",
+    )
+    parser.add_argument(
+        "--gui-no-persist",
+        action="store_true",
+        help="Disable SQLite persistence when launching the GUI from this pipeline.",
     )
     return parser
 
@@ -135,9 +188,9 @@ def main() -> None:
         train_parquet_path=str(Path("data") / "sft" / "train_bootstrap_teacher_sft_dataset.parquet"),
         eval_jsonl_path=str(Path("data") / "sft" / "eval_bootstrap_teacher_sft_dataset.jsonl"),
         eval_parquet_path=str(Path("data") / "sft" / "eval_bootstrap_teacher_sft_dataset.parquet"),
-        training_output_dir=str(Path("data") / "training" / "qwen3_5_4b_bootstrap_baseline"),
-        run_spec_path=str(Path("data") / "training" / "qwen3_5_4b_bootstrap_baseline_run_spec.json"),
-        training_script_path=str(Path("data") / "training" / "train_qwen3_5_4b_bootstrap_baseline.py"),
+        training_output_dir=args.training_output_dir,
+        run_spec_path=args.run_spec_output,
+        training_script_path=args.training_script_output,
         export_format=args.format,
         trainer_backend=trainer_backend,
         sft_variant=sft_variant,
@@ -166,6 +219,7 @@ def main() -> None:
     print(f"Eval rows: {baseline_artifacts.eval_rows}")
     print(f"Trainer backend: {trainer_backend}")
     print(f"SFT variant: {sft_variant}")
+    print(f"Training output dir: {Path(args.training_output_dir)}")
     print(f"Pipeline manifest: {manifest_path}")
 
     if args.launch_train:
@@ -177,17 +231,73 @@ def main() -> None:
             "--eval-dataset",
             baseline_artifacts.eval_jsonl_path,
             "--output-dir",
-            str(Path("data") / "training" / "qwen3_5_4b_bootstrap_baseline"),
+            args.training_output_dir,
             "--script-output",
-            str(Path("data") / "training" / "train_qwen3_5_4b_bootstrap_baseline.py"),
+            args.training_script_output,
             "--spec-output",
-            str(Path("data") / "training" / "qwen3_5_4b_bootstrap_baseline_run_spec.json"),
+            args.run_spec_output,
             "--trainer-backend",
             trainer_backend,
+            "--memory-profile",
+            args.memory_profile,
         ]
+        if args.max_seq_length is not None:
+            launch_args.extend(["--max-seq-length", str(args.max_seq_length)])
+        if args.batch_size is not None:
+            launch_args.extend(["--batch-size", str(args.batch_size)])
+        if args.grad_accum is not None:
+            launch_args.extend(["--grad-accum", str(args.grad_accum)])
+        if args.lora_rank is not None:
+            launch_args.extend(["--lora-rank", str(args.lora_rank)])
+        if args.lora_alpha is not None:
+            launch_args.extend(["--lora-alpha", str(args.lora_alpha)])
+        if args.optimizer:
+            launch_args.extend(["--optimizer", args.optimizer])
+        if args.load_in_4bit:
+            launch_args.append("--load-in-4bit")
         if args.skip_dependency_check:
             launch_args.append("--skip-dependency-check")
         subprocess.run(launch_args, check=True)
+
+    adapter_path = Path(args.training_output_dir)
+    if args.run_gate or args.launch_gui:
+        if not adapter_path.exists():
+            raise FileNotFoundError(
+                f"Adapter directory '{adapter_path}' does not exist yet. Run with --launch-train first or point --training-output-dir at an existing adapter."
+            )
+
+    if args.run_gate:
+        gate_args = [
+            args.python_bin,
+            "run_model_gate.py",
+            "--dialogue-backend",
+            "local_peft",
+            "--dialogue-model",
+            "Qwen/Qwen3.5-4B",
+            "--dialogue-adapter-path",
+            str(adapter_path),
+            "--turns",
+            str(args.gate_turns),
+            "--output",
+            args.gate_output,
+        ]
+        subprocess.run(gate_args, check=True)
+
+    if args.launch_gui:
+        gui_args = [
+            args.python_bin,
+            "run_acidnet_gui.py",
+            "--dialogue-backend",
+            "local_peft",
+            "--dialogue-model",
+            "Qwen/Qwen3.5-4B",
+            "--dialogue-adapter-path",
+            str(adapter_path),
+        ]
+        if args.gui_no_persist:
+            gui_args.append("--no-persist")
+        subprocess.run(gui_args, check=True)
+
 
 def _resolve_trainer_backend(requested_backend: str) -> str:
     if requested_backend != "auto":

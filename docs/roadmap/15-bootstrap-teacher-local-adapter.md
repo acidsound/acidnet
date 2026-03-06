@@ -36,6 +36,27 @@ python run_bootstrap_qwen4b_pipeline.py ^
   --sft-variant runtime_dialogue
 ```
 
+Run the full 50k / 4k runtime-dialogue LoRA job, gate it directly through `local_peft`, and leave it ready for the GUI:
+
+```bash
+python run_bootstrap_qwen4b_pipeline.py ^
+  --mode synthetic ^
+  --scenarios 2048 ^
+  --turns 4 ^
+  --tasks dialogue ^
+  --format both ^
+  --train-rows 50000 ^
+  --eval-rows 4000 ^
+  --trainer-backend hf_peft ^
+  --sft-variant runtime_dialogue ^
+  --training-output-dir data/training/qwen3_5_4b_runtime_dialogue_full_adapter ^
+  --run-spec-output data/training/qwen3_5_4b_runtime_dialogue_full_run_spec.json ^
+  --training-script-output data/training/train_qwen3_5_4b_runtime_dialogue_full.py ^
+  --launch-train ^
+  --run-gate ^
+  --gate-output data/eval/qwen3_5_4b_runtime_dialogue_full_gate_report.json
+```
+
 This currently produces:
 
 - `data/prompt_packs/bootstrap_teacher_requests.jsonl`
@@ -135,6 +156,17 @@ python run_acidnet_gui.py ^
   --dialogue-adapter-path data/test_artifacts/qwen3_5_4b_runtime_dialogue_smoke_adapter
 ```
 
+Or use the dev launcher directly with a local adapter:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File run_dev_world.ps1 `
+  -DialogueBackend local_peft `
+  -DialogueModel Qwen/Qwen3.5-4B `
+  -DialogueAdapterPath data/training/qwen3_5_4b_runtime_dialogue_full_adapter `
+  -RunModelGate `
+  -Detached
+```
+
 ## Current Read
 
 - the end-to-end technical path is working
@@ -142,11 +174,12 @@ python run_acidnet_gui.py ^
 - the runtime-dialogue smoke adapter is good enough to use as the current local-model baseline
 - `thinking` must stay disabled in both training and runtime for the small-model path
 - runtime dialogue SFT is now the default promotion path for NPC speech
+- runtime dialogue SFT now normalizes old bootstrap interaction labels into the live runtime modes: `talk`, `rumor_request`, `trade_request`, and `direct_say`
 - world circulation remains stable because the rule-based simulation still owns world mutation
 
 ## Immediate Next Work
 
-- run a larger 4B LoRA job from the full bootstrap dataset now that the smoke gate is cleared
+- run the larger 4B LoRA job from the full bootstrap dataset and promote the first checkpoint that clears the direct `local_peft` gate
 - add runtime transcripts back into the dataset mix
 - reduce latency on the direct `local_peft` path
 - after the larger checkpoint lands, prepare the GGUF export path

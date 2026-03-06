@@ -25,6 +25,8 @@ class HFPeftRunSpec:
     lora_alpha: int
     lora_dropout: float
     bf16: bool
+    load_in_4bit: bool
+    optimizer: str
     train_dataset_path: str
     eval_dataset_path: str
 
@@ -46,6 +48,8 @@ def build_hf_peft_run_spec(experiment: FineTuneExperiment, paths: RunPaths) -> H
         lora_alpha=experiment.lora_alpha,
         lora_dropout=0.05,
         bf16=experiment.precision == "bf16",
+        load_in_4bit=False,
+        optimizer="adamw_torch",
         train_dataset_path=paths.train_dataset_path,
         eval_dataset_path=paths.eval_dataset_path,
     )
@@ -87,10 +91,11 @@ ensure_windows_shims_on_path()
 
 import torch
 from datasets import load_dataset
-from peft import LoraConfig, TaskType, get_peft_model
+from peft import LoraConfig, TaskType, get_peft_model, prepare_model_for_kbit_training
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
+    BitsAndBytesConfig,
     DataCollatorForLanguageModeling,
     Trainer,
     TrainingArguments,
@@ -130,13 +135,27 @@ def main() -> None:
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
+    quantization_config = None
+    device_map = None
+    if RUN_SPEC["load_in_4bit"]:
+        quantization_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=dtype,
+            bnb_4bit_quant_type="nf4",
+        )
+        device_map = "auto" if torch.cuda.is_available() else None
+
     model = AutoModelForCausalLM.from_pretrained(
         RUN_SPEC["model_name"],
         torch_dtype=dtype,
         low_cpu_mem_usage=True,
         trust_remote_code=True,
+        quantization_config=quantization_config,
+        device_map=device_map,
     )
     model.config.use_cache = False
+    if RUN_SPEC["load_in_4bit"]:
+        model = prepare_model_for_kbit_training(model)
     if hasattr(model, "gradient_checkpointing_enable"):
         model.gradient_checkpointing_enable()
     if hasattr(model, "enable_input_require_grads"):
@@ -180,7 +199,7 @@ def main() -> None:
         save_total_limit=2,
         report_to=[],
         gradient_checkpointing=True,
-        optim="adamw_torch",
+        optim=RUN_SPEC["optimizer"],
         remove_unused_columns=True,
         dataloader_pin_memory=True,
     )
