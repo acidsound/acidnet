@@ -45,6 +45,17 @@ python run_model_gate.py ^
   --turns 120
 ```
 
+같은 gate 를 돌린 뒤 GUI 로 바로 관찰:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File run_dev_world.ps1 `
+  -DialogueBackend openai_compat `
+  -DialogueModel qwen3.5-4b `
+  -DialogueEndpoint http://127.0.0.1:8000/v1/chat/completions `
+  -RunModelGate `
+  -Detached
+```
+
 ## 출력
 
 ```text

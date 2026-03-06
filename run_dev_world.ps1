@@ -5,6 +5,8 @@ param(
     [string]$DialogueEndpoint = "",
     [switch]$Persist,
     [switch]$RunPromptOnlyEval,
+    [switch]$RunModelGate,
+    [int]$ModelGateTurns = 120,
     [switch]$Detached,
     [switch]$NoMonkey,
     [int]$MonkeySteps = 160,
@@ -64,6 +66,25 @@ if ($RunPromptOnlyEval) {
     }
     Write-Host "Running prompt-only baseline eval..."
     & python @EvalArgs
+}
+
+if ($RunModelGate) {
+    $GateArgs = @(
+        "run_model_gate.py",
+        "--dialogue-backend", $DialogueBackend,
+        "--turns", $ModelGateTurns,
+        "--output", "data/eval/dev_model_gate_report.json"
+    )
+    if ($DialogueModel) {
+        $GateArgs += "--dialogue-model"
+        $GateArgs += $DialogueModel
+    }
+    if ($DialogueEndpoint) {
+        $GateArgs += "--dialogue-endpoint"
+        $GateArgs += $DialogueEndpoint
+    }
+    Write-Host "Running combined model gate..."
+    & python @GateArgs
 }
 
 if ($TailLog -and -not $NoEventLog) {

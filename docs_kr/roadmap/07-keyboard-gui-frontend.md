@@ -63,6 +63,7 @@ powershell -ExecutionPolicy Bypass -File run_dev_world.ps1 `
   -DialogueModel qwen3.5-4b `
   -DialogueEndpoint http://127.0.0.1:8000/v1/chat/completions `
   -RunPromptOnlyEval `
+  -RunModelGate `
   -Detached
 ```
 
