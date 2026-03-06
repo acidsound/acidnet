@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Iterable
 
 from acidnet.llm import DialogueContext, DialogueModelAdapter, DialogueResult, RuleBasedDialogueAdapter, build_dialogue_adapter
-from acidnet.llm.prompt_builder import DEFAULT_SYSTEM_PROMPT, infer_interaction_mode, select_heuristic_language
+from acidnet.llm.prompt_builder import DEFAULT_SYSTEM_PROMPT, infer_interaction_mode
 from acidnet.models import (
     Belief,
     EpisodicMemory,
@@ -522,10 +522,11 @@ class Simulation:
             return TurnResult(self._events("system", [error]))
 
         player_prompt = "What is going on around here?"
-        entries = [self._npc_dialogue_event(npc, self._generate_dialogue(npc, interaction_mode="talk", player_prompt=player_prompt))]
+        dialogue = self._generate_dialogue_result(npc, interaction_mode="talk", player_prompt=player_prompt)
+        entries = [self._npc_dialogue_event(npc, dialogue.text)]
         self._record_dialogue_exchange(npc, player_prompt=player_prompt)
         self._change_relationship(npc, self.player.player_id, trust_delta=0.02, closeness_delta=0.04)
-        rumor_notice = self._offer_rumor_to_player(npc, asked=False)
+        rumor_notice = self._offer_rumor_to_player(npc, dialogue_result=dialogue, asked=False)
         if rumor_notice:
             entries.extend(self._events("system", [rumor_notice]))
         entries.extend(self.advance_turn(1).entries)
@@ -541,16 +542,14 @@ class Simulation:
             return TurnResult(self._events("system", ["Say what?"]))
 
         interaction_mode = infer_interaction_mode(player_prompt)
+        dialogue = self._generate_dialogue_result(npc, interaction_mode=interaction_mode, player_prompt=player_prompt)
         entries = [
-            self._npc_dialogue_event(
-                npc,
-                self._generate_dialogue(npc, interaction_mode=interaction_mode, player_prompt=player_prompt),
-            )
+            self._npc_dialogue_event(npc, dialogue.text)
         ]
         self._record_dialogue_exchange(npc, player_prompt=player_prompt)
         self._change_relationship(npc, self.player.player_id, trust_delta=0.02, closeness_delta=0.05)
         if interaction_mode == "rumor_request":
-            rumor_notice = self._offer_rumor_to_player(npc, asked=True)
+            rumor_notice = self._offer_rumor_to_player(npc, dialogue_result=dialogue, asked=True)
             if rumor_notice:
                 entries.extend(self._events("system", [rumor_notice]))
         entries.extend(self.advance_turn(1).entries)
@@ -561,24 +560,17 @@ class Simulation:
         if npc is None:
             return TurnResult(self._events("system", [error]))
         if topic.lower() != "rumor":
-            language = select_heuristic_language(self.dialogue_system_prompt)
-            fallback = (
-                '고개를 갸웃한다. "마을 소식이 궁금하면 소문을 물어봐."'
-                if language == "ko"
-                else 'tilts their head. "Ask about rumors if you want local news."'
-            )
-            return TurnResult(
-                [self._npc_dialogue_event(npc, fallback)]
-            )
+            player_prompt = f"What do you know about {topic}?"
+            dialogue = self._generate_dialogue_result(npc, interaction_mode="direct_say", player_prompt=player_prompt)
+            self._record_dialogue_exchange(npc, player_prompt=player_prompt)
+            result = [self._npc_dialogue_event(npc, dialogue.text)]
+            result.extend(self.advance_turn(1).entries)
+            return TurnResult(result)
         player_prompt = "Have you heard any useful rumors?"
-        result = [
-            self._npc_dialogue_event(
-                npc,
-                self._generate_dialogue(npc, interaction_mode="rumor_request", player_prompt=player_prompt),
-            )
-        ]
+        dialogue = self._generate_dialogue_result(npc, interaction_mode="rumor_request", player_prompt=player_prompt)
+        result = [self._npc_dialogue_event(npc, dialogue.text)]
         self._record_dialogue_exchange(npc, player_prompt=player_prompt)
-        rumor_notice = self._offer_rumor_to_player(npc, asked=True)
+        rumor_notice = self._offer_rumor_to_player(npc, dialogue_result=dialogue, asked=True)
         if rumor_notice is not None:
             result.extend(self._events("system", [rumor_notice]))
         result.extend(self.advance_turn(1).entries)
@@ -1329,43 +1321,44 @@ class Simulation:
         self._change_relationship(listener, speaker.npc_id, trust_delta=0.02, closeness_delta=0.01)
         return f"{speaker.name} shares a rumor with {listener.name}."
 
-    def _offer_rumor_to_player(self, npc: NPCState, asked: bool) -> str | None:
-        rumor = self._preferred_rumor_to_share_to_player(npc)
-        if rumor is None:
+    def _offer_rumor_to_player(self, npc: NPCState, *, dialogue_result: DialogueResult | None, asked: bool) -> str | None:
+        candidates: list[Rumor] = []
+        seen_signatures: set[tuple[str | None, str, str]] = set()
+        for rumor_id in dialogue_result.used_rumor_ids if dialogue_result is not None else []:
+            rumor = self.rumors.get(rumor_id)
+            if rumor is None:
+                continue
+            signature = self._rumor_signature(rumor)
+            if signature in seen_signatures:
+                continue
+            seen_signatures.add(signature)
+            candidates.append(rumor)
+        if not candidates and asked:
+            rumor = self._preferred_rumor_to_share_to_player(npc)
+            if rumor is not None:
+                candidates.append(rumor)
+
+        learned = 0
+        repeated = 0
+        for rumor in candidates:
+            if self._knows_rumor(self.player.known_rumor_ids, rumor):
+                repeated += 1
+            else:
+                self.player.known_rumor_ids.append(rumor.rumor_id)
+                learned += 1
+            rumor.hop_count += 1
+            rumor.last_shared_tick = self.world.tick
+            rumor.confidence = max(0.15, rumor.confidence - 0.02)
+        return self._format_player_rumor_notice(npc, asked=asked, learned=learned, repeated=repeated)
+
+    def _format_player_rumor_notice(self, npc: NPCState, *, asked: bool, learned: int, repeated: int) -> str | None:
+        if learned <= 0 and repeated <= 0:
             return None
-        is_new = not self._knows_rumor(self.player.known_rumor_ids, rumor)
-        if is_new:
-            self.player.known_rumor_ids.append(rumor.rumor_id)
-        rumor.hop_count += 1
-        rumor.last_shared_tick = self.world.tick
-        rumor.confidence = max(0.15, rumor.confidence - 0.02)
-        return self._format_player_rumor_notice(npc, rumor, asked=asked, is_new=is_new)
-
-    def _format_player_rumor_notice(self, npc: NPCState, rumor: Rumor, *, asked: bool, is_new: bool) -> str:
-        language = select_heuristic_language(self.dialogue_system_prompt)
-        if language == "ko":
-            summary = self._localized_rumor_notice(rumor)
-            if is_new:
-                return f"{npc.name}에게서 새 소문을 들었다. {summary}"
-            if asked:
-                return f"{npc.name}에게 같은 소문을 다시 확인했다. {summary}"
-            return f"{npc.name}의 말이 전에 들은 소문과 겹친다. {summary}"
-        if is_new:
-            return f"You learn a new rumor from {npc.name}: {rumor.content}"
+        if learned > 0:
+            return f"You note a rumor from {npc.name}."
         if asked:
-            return f"{npc.name} repeats a rumor you already know: {rumor.content}"
-        return f"{npc.name}'s aside matches a rumor you already know: {rumor.content}"
-
-    def _localized_rumor_notice(self, rumor: Rumor) -> str:
-        if rumor.category is RumorCategory.SHORTAGE:
-            return "식량이나 재고가 빠듯해질 거라는 말이 돈다."
-        if rumor.category is RumorCategory.ECONOMY:
-            return "가격과 거래 분위기가 흔들릴 거라는 말이 돈다."
-        if rumor.category is RumorCategory.DANGER:
-            return "사람들이 주변 위험을 더 경계하고 있다는 말이 돈다."
-        if rumor.category is RumorCategory.EVENT:
-            return "날씨나 마을 분위기가 변하고 있다는 말이 돈다."
-        return "마을에 새로운 이야기가 돌고 있다."
+            return f"{npc.name}'s answer matches notes you already have."
+        return f"{npc.name}'s aside matches a rumor already in your notes."
 
     def _generate_dialogue(self, npc: NPCState, *, interaction_mode: str, player_prompt: str) -> str:
         return self._generate_dialogue_result(

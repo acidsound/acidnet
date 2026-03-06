@@ -35,6 +35,9 @@ def build_demo_setup() -> DemoSetup:
             kind="market",
             region_id="region.greenfall",
             neighbors=["tavern", "bakery", "smithy", "farm", "shrine"],
+            map_row=2,
+            map_column=3,
+            map_glyph="+",
         ),
         "tavern": Location(
             location_id="tavern",
@@ -42,6 +45,9 @@ def build_demo_setup() -> DemoSetup:
             kind="social",
             region_id="region.greenfall",
             neighbors=["square", "riverside"],
+            map_row=2,
+            map_column=1,
+            map_glyph="T",
         ),
         "bakery": Location(
             location_id="bakery",
@@ -49,6 +55,9 @@ def build_demo_setup() -> DemoSetup:
             kind="workshop",
             region_id="region.greenfall",
             neighbors=["square"],
+            map_row=1,
+            map_column=4,
+            map_glyph="B",
         ),
         "smithy": Location(
             location_id="smithy",
@@ -56,6 +65,9 @@ def build_demo_setup() -> DemoSetup:
             kind="workshop",
             region_id="region.greenfall",
             neighbors=["square"],
+            map_row=2,
+            map_column=5,
+            map_glyph="S",
         ),
         "farm": Location(
             location_id="farm",
@@ -63,6 +75,9 @@ def build_demo_setup() -> DemoSetup:
             kind="resource",
             region_id="region.greenfall",
             neighbors=["square", "riverside"],
+            map_row=3,
+            map_column=3,
+            map_glyph='"',
         ),
         "riverside": Location(
             location_id="riverside",
@@ -70,6 +85,9 @@ def build_demo_setup() -> DemoSetup:
             kind="resource",
             region_id="region.greenfall",
             neighbors=["farm", "tavern"],
+            map_row=3,
+            map_column=1,
+            map_glyph="~",
         ),
         "shrine": Location(
             location_id="shrine",
@@ -77,6 +95,9 @@ def build_demo_setup() -> DemoSetup:
             kind="rest",
             region_id="region.greenfall",
             neighbors=["square"],
+            map_row=1,
+            map_column=2,
+            map_glyph="^",
         ),
         "hollowmarket_gate": Location(
             location_id="hollowmarket_gate",
@@ -84,6 +105,9 @@ def build_demo_setup() -> DemoSetup:
             kind="route",
             region_id="region.hollowmarket",
             neighbors=[],
+            map_row=4,
+            map_column=2,
+            map_glyph="H",
         ),
         "stonewatch_gate": Location(
             location_id="stonewatch_gate",
@@ -91,6 +115,9 @@ def build_demo_setup() -> DemoSetup:
             kind="route",
             region_id="region.stonewatch",
             neighbors=[],
+            map_row=4,
+            map_column=4,
+            map_glyph="G",
         ),
     }
 

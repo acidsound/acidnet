@@ -32,6 +32,9 @@ class Location(BaseModel):
     kind: str
     region_id: str = "region.greenfall"
     neighbors: list[str] = Field(default_factory=list)
+    map_row: int = Field(default=1, ge=1)
+    map_column: int = Field(default=1, ge=1)
+    map_glyph: str = "?"
 
 
 class RegionNode(BaseModel):

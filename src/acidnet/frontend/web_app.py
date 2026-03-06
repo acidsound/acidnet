@@ -13,16 +13,6 @@ from acidnet.engine import Simulation
 from acidnet.engine.simulation import CONSUMPTION_VALUE, TurnEvent
 from acidnet.storage import EventLogFile, SQLiteWorldStore
 
-MAP_GRID = {
-    "shrine": {"row": 1, "column": 2, "glyph": "^"},
-    "bakery": {"row": 1, "column": 4, "glyph": "B"},
-    "tavern": {"row": 2, "column": 1, "glyph": "T"},
-    "square": {"row": 2, "column": 3, "glyph": "+"},
-    "smithy": {"row": 2, "column": 5, "glyph": "S"},
-    "riverside": {"row": 3, "column": 1, "glyph": "~"},
-    "farm": {"row": 3, "column": 3, "glyph": '"'},
-}
-
 
 class WebSimulationRuntime:
     def __init__(
@@ -174,24 +164,100 @@ class WebSimulationRuntime:
     def _map_nodes(self) -> list[dict[str, Any]]:
         current_id = self.simulation.player.location_id
         current = self.simulation.world.locations[current_id]
+        current_region = self.simulation.current_region()
         nodes: list[dict[str, Any]] = []
         for location_id, location in self.simulation.world.locations.items():
-            layout = MAP_GRID.get(location_id, {"row": 1, "column": 1, "glyph": "?"})
             occupant_count = sum(1 for npc in self.simulation.npcs.values() if npc.location_id == location_id)
+            move_command: str | None = None
+            connection_kind = "local"
+            is_reachable = False
+            if location_id == current_id:
+                move_command = "look"
+                is_reachable = True
+            elif location.region_id == current.region_id and location_id in current.neighbors:
+                move_command = f"go {location_id}"
+                is_reachable = True
+            elif current_region is not None and location.location_id == self.simulation.world.regions.get(location.region_id, current_region).anchor_location_id:
+                route = self.simulation._regional_route_between(current.region_id, location.region_id)
+                if route is not None and not self.simulation.player.travel_state.is_traveling:
+                    target_region = self.simulation.world.regions.get(location.region_id)
+                    if target_region is not None:
+                        move_command = f"travel-region {target_region.name}"
+                        is_reachable = True
+                        connection_kind = "regional"
             nodes.append(
                 {
                     "location_id": location_id,
                     "name": location.name,
                     "kind": location.kind,
-                    "row": layout["row"],
-                    "column": layout["column"],
-                    "glyph": layout["glyph"],
+                    "row": location.map_row,
+                    "column": location.map_column,
+                    "glyph": location.map_glyph,
                     "is_player_here": location_id == current_id,
                     "is_adjacent": location_id in current.neighbors,
+                    "is_reachable": is_reachable,
+                    "move_command": move_command,
+                    "connection_kind": connection_kind,
                     "occupant_count": occupant_count,
                 }
             )
         return nodes
+
+    def _map_edges(self) -> list[dict[str, Any]]:
+        current_region = self.simulation.current_region()
+        current_location = self.simulation.world.locations[self.simulation.player.location_id]
+        seen: set[tuple[str, str, str]] = set()
+        edges: list[dict[str, Any]] = []
+
+        for location in self.simulation.world.locations.values():
+            if location.region_id != current_location.region_id:
+                continue
+            for neighbor_id in location.neighbors:
+                neighbor = self.simulation.world.locations.get(neighbor_id)
+                if neighbor is None or neighbor.region_id != current_location.region_id:
+                    continue
+                key = tuple(sorted((location.location_id, neighbor.location_id))) + ("local",)
+                if key in seen:
+                    continue
+                seen.add(key)
+                edges.append(
+                    {
+                        "from_location_id": location.location_id,
+                        "to_location_id": neighbor.location_id,
+                        "kind": "local",
+                        "route_id": None,
+                        "is_delayed": False,
+                    }
+                )
+
+        if current_region is None or current_region.anchor_location_id is None:
+            return edges
+
+        for route in self.simulation.world.regional_routes:
+            other_region_id: str | None = None
+            if route.from_region_id == current_region.region_id:
+                other_region_id = route.to_region_id
+            elif route.to_region_id == current_region.region_id:
+                other_region_id = route.from_region_id
+            if other_region_id is None:
+                continue
+            other_region = self.simulation.world.regions.get(other_region_id)
+            if other_region is None or other_region.anchor_location_id is None:
+                continue
+            key = tuple(sorted((current_region.anchor_location_id, other_region.anchor_location_id))) + ("regional",)
+            if key in seen:
+                continue
+            seen.add(key)
+            edges.append(
+                {
+                    "from_location_id": current_region.anchor_location_id,
+                    "to_location_id": other_region.anchor_location_id,
+                    "kind": "regional",
+                    "route_id": route.route_id,
+                    "is_delayed": self.simulation._visible_route_delay_event_for_player(route.route_id) is not None,
+                }
+            )
+        return edges
 
     def _action_catalog(self) -> dict[str, list[dict[str, Any]]]:
         focused_npc = self.simulation._focused_npc_here()
@@ -342,6 +408,7 @@ class WebSimulationRuntime:
                         )
                     ],
                     "map_nodes": self._map_nodes(),
+                    "map_edges": self._map_edges(),
                     "regional_nodes": [
                         {
                             "region_id": node.region_id,

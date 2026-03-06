@@ -169,7 +169,7 @@ Save request:
 
 ```json
 {
-  "prompt": "Respond in Korean only."
+  "prompt": "Stay grounded in the supplied state. Reply with one short in-character answer."
 }
 ```
 
@@ -316,11 +316,42 @@ Per-node shape:
   "glyph": "+",
   "is_player_here": true,
   "is_adjacent": true,
+  "is_reachable": true,
+  "move_command": "look",
+  "connection_kind": "local",
   "occupant_count": 3
 }
 ```
 
-This is presentation guidance, not a physics system.
+Notes:
+
+- `row`, `column`, and `glyph` come from world/location data, not frontend-only constants
+- `move_command` is the server-authoritative command the client should send if the tile is activated
+- `connection_kind` is currently `local` or `regional`
+- `is_adjacent` remains a local-topology hint; the client should use `move_command` and `is_reachable` for interaction state
+
+### `scene.map_edges`
+
+Current visible map connections for the browser probe.
+
+Per-edge shape:
+
+```json
+{
+  "from_location_id": "square",
+  "to_location_id": "farm",
+  "kind": "local",
+  "route_id": null,
+  "is_delayed": false
+}
+```
+
+Notes:
+
+- `kind` is currently `local` or `regional`
+- local edges represent direct in-region movement links
+- regional edges represent summarized inter-region routes between anchor locations
+- the client should render these as display hints only; route validity still comes from commands returned by the server
 
 ### `scene.regional_routes`
 

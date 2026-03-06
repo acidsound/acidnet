@@ -204,11 +204,46 @@
     .feed-entry.world { border-color: #e6d7a6; }
     .feed-entry.ui { border-color: #d9a441; }
 
+    .map-board {
+      position: relative;
+      min-height: 360px;
+    }
+
+    .map-grid,
+    .map-overlay {
+      position: absolute;
+      inset: 0;
+    }
+
     .map-grid {
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 10px;
-      min-height: 280px;
+      min-height: 360px;
+      z-index: 1;
+    }
+
+    .map-overlay {
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+      pointer-events: none;
+      overflow: visible;
+    }
+
+    .map-edge {
+      fill: none;
+      stroke: rgba(230, 215, 166, 0.4);
+      stroke-width: 0.12;
+      stroke-linecap: round;
+    }
+
+    .map-edge.regional {
+      stroke: rgba(144, 192, 255, 0.55);
+      stroke-dasharray: 0.35 0.18;
+    }
+
+    .map-edge.delayed {
+      stroke: rgba(208, 140, 63, 0.72);
     }
 
     .tile {
@@ -379,7 +414,10 @@
       <div class="main-column">
         <section class="panel">
           <h2>Village Map</h2>
-          <div class="map-grid" id="map-grid"></div>
+          <div class="map-board">
+            <svg class="map-overlay" id="map-overlay" viewBox="0 0 5 4" preserveAspectRatio="none"></svg>
+            <div class="map-grid" id="map-grid"></div>
+          </div>
         </section>
 
         <section class="panel">
@@ -568,16 +606,12 @@
       sendCommand(`ask ${npcId} rumor`);
     }
 
-    function goTo(locationId, isAdjacent, isCurrent) {
-      if (isCurrent) {
-        sendCommand('look');
-        return;
-      }
-      if (!isAdjacent) {
+    function goTo(node) {
+      if (!node.move_command) {
         alert('That location is not directly connected from here yet.');
         return;
       }
-      sendCommand(`go ${locationId}`);
+      sendCommand(node.move_command);
     }
 
     function currentTarget() {
@@ -678,14 +712,37 @@
 
     function renderMap(state) {
       const mapGrid = document.getElementById('map-grid');
+      const mapOverlay = document.getElementById('map-overlay');
       mapGrid.innerHTML = '';
-      for (const node of state.scene.map_nodes) {
+      mapOverlay.innerHTML = '';
+      const nodes = state.scene.map_nodes || [];
+      const columns = Math.max(1, ...nodes.map((node) => Number(node.column) || 1));
+      const rows = Math.max(1, ...nodes.map((node) => Number(node.row) || 1));
+      mapGrid.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`;
+      mapOverlay.setAttribute('viewBox', `0 0 ${columns} ${rows}`);
+
+      const nodeById = Object.fromEntries(nodes.map((node) => [node.location_id, node]));
+      for (const edge of state.scene.map_edges || []) {
+        const fromNode = nodeById[edge.from_location_id];
+        const toNode = nodeById[edge.to_location_id];
+        if (!fromNode || !toNode) {
+          continue;
+        }
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', String(Number(fromNode.column) - 0.5));
+        line.setAttribute('y1', String(Number(fromNode.row) - 0.5));
+        line.setAttribute('x2', String(Number(toNode.column) - 0.5));
+        line.setAttribute('y2', String(Number(toNode.row) - 0.5));
+        line.setAttribute('class', `map-edge ${edge.kind}${edge.is_delayed ? ' delayed' : ''}`);
+        mapOverlay.appendChild(line);
+      }
+      for (const node of nodes) {
         const tile = document.createElement('button');
         tile.type = 'button';
-        tile.className = `tile${node.is_player_here ? ' current' : ''}${(!node.is_adjacent && !node.is_player_here) ? ' disabled' : ''}`;
+        tile.className = `tile${node.is_player_here ? ' current' : ''}${(!node.is_reachable && !node.is_player_here) ? ' disabled' : ''}`;
         tile.style.gridRow = node.row;
         tile.style.gridColumn = node.column;
-        tile.onclick = () => goTo(node.location_id, node.is_adjacent, node.is_player_here);
+        tile.onclick = () => goTo(node);
 
         const shell = document.createElement('div');
         const glyph = document.createElement('div');
@@ -697,7 +754,7 @@
         name.className = 'tile-name';
         name.textContent = node.name;
         meta.className = 'tile-meta';
-        meta.textContent = `${node.kind} | npcs ${node.occupant_count}`;
+        meta.textContent = `${node.kind} | ${node.connection_kind} | npcs ${node.occupant_count}`;
 
         shell.appendChild(glyph);
         shell.appendChild(name);
@@ -824,7 +881,10 @@
     function renderFeed(state) {
       const feedList = document.getElementById('feed-list');
       feedList.innerHTML = '';
-      for (const event of [...state.recent_events].reverse()) {
+      const events = state.recent_events || [];
+      const latestKey = events.length ? `${events[events.length - 1].day}:${events[events.length - 1].tick}:${events[events.length - 1].kind}:${events[events.length - 1].text}` : '';
+      const shouldFollow = !window.__acidnetFeedPinned || window.__acidnetLastFeedKey !== latestKey;
+      for (const event of events) {
         const entry = document.createElement('div');
         const meta = document.createElement('small');
         entry.className = `feed-entry ${event.kind}`;
@@ -832,6 +892,10 @@
         meta.textContent = `day ${String(event.day).padStart(2, '0')} tick ${String(event.tick).padStart(4, '0')} | ${event.kind}`;
         entry.appendChild(meta);
         feedList.appendChild(entry);
+      }
+      window.__acidnetLastFeedKey = latestKey;
+      if (shouldFollow) {
+        feedList.scrollTop = feedList.scrollHeight;
       }
     }
 
@@ -877,6 +941,10 @@
     document.getElementById('trade-mode').addEventListener('change', updateTradeControls);
     document.getElementById('trade-item').addEventListener('change', updateTradeControls);
     document.getElementById('trade-qty').addEventListener('input', updateTradeControls);
+    document.getElementById('feed-list').addEventListener('scroll', (event) => {
+      const element = event.currentTarget;
+      window.__acidnetFeedPinned = element.scrollTop + element.clientHeight + 24 < element.scrollHeight;
+    });
     document.getElementById('command-input').addEventListener('keydown', (event) => {
       if (event.key === 'Enter') {
         runCommandInput();

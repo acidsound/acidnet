@@ -1,5 +1,34 @@
 from acidnet.engine import Simulation
+from acidnet.llm import DialogueContext, DialogueResult
 from acidnet.models import RegionalTransit, WorldEvent
+from acidnet.world import build_demo_setup
+
+
+class RecordingDialogueAdapter:
+    def __init__(self) -> None:
+        self.contexts: list[DialogueContext] = []
+
+    def prepare(self) -> str | None:
+        return "ready"
+
+    def generate(self, context: DialogueContext) -> DialogueResult:
+        self.contexts.append(context.model_copy(deep=True))
+        return DialogueResult(text=f"{context.npc.name} sees: {context.player_prompt}", adapter_name="recording")
+
+
+def build_recording_simulation(system_prompt: str = "Test system prompt.") -> tuple[Simulation, RecordingDialogueAdapter]:
+    setup = build_demo_setup()
+    adapter = RecordingDialogueAdapter()
+    simulation = Simulation(
+        world=setup.world,
+        player=setup.player,
+        npcs=setup.npcs,
+        personas=setup.personas,
+        rumors=setup.rumors,
+        dialogue_adapter=adapter,
+        dialogue_system_prompt=system_prompt,
+    )
+    return simulation, adapter
 
 
 def test_demo_simulation_boots_with_interactable_square() -> None:
@@ -35,69 +64,59 @@ def test_player_can_say_freeform_message_to_npc() -> None:
     assert any(entry.kind == "world" for entry in result.entries[1:])
 
 
-def test_heuristic_dialogue_honors_korean_language_request_in_system_prompt() -> None:
+def test_talk_forwards_system_prompt_into_dialogue_context() -> None:
+    simulation, adapter = build_recording_simulation("Stay grounded. Never narrate hidden state.")
+
+    simulation.handle_command("talk neri")
+
+    assert adapter.contexts
+    assert adapter.contexts[-1].system_prompt == "Stay grounded. Never narrate hidden state."
+    assert adapter.contexts[-1].interaction_mode == "talk"
+    assert adapter.contexts[-1].player_prompt == "What is going on around here?"
+
+
+def test_ask_rumor_forwards_system_prompt_into_dialogue_context() -> None:
+    simulation, adapter = build_recording_simulation("Answer as exactly one NPC.")
+
+    simulation.handle_command("ask neri rumor")
+
+    assert adapter.contexts
+    assert adapter.contexts[-1].system_prompt == "Answer as exactly one NPC."
+    assert adapter.contexts[-1].interaction_mode == "rumor_request"
+    assert adapter.contexts[-1].player_prompt == "Have you heard any useful rumors?"
+
+
+def test_direct_say_forwards_exact_player_prompt_into_dialogue_context() -> None:
+    simulation, adapter = build_recording_simulation("Keep the reply short.")
+
+    simulation.handle_command("say neri Where did you come from?")
+
+    assert adapter.contexts
+    assert adapter.contexts[-1].system_prompt == "Keep the reply short."
+    assert adapter.contexts[-1].interaction_mode == "direct_say"
+    assert adapter.contexts[-1].player_prompt == "Where did you come from?"
+
+
+def test_asking_for_rumor_uses_single_npc_line_and_nonverbal_system_note() -> None:
     simulation = Simulation.create_demo(dialogue_backend="heuristic")
-    simulation.set_dialogue_system_prompt(
-        "You are a village NPC. Respond in exactly one language. That language must be Korean."
-    )
-
-    text = simulation.probe_npc_dialogue("npc.neri", interaction_mode="talk", player_prompt="안녕?")
-
-    assert any("\uac00" <= char <= "\ud7a3" for char in text)
-    assert "Stories travel faster than thread in this village." not in text
-
-
-def test_heuristic_dialogue_follows_english_language_clause_without_prompt_sniffing() -> None:
-    simulation = Simulation.create_demo(dialogue_backend="heuristic")
-    simulation.set_dialogue_system_prompt(
-        "You are a village NPC. Reply with one or two short lines. Reply only in Korean."
-    )
-
-    text = simulation.probe_npc_dialogue("npc.neri", interaction_mode="talk", player_prompt="안녕")
-
-    assert any("\uac00" <= char <= "\ud7a3" for char in text)
-    assert "Stories travel faster than thread in this village." not in text
-
-
-def test_asking_for_rumor_does_not_emit_english_npc_postfix_under_korean_prompt() -> None:
-    simulation = Simulation.create_demo(dialogue_backend="heuristic")
-    simulation.set_dialogue_system_prompt(
-        "You are a village NPC. Respond in exactly one language. That language must be Korean."
-    )
 
     result = simulation.handle_command("ask neri rumor")
 
     assert not any("leans closer" in line for line in result.lines)
     assert not any("adds quietly" in line for line in result.lines)
     assert sum(1 for entry in result.entries if entry.kind == "npc") == 1
-    assert any(entry.kind == "system" and "소문" in entry.text for entry in result.entries)
+    assert any(entry.kind == "system" and "rumor" in entry.text.lower() for entry in result.entries)
 
 
-def test_ask_non_rumor_fallback_is_localized_under_korean_prompt() -> None:
+def test_direct_say_first_meeting_question_uses_player_prompt_and_location_context() -> None:
     simulation = Simulation.create_demo(dialogue_backend="heuristic")
-    simulation.set_dialogue_system_prompt(
-        "You are a village NPC. Respond in exactly one language. That language must be Korean."
-    )
 
-    result = simulation.handle_command("ask neri weather")
-
-    assert any("소문" in line for line in result.lines)
-    assert not any("Ask about rumors" in line for line in result.lines)
-
-
-def test_direct_say_first_meeting_question_uses_current_prompt_and_context() -> None:
-    simulation = Simulation.create_demo(dialogue_backend="heuristic")
-    simulation.set_dialogue_system_prompt(
-        "You are a village NPC. Respond in exactly one language. That language must be Korean."
-    )
-
-    result = simulation.handle_command("say neri 처음보는 친군데? 어디서 왔어?")
+    result = simulation.handle_command("say neri Where did you come from?")
 
     assert result.entries[0].kind == "npc"
-    assert "You are not entirely new to me anymore." not in result.entries[0].text
     assert "Stories travel faster than thread in this village." not in result.entries[0].text
-    assert "재단사" in result.entries[0].text or "Market Square" in result.entries[0].text
-    assert any("\uac00" <= char <= "\ud7a3" for char in result.entries[0].text)
+    assert "You are not entirely new to me anymore." not in result.entries[0].text
+    assert "Market Square" in result.entries[0].text
 
 
 def test_demo_world_starts_with_multiple_distinct_rumors() -> None:
