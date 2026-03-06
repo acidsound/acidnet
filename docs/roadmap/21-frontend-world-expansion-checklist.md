@@ -64,6 +64,10 @@ Current note:
   - treat monkey runs as proxy-PC observation runs, not as random noise
   - keep scoring rule-based
   - emit failure reasons that are actionable during tuning
+  Progress:
+  - initial role-driven runner landed with `wanderer`, `survivor`, `trader`, `rumor_verifier`, and `altruist`
+  - each step now records a goal label alongside the chosen command
+  - rule-based scoring and actionable failure summaries still remain
 
 - [ ] Step 20F: Add the first controllable external shock.
   Exit criteria:

@@ -64,6 +64,10 @@
   - monkey run 을 random noise 가 아니라 proxy-PC observation run 으로 다룬다
   - scoring 은 계속 rule-based 로 유지한다
   - tuning 에 바로 쓸 수 있는 failure reason 을 출력한다
+  Progress:
+  - `wanderer`, `survivor`, `trader`, `rumor_verifier`, `altruist` role 이 있는 초기 role-driven runner 가 들어갔다
+  - 각 step 은 선택된 command 와 함께 goal label 을 남긴다
+  - rule-based scoring 과 actionable failure summary 는 아직 남아 있다
 
 - [ ] Step 20F: 첫 controllable external shock 추가
   Exit criteria:

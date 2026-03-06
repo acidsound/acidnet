@@ -44,6 +44,7 @@
 - random monkeying 을 role-driven proxy-PC run 으로 교체한다
 - 명시적 목표, 허용 명령, rule-based scoring 을 추가한다
 - monkey 를 travel, exchange, shock 행동을 보는 표준 observation harness 로 만든다
+- 초기 role-driven runner 는 들어갔고, 남은 핵심 공백은 scoring/failure reporting 이다
 
 ### Phase 5: External Shocks and Recovery Loops
 
