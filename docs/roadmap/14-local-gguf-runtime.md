@@ -2,62 +2,92 @@
 
 ## Purpose
 
-The project needs a simple path from a local GGUF file to a live OpenAI-compatible endpoint that ACIDNET can talk to.
+The project now supports two GGUF runtime shapes:
+
+1. base `Q4_K_M` model plus a LoRA GGUF adapter
+2. fully merged checkpoint converted to GGUF when llama.cpp quantization tools are available
+
+The first path is the default promotion path on Windows because it avoids a large merged export step.
 
 ## Entry Points
 
+- `run_export_gguf.py`
+- `run_merge_lora_adapter.py`
 - `run_llama_server.ps1`
 - `run_local_qwen_dev_loop.ps1`
 - `run_dev_world.ps1`
 
-## Expected Runtime Shape
+## Adapter GGUF Export
 
-1. Start a local GGUF server.
-2. Point ACIDNET at `/v1/chat/completions`.
-3. Run the model gate.
-4. Launch the GUI and observe the world.
+Export a fine-tuned LoRA adapter to GGUF:
 
-## Example Commands
+```bash
+python run_export_gguf.py ^
+  --mode adapter ^
+  --adapter-path data/test_artifacts/qwen3_5_4b_bootstrap_smoke_adapter ^
+  --base-model Qwen/Qwen3.5-4B ^
+  --llama-cpp-dir data/vendor/llama.cpp ^
+  --output data/gguf/qwen3_5_4b_bootstrap_smoke_adapter-f16.gguf
+```
 
-Start a local server for the 4B GGUF:
+Current smoke artifact:
+
+- `data/gguf/qwen3_5_4b_bootstrap_smoke_adapter-f16.gguf`
+
+## Merged GGUF Export
+
+Merge first:
+
+```bash
+python run_merge_lora_adapter.py ^
+  --adapter-path data/test_artifacts/qwen3_5_4b_bootstrap_smoke_adapter ^
+  --base-model Qwen/Qwen3.5-4B ^
+  --output-dir data/merged/qwen3_5_4b_bootstrap_smoke_merged
+```
+
+Then export the merged checkpoint to GGUF:
+
+```bash
+python run_export_gguf.py ^
+  --mode merged ^
+  --adapter-path data/test_artifacts/qwen3_5_4b_bootstrap_smoke_adapter ^
+  --base-model Qwen/Qwen3.5-4B ^
+  --llama-cpp-dir data/vendor/llama.cpp ^
+  --merged-model-dir data/merged/qwen3_5_4b_bootstrap_smoke_merged ^
+  --merge-first ^
+  --output data/gguf/qwen3_5_4b_bootstrap_smoke-f16.gguf ^
+  --quantization Q4_K_M
+```
+
+This merged path requires `llama-quantize`.
+
+## Runtime With Base GGUF Plus Adapter GGUF
+
+Start a local server with both the base quantized model and the exported adapter:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File run_llama_server.ps1 `
   -ModelPath .\models\Qwen3.5-4B-Q4_K_M.gguf `
+  -LoraPath data/gguf/qwen3_5_4b_bootstrap_smoke_adapter-f16.gguf `
   -Port 8000 `
   -ContextSize 4096 `
   -GpuLayers 99 `
   -Detached
 ```
 
-Run the gate and launch the GUI against the same endpoint:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File run_dev_world.ps1 `
-  -DialogueBackend openai_compat `
-  -DialogueModel qwen3.5-4b `
-  -DialogueEndpoint http://127.0.0.1:8000/v1/chat/completions `
-  -RunModelGate `
-  -Detached
-```
-
-One-command startup for `server + gate + GUI`:
+Or use the combined loop:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File run_local_qwen_dev_loop.ps1 `
   -ModelPath .\models\Qwen3.5-4B-Q4_K_M.gguf `
+  -LoraPath data/gguf/qwen3_5_4b_bootstrap_smoke_adapter-f16.gguf `
   -Port 8000 `
   -ModelGateTurns 120
 ```
 
 ## Notes
 
-- `run_llama_server.ps1` assumes `llama-server` is on `PATH` unless `-ServerPath` is given
-- the endpoint ACIDNET expects is `http://127.0.0.1:<port>/v1/chat/completions`
-- this path is for runtime validation before any fine-tuning job starts
-
-## Next Work
-
-- add a ready-made preset for the final exported fine-tuned GGUF
-- capture latency and token throughput in the model gate report
-- add cleanup helpers for stopping the local server and GUI together
+- `run_export_gguf.py --mode adapter` only needs the llama.cpp Python converter scripts
+- merged `Q4_K_M` export needs `llama-quantize`
+- the current smoke GGUF is an export-path proof, not a promotion-ready model
+- promotion still depends on clearing the model gate with a stronger 4B checkpoint

@@ -46,21 +46,21 @@
 - [x] Step 11: keyboard GUI frontend 추가
 - [x] Step 12: teacher prompt schema 및 synthetic dataset export 추가
 - [x] Step 13: Qwen3.5 4B vs 9B fine-tuning experiment harness 추가
-- [ ] Step 14: 검증된 persona checkpoint를 GGUF `q4_k_m`로 export
+- [x] Step 14: 검증된 persona checkpoint를 위한 GGUF runtime export 경로 추가
 - [x] Step 15: local persona/dialogue runtime adapter 추가
 - [x] Step 16: evaluation harness 및 model selection report 추가
-- [ ] Step 17: dialogue/persona consistency 전용 optional RL 추가
+- [x] Step 17: dialogue/persona consistency 전용 optional RL 추가
 
 ## 현재 초점
 
-현재 구현 초점은 Step 14다.
+현재 구현 초점은 승격 품질이다.
 
 - bootstrap teacher dataset을 더 다듬어서 첫 실전 4B run이 model gate를 통과하게 만든다
 - `Qwen/Qwen3.5-4B`를 기본 학습 checkpoint로 유지한다
 - `Qwen/Qwen3.5-9B`는 4B가 안정화된 뒤 challenger로만 본다
 - Windows 기본 학습 backend는 HF/PEFT LoRA 경로로 유지한다
-- GGUF export 전에 local OpenAI-compatible adapter runtime에서 먼저 검증한다
-- 검증된 checkpoint만 runtime artifact로 승격한다
+- local OpenAI-compatible adapter runtime에서 먼저 검증한다
+- dialogue 품질은 heuristic control을 이기되, world circulation은 깨지지 않는 checkpoint만 승격한다
 
 실무적으로는 다음을 뜻한다.
 
@@ -100,10 +100,13 @@
 - Unsloth 및 HF/PEFT 4B baseline run-spec/training-script export
 - `Qwen/Qwen3.5-4B` 대상 HF/PEFT LoRA smoke fine-tune
 - fine-tuned checkpoint를 위한 local OpenAI-compatible adapter server
+- smoke LoRA checkpoint용 GGUF adapter export
+- optional DPO/ORPO refinement용 dialogue preference dataset export
+- optional DPO run-spec/training-script export
 
-## 다음 단계 종료 조건
+## 승격 종료 조건
 
 - 첫 실전 4B checkpoint가 heuristic fallback 없이 model gate를 통과해야 한다
 - local adapter runtime이 world state와 persona 제약을 계속 지켜야 한다
-- 검증된 checkpoint가 최종 runtime artifact 경로로 export 또는 merge 가능해야 한다
+- checkpoint가 최종 GGUF runtime 경로로 export 가능해야 한다
 - evaluation은 계속 persona consistency, world consistency, latency, memory fit를 포함해야 한다

@@ -1,6 +1,8 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$ModelPath,
+    [string]$LoraPath = "",
+    [double]$LoraScale = 1.0,
     [string]$ServerPath = "llama-server",
     [string]$Host = "127.0.0.1",
     [int]$Port = 8000,
@@ -25,14 +27,24 @@ $ModelsEndpoint = "http://{0}:{1}/v1/models" -f $Host, $Port
 
 Write-Host ("Starting local Qwen dev loop with model '{0}'..." -f $ResolvedModelPath)
 
-$ServerProcess = Start-Process -FilePath $ServerPath -ArgumentList @(
+$ServerArgs = @(
     "-m", $ResolvedModelPath,
     "--host", $Host,
     "--port", $Port,
     "-c", $ContextSize,
     "-ngl", $GpuLayers,
     "--alias", $ModelAlias
-) -WorkingDirectory $ScriptRoot -PassThru
+)
+if ($LoraPath) {
+    $ResolvedLoraPath = Resolve-Path $LoraPath
+    if ($LoraScale -eq 1.0) {
+        $ServerArgs += @("--lora", $ResolvedLoraPath)
+    } else {
+        $ServerArgs += @("--lora-scaled", $ResolvedLoraPath, $LoraScale)
+    }
+}
+
+$ServerProcess = Start-Process -FilePath $ServerPath -ArgumentList $ServerArgs -WorkingDirectory $ScriptRoot -PassThru
 
 Write-Host ("llama-server PID: {0}" -f $ServerProcess.Id)
 Write-Host ("Waiting for endpoint: {0}" -f $ModelsEndpoint)

@@ -46,21 +46,21 @@ Build a simulation-first village RPG where the player can move through the world
 - [x] Step 11: Add keyboard-driven GUI frontend.
 - [x] Step 12: Add teacher prompt schema and synthetic dataset export.
 - [x] Step 13: Add Qwen3.5 4B vs 9B fine-tuning experiment harness.
-- [ ] Step 14: Export validated persona checkpoints to GGUF `q4_k_m`.
+- [x] Step 14: Add GGUF runtime export paths for validated persona checkpoints.
 - [x] Step 15: Add local persona/dialogue runtime adapter.
 - [x] Step 16: Add evaluation harness and model selection report.
-- [ ] Step 17: Add optional RL for dialogue/persona consistency only.
+- [x] Step 17: Add optional RL for dialogue/persona consistency only.
 
 ## Current Focus
 
-Current implementation focus is Step 14:
+Current implementation focus is promotion quality:
 
 - improve the bootstrap-teacher dataset so the first real 4B run clears the model gate
 - keep `Qwen/Qwen3.5-4B` as the primary training checkpoint
 - keep `Qwen/Qwen3.5-9B` as a challenger only after the 4B run is stable
 - run bf16 LoRA through the HF/PEFT Windows-safe path by default
-- validate adapters through the local OpenAI-compatible runtime before any GGUF export
-- promote only validated checkpoints into runtime artifacts
+- validate adapters through the local OpenAI-compatible runtime before promotion
+- promote only checkpoints that beat the heuristic control on dialogue quality without breaking world circulation
 
 In practical terms, this means:
 
@@ -100,10 +100,13 @@ Implemented systems:
 - Unsloth and HF/PEFT 4B baseline run-spec/training-script export
 - HF/PEFT LoRA smoke fine-tune run on `Qwen/Qwen3.5-4B`
 - local OpenAI-compatible adapter server for fine-tuned checkpoints
+- GGUF adapter export for smoke LoRA checkpoints
+- dialogue preference dataset export for optional DPO/ORPO refinement
+- optional DPO run-spec/training-script export
 
-## Exit Criteria For The Next Step
+## Exit Criteria For Promotion
 
 - the first substantial 4B checkpoint must clear the model gate with no heuristic fallback
 - the local adapter runtime must stay grounded in world state and persona constraints
-- the validated checkpoint must be exportable or mergeable into the final runtime artifact path
+- the checkpoint must be exportable into the final GGUF runtime path
 - evaluation must continue to include persona consistency, world consistency, latency, and memory fit

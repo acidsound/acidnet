@@ -3,13 +3,20 @@ from dataclasses import asdict
 
 from acidnet.training import (
     baseline_pipeline_artifacts_to_dict,
+    build_bootstrap_rejected_outputs,
     build_bootstrap_teacher_outputs,
+    build_dialogue_preference_examples,
+    build_dpo_run_spec,
     RunPaths,
+    build_hf_to_gguf_command,
     build_finetune_manifest,
     build_hf_peft_run_spec,
+    build_lora_to_gguf_command,
     build_openai_batch_requests,
+    build_quantize_command,
     build_unsloth_run_spec,
     coerce_sft_examples,
+    export_dpo_training_script,
     export_prompt_pack_jsonl,
     export_finetune_manifest_json,
     export_hf_peft_training_script,
@@ -193,6 +200,61 @@ def test_qwen4b_baseline_run_spec_can_render_hf_peft_script() -> None:
     assert "ROOT = _project_root()" in script_text
     assert 'get_peft_model(model, peft_config)' in script_text
     assert 'remove_columns=train_raw.column_names' in script_text
+
+
+def test_dialogue_preference_examples_can_be_built_from_bootstrap_rows() -> None:
+    prompt_rows = [asdict(row) for row in generate_demo_prompt_pack(num_turns=1) if row.task == "dialogue"][:3]
+    chosen_rows = [asdict(row) for row in build_bootstrap_teacher_outputs(prompt_rows, tasks=("dialogue",))]
+    rejected_rows = build_bootstrap_rejected_outputs(prompt_rows)
+
+    examples = build_dialogue_preference_examples(prompt_rows, chosen_rows, rejected_rows)
+
+    assert examples
+    assert all(example.chosen != example.rejected for example in examples)
+    assert all(example.chosen_reward["total_score"] > example.rejected_reward["total_score"] for example in examples)
+
+
+def test_gguf_export_commands_are_rendered_with_expected_arguments() -> None:
+    lora_command = build_lora_to_gguf_command(
+        adapter_path="data/adapter",
+        output_path="data/gguf/adapter.gguf",
+        base_model_id="Qwen/Qwen3.5-4B",
+        convert_lora_script="tools/llama.cpp/convert_lora_to_gguf.py",
+    )
+    hf_command = build_hf_to_gguf_command(
+        merged_model_dir="data/merged/model",
+        output_path="data/gguf/model-f16.gguf",
+        convert_hf_script="tools/llama.cpp/convert_hf_to_gguf.py",
+    )
+    quantize_command = build_quantize_command(
+        quantize_binary="tools/llama.cpp/build/bin/llama-quantize.exe",
+        source_path="data/gguf/model-f16.gguf",
+        output_path="data/gguf/model-q4.gguf",
+        quantization="Q4_K_M",
+    )
+
+    assert "--base-model-id" in lora_command
+    assert "--outfile" in hf_command
+    assert quantize_command[-1] == "Q4_K_M"
+
+
+def test_qwen4b_dialogue_dpo_run_spec_can_render_training_script() -> None:
+    baseline = build_finetune_manifest(vram_gb=24)[0]
+    run_spec = build_dpo_run_spec(
+        baseline,
+        train_dataset_path="data/preferences/bootstrap_dialogue_preferences.jsonl",
+        eval_dataset_path="data/preferences/bootstrap_dialogue_preferences.jsonl",
+        output_dir="data/training/qwen3_5_4b_dialogue_dpo",
+        sft_adapter_path="data/training/qwen3_5_4b_baseline",
+    )
+    artifact_dir = Path("data") / "test_artifacts"
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    script_path = export_dpo_training_script(artifact_dir / "train_qwen3_5_4b_dialogue_dpo_test.py", run_spec)
+    script_text = script_path.read_text(encoding="utf-8")
+
+    assert run_spec.model_name == "Qwen/Qwen3.5-4B"
+    assert "DPOTrainer" in script_text
+    assert 'RUN_SPEC["sft_adapter_path"]' in script_text
 
 
 def test_sft_examples_can_be_split_deterministically() -> None:

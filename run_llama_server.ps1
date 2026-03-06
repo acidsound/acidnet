@@ -1,6 +1,8 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$ModelPath,
+    [string]$LoraPath = "",
+    [double]$LoraScale = 1.0,
     [string]$ServerPath = "llama-server",
     [string]$Host = "127.0.0.1",
     [int]$Port = 8000,
@@ -24,6 +26,14 @@ $Args = @(
     "-ngl", $GpuLayers,
     "--alias", $Alias
 )
+if ($LoraPath) {
+    $ResolvedLoraPath = Resolve-Path $LoraPath
+    if ($LoraScale -eq 1.0) {
+        $Args += @("--lora", $ResolvedLoraPath)
+    } else {
+        $Args += @("--lora-scaled", $ResolvedLoraPath, $LoraScale)
+    }
+}
 
 Write-Host ("Launching llama-server with model '{0}'..." -f $ResolvedModelPath)
 Write-Host ("Endpoint: http://{0}:{1}/v1/chat/completions" -f $Host, $Port)
