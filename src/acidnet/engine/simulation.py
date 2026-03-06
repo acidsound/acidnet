@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Iterable
 
 from acidnet.llm import DialogueContext, DialogueModelAdapter, DialogueResult, RuleBasedDialogueAdapter, build_dialogue_adapter
-from acidnet.llm.prompt_builder import DEFAULT_SYSTEM_PROMPT, infer_interaction_mode, preferred_output_language
+from acidnet.llm.prompt_builder import DEFAULT_SYSTEM_PROMPT, infer_interaction_mode, select_heuristic_language
 from acidnet.models import (
     Belief,
     EpisodicMemory,
@@ -546,7 +546,7 @@ class Simulation:
         if npc is None:
             return TurnResult(self._events("system", [error]))
         if topic.lower() != "rumor":
-            language = preferred_output_language(self.dialogue_system_prompt)
+            language = select_heuristic_language(self.dialogue_system_prompt)
             fallback = (
                 '고개를 갸웃한다. "마을 소식이 궁금하면 소문을 물어봐."'
                 if language == "ko"
@@ -1207,7 +1207,7 @@ class Simulation:
         return self._format_player_rumor_notice(npc, rumor, asked=asked, is_new=is_new)
 
     def _format_player_rumor_notice(self, npc: NPCState, rumor: Rumor, *, asked: bool, is_new: bool) -> str:
-        language = preferred_output_language(self.dialogue_system_prompt)
+        language = select_heuristic_language(self.dialogue_system_prompt)
         if language == "ko":
             summary = self._localized_rumor_notice(rumor)
             if is_new:

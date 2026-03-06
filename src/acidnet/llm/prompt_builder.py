@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+from dataclasses import dataclass
 from typing import Any
 
 from acidnet.llm.protocols import DialogueContext
@@ -23,9 +25,47 @@ INTERACTION_MODE_ALIASES = {
     "ask_safety": "direct_say",
     "ask_social_state": "direct_say",
 }
-RUMOR_KEYWORDS = ("rumor", "rumors", "heard", "hear", "gossip", "news")
-TRADE_KEYWORDS = ("buy", "sell", "trade", "price", "prices", "cost", "coin", "bread", "stew", "food", "stock")
-TALK_KEYWORDS = ("hello", "hi", "hey", "what is going on", "what's going on", "how are things", "what happened")
+RUMOR_KEYWORDS = (
+    "rumor",
+    "rumors",
+    "heard",
+    "hear",
+    "gossip",
+    "news",
+    "소문",
+    "풍문",
+    "이야기",
+)
+TRADE_KEYWORDS = (
+    "buy",
+    "sell",
+    "trade",
+    "price",
+    "prices",
+    "cost",
+    "coin",
+    "bread",
+    "stew",
+    "food",
+    "stock",
+    "사다",
+    "팔다",
+    "거래",
+    "값",
+    "가격",
+)
+TALK_KEYWORDS = (
+    "hello",
+    "hi",
+    "hey",
+    "what is going on",
+    "what's going on",
+    "how are things",
+    "what happened",
+    "안녕",
+    "무슨 일",
+    "어때",
+)
 DEFAULT_SYSTEM_PROMPT = """You are a small NPC dialogue model inside a village simulation.
 
 Respond as exactly one NPC.
@@ -37,13 +77,57 @@ Keep the answer compact and game-usable.
 Do not explain your reasoning.
 """
 
+_SINGLE_LANGUAGE_PATTERNS = (
+    re.compile(r"\bexactly one language\b", re.IGNORECASE),
+    re.compile(r"\bone language only\b", re.IGNORECASE),
+    re.compile(r"\bsingle language\b", re.IGNORECASE),
+)
+_LANGUAGE_DIRECTIVE_PATTERNS = (
+    re.compile(r"\bthat language must be\s+(?P<language>[a-z][a-z -]{1,40})", re.IGNORECASE),
+    re.compile(r"\b(?:reply|respond)\s+only\s+in\s+(?P<language>[a-z][a-z -]{1,40})", re.IGNORECASE),
+    re.compile(r"\b(?:reply|respond)\s+in\s+(?P<language>[a-z][a-z -]{1,40})\s+only\b", re.IGNORECASE),
+    re.compile(r"\buse\s+only\s+(?P<language>[a-z][a-z -]{1,40})", re.IGNORECASE),
+)
+_SUPPORTED_TEMPLATE_LANGUAGES = {
+    "english": "en",
+    "korean": "ko",
+}
 
-def preferred_output_language(system_prompt: str | None, *, default: str = "en") -> str:
-    prompt = str(system_prompt or "").lower()
-    if "한국어" in prompt or "korean" in prompt:
+
+@dataclass(frozen=True, slots=True)
+class PromptContract:
+    response_language: str | None = None
+    single_language_only: bool = False
+
+
+def parse_prompt_contract(system_prompt: str | None) -> PromptContract:
+    prompt = _normalize_prompt_text(system_prompt)
+    single_language_only = any(pattern.search(prompt) for pattern in _SINGLE_LANGUAGE_PATTERNS)
+    response_language = None
+    for pattern in _LANGUAGE_DIRECTIVE_PATTERNS:
+        match = pattern.search(prompt)
+        if match:
+            response_language = _normalize_language_label(match.group("language"))
+            break
+    return PromptContract(
+        response_language=response_language,
+        single_language_only=single_language_only,
+    )
+
+
+def select_heuristic_language(
+    system_prompt: str | None,
+    *,
+    player_prompt: str | None = None,
+    default: str = "en",
+) -> str:
+    contract = parse_prompt_contract(system_prompt)
+    if contract.response_language:
+        supported = _SUPPORTED_TEMPLATE_LANGUAGES.get(contract.response_language)
+        if supported is not None:
+            return supported
+    if not contract.single_language_only and _contains_hangul(player_prompt):
         return "ko"
-    if "영어" in prompt or "english" in prompt:
-        return "en"
     return default
 
 
@@ -167,17 +251,17 @@ def normalize_interaction_mode(mode: str | None, *, player_prompt: str | None = 
 
 
 def infer_interaction_mode(player_prompt: str, *, fallback: str = "direct_say") -> str:
-    normalized_prompt = " ".join(str(player_prompt).lower().split())
-    if any(keyword in normalized_prompt for keyword in RUMOR_KEYWORDS):
+    prompt = " ".join(str(player_prompt or "").lower().split())
+    if any(keyword in prompt for keyword in RUMOR_KEYWORDS):
         return "rumor_request"
-    if any(keyword in normalized_prompt for keyword in TRADE_KEYWORDS):
+    if any(keyword in prompt for keyword in TRADE_KEYWORDS):
         return "trade_request"
-    if any(keyword in normalized_prompt for keyword in TALK_KEYWORDS):
+    if any(keyword in prompt for keyword in TALK_KEYWORDS):
         return "talk"
     return fallback
 
 
-def _format_beliefs(beliefs: list) -> list[str]:
+def _format_beliefs(beliefs: list[Any]) -> list[str]:
     if not beliefs:
         return ["none"]
     lines: list[str] = []
@@ -188,10 +272,12 @@ def _format_beliefs(beliefs: list) -> list[str]:
             lines.append(
                 f'{belief.get("subject_id", "unknown")}:{belief.get("predicate", "unknown")}:{float(belief.get("confidence", 0.0)):.2f}'
             )
+        else:
+            lines.append(str(belief))
     return lines or ["none"]
 
 
-def _format_memories(memories: list) -> list[str]:
+def _format_memories(memories: list[Any]) -> list[str]:
     if not memories:
         return ["none"]
     lines: list[str] = []
@@ -200,10 +286,12 @@ def _format_memories(memories: list) -> list[str]:
             lines.append(memory)
         elif isinstance(memory, dict):
             lines.append(str(memory.get("summary", "")).strip() or "memory")
+        else:
+            lines.append(str(memory))
     return lines or ["none"]
 
 
-def _format_rumors(rumors: list) -> list[str]:
+def _format_rumors(rumors: list[Any]) -> list[str]:
     if not rumors:
         return ["none"]
     lines: list[str] = []
@@ -212,4 +300,26 @@ def _format_rumors(rumors: list) -> list[str]:
             lines.append(rumor)
         elif isinstance(rumor, dict):
             lines.append(str(rumor.get("content", "")).strip() or "rumor")
+        else:
+            lines.append(str(rumor))
     return lines or ["none"]
+
+
+def _normalize_prompt_text(system_prompt: str | None) -> str:
+    return re.sub(r"\s+", " ", str(system_prompt or "")).strip().lower()
+
+
+def _normalize_language_label(value: str) -> str:
+    normalized = re.sub(r"[^a-z -]", "", value.strip().lower()).strip(" -")
+    normalized = re.sub(r"\s+", " ", normalized)
+    if normalized.startswith("the "):
+        normalized = normalized[4:].strip()
+    if normalized.endswith(" language"):
+        normalized = normalized[: -len(" language")].strip()
+    return normalized
+
+
+def _contains_hangul(text: str | None) -> bool:
+    if not text:
+        return False
+    return any("\uac00" <= char <= "\ud7a3" for char in text)

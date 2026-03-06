@@ -37,7 +37,7 @@ def test_player_can_say_freeform_message_to_npc() -> None:
 def test_heuristic_dialogue_honors_korean_language_request_in_system_prompt() -> None:
     simulation = Simulation.create_demo(dialogue_backend="heuristic")
     simulation.set_dialogue_system_prompt(
-        "You are a village NPC. Respond in exactly one language. That language must be Korean. 한국어만 사용해."
+        "You are a village NPC. Respond in exactly one language. That language must be Korean."
     )
 
     text = simulation.probe_npc_dialogue("npc.neri", interaction_mode="talk", player_prompt="안녕?")
@@ -46,10 +46,22 @@ def test_heuristic_dialogue_honors_korean_language_request_in_system_prompt() ->
     assert "Stories travel faster than thread in this village." not in text
 
 
+def test_heuristic_dialogue_follows_english_language_clause_without_prompt_sniffing() -> None:
+    simulation = Simulation.create_demo(dialogue_backend="heuristic")
+    simulation.set_dialogue_system_prompt(
+        "You are a village NPC. Reply with one or two short lines. Reply only in Korean."
+    )
+
+    text = simulation.probe_npc_dialogue("npc.neri", interaction_mode="talk", player_prompt="안녕")
+
+    assert any("\uac00" <= char <= "\ud7a3" for char in text)
+    assert "Stories travel faster than thread in this village." not in text
+
+
 def test_asking_for_rumor_does_not_emit_english_npc_postfix_under_korean_prompt() -> None:
     simulation = Simulation.create_demo(dialogue_backend="heuristic")
     simulation.set_dialogue_system_prompt(
-        "You are a village NPC. Respond in exactly one language. That language must be Korean. ?쒓뎅?대쭔 ?ъ슜??"
+        "You are a village NPC. Respond in exactly one language. That language must be Korean."
     )
 
     result = simulation.handle_command("ask neri rumor")
@@ -63,13 +75,28 @@ def test_asking_for_rumor_does_not_emit_english_npc_postfix_under_korean_prompt(
 def test_ask_non_rumor_fallback_is_localized_under_korean_prompt() -> None:
     simulation = Simulation.create_demo(dialogue_backend="heuristic")
     simulation.set_dialogue_system_prompt(
-        "You are a village NPC. Respond in exactly one language. That language must be Korean. Korean only."
+        "You are a village NPC. Respond in exactly one language. That language must be Korean."
     )
 
     result = simulation.handle_command("ask neri weather")
 
     assert any("소문" in line for line in result.lines)
     assert not any("Ask about rumors" in line for line in result.lines)
+
+
+def test_direct_say_first_meeting_question_uses_current_prompt_and_context() -> None:
+    simulation = Simulation.create_demo(dialogue_backend="heuristic")
+    simulation.set_dialogue_system_prompt(
+        "You are a village NPC. Respond in exactly one language. That language must be Korean."
+    )
+
+    result = simulation.handle_command("say neri 처음보는 친군데? 어디서 왔어?")
+
+    assert result.entries[0].kind == "npc"
+    assert "You are not entirely new to me anymore." not in result.entries[0].text
+    assert "Stories travel faster than thread in this village." not in result.entries[0].text
+    assert "재단사" in result.entries[0].text or "Market Square" in result.entries[0].text
+    assert any("\uac00" <= char <= "\ud7a3" for char in result.entries[0].text)
 
 
 def test_demo_world_starts_with_multiple_distinct_rumors() -> None:
