@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import importlib
+import json
 import time
 import os
 from dataclasses import dataclass
@@ -101,18 +103,50 @@ def _load_bundle(*, base_model: str, adapter_path: str, load_in_4bit: bool) -> t
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    model = AutoModelForCausalLM.from_pretrained(
-        base_model,
-        torch_dtype=dtype,
-        device_map="auto" if torch.cuda.is_available() else None,
-        low_cpu_mem_usage=True,
-        trust_remote_code=True,
-        quantization_config=quantization_config,
-    )
+    model_loader = _resolve_model_loader(resolved_adapter_path)
+    load_kwargs: dict[str, Any] = {
+        "torch_dtype": dtype,
+        "device_map": "auto" if torch.cuda.is_available() else None,
+        "low_cpu_mem_usage": True,
+        "quantization_config": quantization_config,
+    }
+    if model_loader is AutoModelForCausalLM:
+        load_kwargs["trust_remote_code"] = True
+    try:
+        model = model_loader.from_pretrained(base_model, **load_kwargs)
+    except TypeError:
+        load_kwargs.pop("trust_remote_code", None)
+        model = model_loader.from_pretrained(base_model, **load_kwargs)
     model = PeftModel.from_pretrained(model, resolved_adapter_path)
     model.eval()
     _MODEL_CACHE[cache_key] = (tokenizer, model)
     return tokenizer, model
+
+
+def _load_adapter_config(adapter_path: str) -> dict[str, Any]:
+    config_path = Path(adapter_path) / "adapter_config.json"
+    if not config_path.exists():
+        return {}
+    try:
+        return json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _resolve_model_loader(adapter_path: str) -> Any:
+    auto_mapping = _load_adapter_config(adapter_path).get("auto_mapping") or {}
+    parent_library = auto_mapping.get("parent_library")
+    base_model_class = auto_mapping.get("base_model_class")
+    if not parent_library or not base_model_class:
+        return AutoModelForCausalLM
+    try:
+        module = importlib.import_module(parent_library)
+        loader = getattr(module, base_model_class, None)
+    except ImportError:
+        return AutoModelForCausalLM
+    if loader is None or not hasattr(loader, "from_pretrained"):
+        return AutoModelForCausalLM
+    return loader
 
 
 def _build_prompt(tokenizer: Any, messages: list[dict[str, str]]) -> str:

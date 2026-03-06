@@ -79,6 +79,10 @@
 - WSL2 + Unsloth smoke 경로도 이제 fast-path kernel 설치 상태로 검증됐다
 - 현재 WSL smoke gate 결과: `prompt_avg=1.000`, `prompt_fail_rows=0`, `prompt_latency_ms=2554.396`, `circulation=0.925`
 - 현재 WSL smoke `2048 / 256` benchmark 학습 시간: `335 s`
+- 첫 full WSL2 + Unsloth 4B candidate도 완료됐고 combined model gate를 통과했다
+- 현재 full WSL gate 결과: `prompt_avg=1.000`, `prompt_fail_rows=0`, `prompt_latency_ms=2994.443`, `circulation=0.925`
+- 현재 full WSL `50000 / 4000` 학습 시간: `6999 s`
+- Tk GUI도 수정된 `local_peft` loader를 통해 full WSL-trained adapter 기준으로 실행 중이다
 
 ## 프로토타입 상태
 

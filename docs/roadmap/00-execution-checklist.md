@@ -79,6 +79,10 @@ Current measured status:
 - the WSL2 + Unsloth smoke path is now validated with fast-path kernels installed
 - current WSL smoke gate result: `prompt_avg=1.000`, `prompt_fail_rows=0`, `prompt_latency_ms=2554.396`, `circulation=0.925`
 - current WSL smoke `2048 / 256` benchmark train runtime: `335 s`
+- the first full WSL2 + Unsloth 4B candidate is complete and clears the combined model gate
+- current full WSL gate result: `prompt_avg=1.000`, `prompt_fail_rows=0`, `prompt_latency_ms=2994.443`, `circulation=0.925`
+- current full WSL `50000 / 4000` train runtime: `6999 s`
+- the Tk GUI is now running against the full WSL-trained adapter through the repaired `local_peft` loader
 
 ## Prototype Status
 

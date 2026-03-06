@@ -92,6 +92,19 @@ WSL smoke 경로는 이제 검증됐다.
 - fast-path 설치 전 WSL smoke: `train_runtime = 1204 s`
 - `flash-linear-attention`, `causal-conv1d` 설치 후 WSL smoke: `train_runtime = 335 s`
 
+첫 full WSL candidate도 완료됐다.
+
+- adapter: `data/training/qwen3_5_4b_runtime_dialogue_unsloth_wsl_full_adapter`
+- gate report: `data/eval/model_gate_runtime_dialogue_unsloth_wsl_full_report.json`
+- full gate 결과: `PASS`
+- full prompt average score: `1.000`
+- full prompt average latency: `2994.443 ms`
+- full circulation score: `0.925`
+- full starving NPCs: `0`
+- full train runtime: `6999 s`
+
+Windows `local_peft` loader도 adapter metadata를 읽도록 맞춰서, WSL에서 학습한 Unsloth adapter가 이전 missing-key warning 없이 로드된다.
+
 ## 메모
 
 - WSL2가 안정적으로 사용 가능하면 이 경로를 우선한다

@@ -90,6 +90,19 @@ Measured training improvement on the same `2048 / 256` smoke dataset:
 - earlier WSL smoke before fast-path installs: `train_runtime = 1204 s`
 - current WSL smoke after `flash-linear-attention` and `causal-conv1d`: `train_runtime = 335 s`
 
+The first full WSL candidate is also complete.
+
+- adapter: `data/training/qwen3_5_4b_runtime_dialogue_unsloth_wsl_full_adapter`
+- gate report: `data/eval/model_gate_runtime_dialogue_unsloth_wsl_full_report.json`
+- full gate result: `PASS`
+- full prompt average score: `1.000`
+- full prompt average latency: `2994.443 ms`
+- full circulation score: `0.925`
+- full starving NPCs: `0`
+- full train runtime: `6999 s`
+
+The Windows `local_peft` loader now reads adapter metadata so the WSL-trained Unsloth adapter loads without the earlier missing-key warning.
+
 ## Notes
 
 - this path is preferred when WSL2 is available and stable
