@@ -9,13 +9,16 @@ Implemented:
 - synthetic scenario generator
 - JSONL export
 - Parquet export with optional `pyarrow`
+- teacher-output to SFT-dataset merge path
 
 Code entrypoints:
 
 - `run_teacher_prompt_export.py`
+- `run_teacher_sft_merge.py`
 - `src/acidnet/training/experiment_registry.py`
 - `src/acidnet/training/dataset_builder.py`
 - `src/acidnet/training/teacher_prompts.py`
+- `src/acidnet/training/sft_dataset.py`
 
 ## Experiment Order
 
@@ -81,6 +84,6 @@ rows = scenarios * turns * npc_count * 2
 
 ## Next Work
 
-- attach actual GPT-5.3 teacher responses to the exported prompt packs
+- collect actual GPT-5.3 teacher responses for the exported prompt packs
 - curate an evaluation split before long fine-tuning runs
 - define the first 4B baseline run configuration

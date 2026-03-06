@@ -9,13 +9,16 @@
 - synthetic scenario 생성기
 - JSONL export
 - optional `pyarrow` 기반 Parquet export
+- teacher-output 에서 SFT dataset 으로 병합하는 경로
 
 진입점:
 
 - `run_teacher_prompt_export.py`
+- `run_teacher_sft_merge.py`
 - `src/acidnet/training/experiment_registry.py`
 - `src/acidnet/training/dataset_builder.py`
 - `src/acidnet/training/teacher_prompts.py`
+- `src/acidnet/training/sft_dataset.py`
 
 ## 실험 순서
 
@@ -81,6 +84,6 @@ rows = scenarios * turns * npc_count * 2
 
 ## 다음 작업
 
-- export 한 prompt pack 에 실제 GPT-5.3 teacher response 를 붙이기
+- export 한 prompt pack 에 실제 GPT-5.3 teacher response 를 수집하기
 - 장시간 파인튜닝 전에 evaluation split 을 고정하기
 - 첫 4B baseline run 설정을 문서와 스크립트로 확정하기

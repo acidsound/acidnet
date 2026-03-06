@@ -4,8 +4,10 @@ from acidnet.training import (
     build_finetune_manifest,
     export_prompt_pack_jsonl,
     export_finetune_manifest_json,
+    export_sft_jsonl,
     generate_demo_prompt_pack,
     generate_synthetic_prompt_pack,
+    merge_prompt_pack_with_teacher_outputs,
     recommended_experiment_order,
 )
 
@@ -46,4 +48,31 @@ def test_finetune_manifest_exports_two_experiments() -> None:
     assert len(manifest) == 2
     assert manifest[0].track == "baseline"
     assert manifest[1].track == "challenger"
+    assert output_path.exists()
+
+
+def test_teacher_outputs_can_be_merged_into_sft_examples() -> None:
+    prompt_rows = [
+        {
+            "custom_id": "dialogue.demo.0.npc.neri",
+            "task": "dialogue",
+            "system_prompt": "system",
+            "user_prompt": "user",
+            "metadata": {"npc_id": "npc.neri", "scenario_id": "scenario_0000"},
+        }
+    ]
+    teacher_rows = [
+        {
+            "custom_id": "dialogue.demo.0.npc.neri",
+            "response_text": '{"task":"dialogue","npc_id":"npc.neri","response":"The wind is making everyone tense."}',
+        }
+    ]
+
+    examples = merge_prompt_pack_with_teacher_outputs(prompt_rows, teacher_rows)
+    artifact_dir = Path("data") / "test_artifacts"
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    output_path = export_sft_jsonl(artifact_dir / "teacher_sft_dataset_test.jsonl", examples)
+
+    assert len(examples) == 1
+    assert examples[0].assistant_json["npc_id"] == "npc.neri"
     assert output_path.exists()
