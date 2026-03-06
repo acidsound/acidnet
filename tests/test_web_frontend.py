@@ -122,3 +122,17 @@ def test_scene_payload_updates_region_after_inter_region_travel() -> None:
 
     assert state["world"]["region_id"] == "region.hollowmarket"
     assert state["world"]["region_name"] == "Hollow Market"
+
+
+def test_scene_payload_exposes_route_delay_status() -> None:
+    runtime = build_runtime("web_frontend_route_delay_test")
+    try:
+        runtime.simulation.world.weather = "storm_front"
+        runtime.simulation.advance_turn(1)
+        state = runtime.scene_payload()
+    finally:
+        runtime.close()
+
+    assert any(event["event_type"] == "route_delay" for event in state["world"]["active_events"])
+    assert any(route["status"] == "delayed" for route in state["scene"]["regional_routes"])
+    assert all("status_summary" in route for route in state["scene"]["regional_routes"])

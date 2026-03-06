@@ -78,6 +78,15 @@ FIELD_STRESS_WEATHER_DELTA = {
     "storm_front": 0.08,
 }
 HARVEST_SHORTFALL_EVENT_ID = "event.farm.harvest_shortfall"
+ROUTE_DELAY_EVENT_PREFIX = "event.route."
+ROUTE_WEATHER_PRESSURE = {
+    "clear": 0.0,
+    "cool_rain": 0.06,
+    "market_day": 0.08,
+    "dry_wind": 0.32,
+    "dusty_heat": 0.46,
+    "storm_front": 0.68,
+}
 DEFAULT_SPOILAGE_TICKS = {
     "fish": 24,
     "stew": 36,
@@ -280,8 +289,10 @@ class Simulation:
             for route in self.world.regional_routes:
                 left = self.world.regions[route.from_region_id].name
                 right = self.world.regions[route.to_region_id].name
+                route_event = self._route_delay_event(route.route_id)
+                route_status = f" | {route_event.summary}" if route_event is not None else ""
                 lines.append(
-                    f"- {left} <-> {right}: {self._travel_eta_turns(route.travel_ticks)} turns, risk {route.cargo_risk:.2f}"
+                    f"- {left} <-> {right}: {self._travel_eta_turns(route.travel_ticks)} turns, risk {route.cargo_risk:.2f}{route_status}"
                 )
         return "\n".join(lines)
 
@@ -901,6 +912,9 @@ class Simulation:
         lines.extend(self._advance_player_travel())
         self._advance_weather()
         self._advance_regional_summaries()
+        route_events = self._advance_regional_route_events()
+        lines.extend(route_events)
+        self.tick_log.extend(route_events)
         shock_events = self._advance_world_shocks()
         lines.extend(shock_events)
         self.tick_log.extend(shock_events)
@@ -945,8 +959,9 @@ class Simulation:
         }.get(self.world.weather, 0)
         route_capacity: dict[str, float] = {}
         for route in self.world.regional_routes:
-            route_capacity[route.from_region_id] = route_capacity.get(route.from_region_id, 0.0) + route.seasonal_capacity
-            route_capacity[route.to_region_id] = route_capacity.get(route.to_region_id, 0.0) + route.seasonal_capacity
+            effective_capacity = max(0.2, route.seasonal_capacity - self._regional_route_pressure(route))
+            route_capacity[route.from_region_id] = route_capacity.get(route.from_region_id, 0.0) + effective_capacity
+            route_capacity[route.to_region_id] = route_capacity.get(route.to_region_id, 0.0) + effective_capacity
 
         for region in self.world.regions.values():
             if region.region_id == current_region_id:
@@ -966,6 +981,31 @@ class Simulation:
                 region.stock_signals["fish"] = max(0, min(18, region.stock_signals["fish"] + fish_delta))
             if "tool" in region.stock_signals:
                 region.stock_signals["tool"] = max(0, min(18, region.stock_signals["tool"] + tool_delta))
+
+    def _advance_regional_route_events(self) -> list[str]:
+        events: list[str] = []
+        for route in self.world.regional_routes:
+            pressure = self._regional_route_pressure(route)
+            event_id = self._route_delay_event_id(route.route_id)
+            active_event = self._world_event(event_id)
+            if pressure >= 0.32:
+                summary = self._route_delay_summary(route)
+                if active_event is None:
+                    self.world.active_events.append(
+                        WorldEvent(
+                            event_id=event_id,
+                            event_type="route_delay",
+                            summary=summary,
+                            start_tick=self.world.tick,
+                        )
+                    )
+                    events.append(summary)
+                else:
+                    active_event.summary = summary
+            elif active_event is not None and pressure <= 0.14:
+                self.world.active_events = [event for event in self.world.active_events if event.event_id != event_id]
+                events.append(self._route_recovery_summary(route))
+        return events
 
     def _build_planner_context(self, npc: NPCState) -> PlannerContext:
         top_goals: list[str] = []
@@ -1350,6 +1390,9 @@ class Simulation:
             self._spawn_market_rumor()
         if self.turn_counter % 6 == 0:
             self._spawn_supply_rumor()
+            self._spawn_route_delay_rumor()
+        if self.turn_counter % 12 == 0:
+            self._spawn_regional_summary_rumor()
 
     def _spawn_weather_rumor(self, phase_index: int) -> None:
         weather_templates = {
@@ -1455,6 +1498,53 @@ class Simulation:
                 value=0.66,
                 holders=["npc.toma", "npc.bina", "npc.neri"],
             )
+
+    def _spawn_route_delay_rumor(self) -> None:
+        active_routes = [route for route in self.world.regional_routes if self._route_delay_event(route.route_id) is not None]
+        if not active_routes:
+            return
+        route = sorted(active_routes, key=self._regional_route_pressure, reverse=True)[0]
+        destination = self.world.regions[route.to_region_id]
+        weather_label = self.world.weather.replace("_", " ")
+        self._ensure_rumor(
+            rumor_id=f"rumor.dynamic.route.delay.{route.route_id}.day{self.world.day}.slot{self.turn_counter // 6}",
+            origin_npc_id="npc.mara",
+            subject_id=route.route_id,
+            content=f"Mara says the road toward {destination.name} is dragging under the {weather_label}, so outside grain may arrive late.",
+            category=RumorCategory.ECONOMY,
+            confidence=min(0.9, 0.6 + self._regional_route_pressure(route) * 0.25),
+            value=min(0.88, 0.58 + self._regional_route_pressure(route) * 0.2),
+            holders=["npc.mara", "npc.neri", "npc.iva"],
+        )
+
+    def _spawn_regional_summary_rumor(self) -> None:
+        current_region = self.current_region()
+        current_region_id = current_region.region_id if current_region is not None else None
+        candidates: list[tuple[float, Any]] = []
+        for region in self.world.regions.values():
+            if region.region_id == current_region_id:
+                continue
+            food_total = sum(region.stock_signals.get(item, 0) for item in ("bread", "wheat", "fish"))
+            route = self._regional_route_between(current_region_id, region.region_id) if current_region_id is not None else None
+            route_pressure = self._regional_route_pressure(route) if route is not None else 0.0
+            signal_score = max(0.0, 14 - food_total) + route_pressure * 8.0
+            if signal_score > 2.0:
+                candidates.append((signal_score, region))
+        if not candidates:
+            return
+        _, region = sorted(candidates, key=lambda item: item[0], reverse=True)[0]
+        weakest_item = min(("bread", "wheat", "fish"), key=lambda item: region.stock_signals.get(item, 0))
+        item_label = {"bread": "bread", "wheat": "grain", "fish": "fish"}[weakest_item]
+        self._ensure_rumor(
+            rumor_id=f"rumor.dynamic.region.{region.region_id}.day{self.world.day}.slot{self.turn_counter // 12}",
+            origin_npc_id="npc.neri",
+            subject_id=region.region_id,
+            content=f"Neri hears that {region.name} is bargaining hard for food because {item_label} stocks look thin beyond the road.",
+            category=RumorCategory.SHORTAGE,
+            confidence=0.72,
+            value=0.67,
+            holders=["npc.neri", "npc.mara", "npc.iva"],
+        )
 
     def _ensure_rumor(
         self,
@@ -1574,6 +1664,28 @@ class Simulation:
                 return event
         return None
 
+    def _route_delay_event_id(self, route_id: str) -> str:
+        return f"{ROUTE_DELAY_EVENT_PREFIX}{route_id}.delay"
+
+    def _route_delay_event(self, route_id: str) -> WorldEvent | None:
+        return self._world_event(self._route_delay_event_id(route_id))
+
+    def _regional_route_pressure(self, route) -> float:
+        weather_pressure = ROUTE_WEATHER_PRESSURE.get(self.world.weather, 0.0)
+        from_region = self.world.regions[route.from_region_id]
+        to_region = self.world.regions[route.to_region_id]
+        endpoint_risk = max(from_region.risk_level, to_region.risk_level) * 0.18
+        return min(1.0, route.weather_sensitivity * weather_pressure + route.cargo_risk * 0.35 + endpoint_risk)
+
+    def _route_delay_summary(self, route) -> str:
+        destination = self.world.regions[route.to_region_id].name
+        weather_label = self.world.weather.replace("_", " ")
+        return f"The road toward {destination} is slowing under the {weather_label}, and caravans are arriving late."
+
+    def _route_recovery_summary(self, route) -> str:
+        destination = self.world.regions[route.to_region_id].name
+        return f"The road toward {destination} is moving more cleanly again."
+
     def _farm_yield_amount(self) -> int:
         amount = 2
         if self.world.weather in {"cool_rain", "market_day"}:
@@ -1648,6 +1760,8 @@ class Simulation:
         return None
 
     def _rumor_share_target(self, npc: NPCState) -> NPCState | None:
+        if npc.hunger >= 35 or npc.fatigue >= 55:
+            return None
         if not npc.known_rumor_ids:
             return None
         nearby = [other for other in self._npcs_at(npc.location_id) if other.npc_id != npc.npc_id]
@@ -2149,12 +2263,14 @@ class Simulation:
         self._refresh_actor_loads()
         load_ratio = max(0.0, self._actor_load_ratio(actor))
         weather_multiplier = WEATHER_TRAVEL_MULTIPLIERS.get(self.world.weather, 1.0)
+        route_multiplier = 1.0 + self._regional_route_pressure(route) * 0.9
         total_ticks = max(
             self.turn_ticks * 2,
             int(
                 round(
                     route.travel_ticks
                     * weather_multiplier
+                    * route_multiplier
                     * (1.0 + load_ratio * 0.35)
                     * (1.0 + actor.fatigue / 200.0)
                 )

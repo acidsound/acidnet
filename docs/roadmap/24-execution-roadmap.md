@@ -71,7 +71,10 @@ The current project baseline is:
 - summarized regional nodes and route metadata now exist in the world model and web state
 - low-cost offscreen regional stock drift now runs each turn for summarized neighboring regions
 - `travel-region <region>` now uses summarized route travel and region anchors
-- next work is route-aware events, offscreen actor movement, and broader regional information flow
+- route-aware delay events now surface in world state, regional command output, and web route metadata
+- route pressure now slows inter-region travel and dampens summarized route throughput
+- regional shortage or delay rumors now propagate into the local rumor layer from offscreen summaries
+- next work is offscreen actor movement and stronger cross-settlement circulation checks
 
 ## Immediate Next Work
 

@@ -104,7 +104,10 @@ Current note:
   - offscreen summarized regions now drift their stock signals over time at low cost
   - `travel-region <region>` now follows summarized regional routes and lands at region anchor locations
   - web state now surfaces current region and summarized regional route metadata
-  - the remaining gap is richer route risk/events and offscreen actor movement across regions
+  - route-aware delay events now surface in world state, `regions`, and web regional route payloads
+  - route pressure now raises inter-region ETA and weakens summarized throughput under bad weather
+  - offscreen regional shortages and route delays now seed local regional rumors
+  - the remaining gap is offscreen actor movement and stronger multi-settlement observation runs
 
 ## Recommended Order After This
 

@@ -575,6 +575,52 @@ def test_offscreen_regional_summaries_drift_over_time() -> None:
     assert after != before
 
 
+def test_regional_route_delay_event_appears_under_storm_front() -> None:
+    simulation = Simulation.create_demo()
+    simulation.world.weather = "storm_front"
+
+    simulation.advance_turn(1)
+    result = simulation.handle_command("regions")
+
+    assert any(event.event_type == "route_delay" for event in simulation.world.active_events)
+    assert any("caravans are arriving late" in line for line in result.lines)
+
+
+def test_regional_travel_eta_rises_when_route_pressure_is_high() -> None:
+    clear_simulation = Simulation.create_demo()
+    clear_simulation.world.weather = "clear"
+    clear_simulation.handle_command("travel-region hollow")
+    clear_eta = clear_simulation.player.travel_state.ticks_remaining
+
+    storm_simulation = Simulation.create_demo()
+    storm_simulation.world.weather = "storm_front"
+    storm_simulation.handle_command("travel-region hollow")
+    storm_eta = storm_simulation.player.travel_state.ticks_remaining
+
+    assert storm_eta > clear_eta
+
+
+def test_low_offscreen_food_stock_spawns_regional_summary_rumor() -> None:
+    simulation = Simulation.create_demo()
+    stonewatch = simulation.world.regions["region.stonewatch"]
+    stonewatch.stock_signals["bread"] = 1
+    stonewatch.stock_signals["wheat"] = 1
+    stonewatch.stock_signals["fish"] = 0
+
+    simulation.advance_turn(12)
+
+    assert any("Stonewatch Outpost" in rumor.content for rumor in simulation.rumors.values())
+
+
+def test_route_delay_spawns_regional_delay_rumor() -> None:
+    simulation = Simulation.create_demo()
+    simulation.world.weather = "storm_front"
+
+    simulation.advance_turn(6)
+
+    assert any("road toward" in rumor.content and "dragging under the storm front" in rumor.content for rumor in simulation.rumors.values())
+
+
 def test_regions_command_lists_current_region_and_routes() -> None:
     simulation = Simulation.create_demo()
 
