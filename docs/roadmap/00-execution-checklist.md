@@ -83,6 +83,9 @@ Current measured status:
 - current full WSL gate result: `prompt_avg=1.000`, `prompt_fail_rows=0`, `prompt_latency_ms=2994.443`, `circulation=0.925`
 - current full WSL `50000 / 4000` train runtime: `6999 s`
 - the Tk GUI is now running against the full WSL-trained adapter through the repaired `local_peft` loader
+- the GUI now shows dialogue-model startup readiness and logs both loading and ready events
+- the shared dialogue system prompt is now editable through the GUI and stored in SQLite with a read-only preset table plus editable runtime settings
+- rumor diversity is no longer anchored to a single wheat-shortage rumor; the demo world now starts with multiple seeded rumors and generates additional dynamic rumors from weather, scarcity, and supply shifts
 
 ## Prototype Status
 
