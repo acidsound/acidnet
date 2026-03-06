@@ -33,6 +33,8 @@ class MonkeyReport:
     final_player_hunger: float
     final_player_fatigue: float
     known_rumors: int
+    peak_field_stress: float
+    observed_event_types: list[str]
     score: float
     success: bool
     goal_counts: dict[str, int]
@@ -51,11 +53,15 @@ class SimulationMonkeyRunner:
         self.asked_rumor_npc_ids: set[str] = set()
         self.start_player_money = simulation.player.money
         self.start_known_rumors = len(simulation.player.known_rumor_ids)
+        self.peak_field_stress = simulation.world.field_stress
+        self.observed_event_types: set[str] = {event.event_type for event in simulation.world.active_events}
 
     def run_one_step(self) -> MonkeyStep:
         goal, command = self.choose_action()
         targeted_npc_id = self._targeted_npc_id(command)
         result = self.simulation.handle_command(command)
+        self.peak_field_stress = max(self.peak_field_stress, self.simulation.world.field_stress)
+        self.observed_event_types.update(event.event_type for event in self.simulation.world.active_events)
         if command.startswith("ask ") and command.endswith(" rumor") and targeted_npc_id is not None:
             self.asked_rumor_npc_ids.add(targeted_npc_id)
         self._assert_invariants()
@@ -88,6 +94,8 @@ class SimulationMonkeyRunner:
             final_player_hunger=self.simulation.player.hunger,
             final_player_fatigue=self.simulation.player.fatigue,
             known_rumors=len(self.simulation.player.known_rumor_ids),
+            peak_field_stress=round(self.peak_field_stress, 3),
+            observed_event_types=sorted(self.observed_event_types),
             score=score,
             success=not failure_reasons,
             goal_counts=dict(goal_counts),
@@ -101,6 +109,8 @@ class SimulationMonkeyRunner:
             return "complete_travel", "next 1"
         if self.role == "survivor":
             return self._choose_survivor_action()
+        if self.role == "shock_observer":
+            return self._choose_shock_observer_action()
         if self.role == "rumor_verifier":
             return self._choose_rumor_verifier_action()
         if self.role == "altruist":
@@ -151,6 +161,28 @@ class SimulationMonkeyRunner:
             if npcs_here:
                 return "cross_check_social_context", f"talk {npcs_here[0].name}"
         return self._choose_wanderer_action()
+
+    def _choose_shock_observer_action(self) -> tuple[str, str]:
+        if self.simulation.player.hunger >= 32 and self._best_player_food() is not None:
+            return "maintain_self", "meal"
+        if self.simulation.player.fatigue >= 72:
+            shelter = self.simulation._shelter_rating(self.simulation.player.location_id)
+            return ("recover_sleep", "sleep 1") if shelter >= 0.65 else ("recover_rest", "rest 1")
+        if self.simulation.player.location_id != "farm":
+            next_hop = self._next_hop_toward({"farm"})
+            if next_hop is not None:
+                return "reach_shock_site", next_hop
+        if self.simulation.world.active_events:
+            unasked_here = self._unasked_npcs_here()
+            if unasked_here:
+                return "verify_local_shock_rumor", f"ask {unasked_here[0].name} rumor"
+        if self.simulation.world.field_stress >= 0.45:
+            return "observe_peak_stress", "next 1"
+        if self.simulation.player.location_id == "farm":
+            local_npcs = self._unasked_npcs_here()
+            if local_npcs:
+                return "sample_local_context", f"talk {local_npcs[0].name}"
+        return "wait_for_world_shift", "next 1"
 
     def _choose_altruist_action(self) -> tuple[str, str]:
         if self.simulation.player.hunger >= 34 and self._best_player_food() is not None:
@@ -377,6 +409,13 @@ class SimulationMonkeyRunner:
                 failures.append("rumor_verifier_insufficient_sources")
             if (len(self.simulation.player.known_rumor_ids) - self.start_known_rumors) < 2:
                 failures.append("rumor_verifier_low_rumor_gain")
+        elif self.role == "shock_observer":
+            if self.peak_field_stress < 0.45:
+                failures.append("shock_observer_never_reached_stress_window")
+            if "harvest_shortfall" not in self.observed_event_types:
+                failures.append("shock_observer_missed_world_event")
+            if goal_counts.get("verify_local_shock_rumor", 0) == 0:
+                failures.append("shock_observer_never_cross_checked_rumor")
         elif self.role == "altruist":
             if self._exchange_count(history, {"give"}) == 0:
                 failures.append("altruist_never_shared_resources")
@@ -403,6 +442,9 @@ class SimulationMonkeyRunner:
             "survivor_failed_to_recover": 0.18,
             "rumor_verifier_insufficient_sources": 0.25,
             "rumor_verifier_low_rumor_gain": 0.25,
+            "shock_observer_never_reached_stress_window": 0.24,
+            "shock_observer_missed_world_event": 0.32,
+            "shock_observer_never_cross_checked_rumor": 0.18,
             "altruist_never_shared_resources": 0.28,
             "altruist_overextended_self": 0.2,
             "trader_never_completed_cash_exchange": 0.28,

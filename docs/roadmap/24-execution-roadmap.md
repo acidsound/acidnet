@@ -44,7 +44,9 @@ The current project baseline is:
 - replace random monkeying with role-driven proxy-PC runs
 - add explicit goals, allowed commands, and rule-based scoring
 - make monkeys a standard observation harness for travel, exchange, and shock behavior
-- role-driven runner, scoring, and failure reporting are now in place; next work is richer role coverage and shock-oriented evaluation
+- role-driven runner, scoring, and failure reporting are now in place
+- `shock_observer` now tracks field stress and active shock events from the player side
+- next work is richer exploit-oriented evaluation and multi-settlement observation roles
 
 ### Phase 5: External Shocks and Recovery Loops
 

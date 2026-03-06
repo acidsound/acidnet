@@ -71,3 +71,16 @@ def test_survivor_monkey_report_records_goal_counts_and_successful_score() -> No
     assert report.command_counts.get("meal") == 1
     assert report.score > 0.5
     assert "survivor_failed_to_stabilize_hunger" not in report.failure_reasons
+
+
+def test_shock_observer_monkey_tracks_field_stress_and_events() -> None:
+    simulation = Simulation.create_demo()
+    simulation.world.weather = "dry_wind"
+    runner = SimulationMonkeyRunner(simulation, seed=5, role="shock_observer")
+
+    report = runner.run_steps(12)
+
+    assert report.peak_field_stress >= 0.45
+    assert "harvest_shortfall" in report.observed_event_types
+    assert report.goal_counts.get("reach_shock_site", 0) >= 1
+    assert "shock_observer_missed_world_event" not in report.failure_reasons
