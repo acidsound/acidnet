@@ -84,3 +84,17 @@ def test_shock_observer_monkey_tracks_field_stress_and_events() -> None:
     assert "harvest_shortfall" in report.observed_event_types
     assert report.goal_counts.get("reach_shock_site", 0) >= 1
     assert "shock_observer_missed_world_event" not in report.failure_reasons
+
+
+def test_hoarder_monkey_triggers_storage_pressure_when_capacity_is_low() -> None:
+    simulation = Simulation.create_demo()
+    simulation.player.location_id = "farm"
+    simulation.player.carry_capacity = 2.0
+    simulation.player.inventory = {"wheat": 2, "tool": 1}
+    runner = SimulationMonkeyRunner(simulation, seed=5, role="hoarder")
+
+    report = runner.run_steps(3)
+
+    assert report.storage_pressure_events >= 1
+    assert report.peak_load_ratio >= 0.85
+    assert "hoarder_never_triggered_storage_pressure" not in report.failure_reasons

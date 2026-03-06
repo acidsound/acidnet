@@ -46,7 +46,8 @@ The current project baseline is:
 - make monkeys a standard observation harness for travel, exchange, and shock behavior
 - role-driven runner, scoring, and failure reporting are now in place
 - `shock_observer` now tracks field stress and active shock events from the player side
-- next work is richer exploit-oriented evaluation and multi-settlement observation roles
+- `hoarder` now probes storage-pressure behavior from the player side
+- next work is multi-settlement observation roles and summarized regional scaling
 
 ### Phase 5: External Shocks and Recovery Loops
 

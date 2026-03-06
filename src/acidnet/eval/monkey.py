@@ -35,6 +35,8 @@ class MonkeyReport:
     known_rumors: int
     peak_field_stress: float
     observed_event_types: list[str]
+    peak_load_ratio: float
+    storage_pressure_events: int
     score: float
     success: bool
     goal_counts: dict[str, int]
@@ -55,6 +57,8 @@ class SimulationMonkeyRunner:
         self.start_known_rumors = len(simulation.player.known_rumor_ids)
         self.peak_field_stress = simulation.world.field_stress
         self.observed_event_types: set[str] = {event.event_type for event in simulation.world.active_events}
+        self.peak_load_ratio = 0.0
+        self.storage_pressure_events = 0
 
     def run_one_step(self) -> MonkeyStep:
         goal, command = self.choose_action()
@@ -62,6 +66,13 @@ class SimulationMonkeyRunner:
         result = self.simulation.handle_command(command)
         self.peak_field_stress = max(self.peak_field_stress, self.simulation.world.field_stress)
         self.observed_event_types.update(event.event_type for event in self.simulation.world.active_events)
+        self.simulation._refresh_actor_loads()
+        if self.simulation.player.carry_capacity > 0:
+            self.peak_load_ratio = max(
+                self.peak_load_ratio,
+                self.simulation.player.carried_weight / self.simulation.player.carry_capacity,
+            )
+        self.storage_pressure_events += sum(1 for line in result.lines if "leave" in line.lower() and "behind" in line.lower())
         if command.startswith("ask ") and command.endswith(" rumor") and targeted_npc_id is not None:
             self.asked_rumor_npc_ids.add(targeted_npc_id)
         self._assert_invariants()
@@ -96,6 +107,8 @@ class SimulationMonkeyRunner:
             known_rumors=len(self.simulation.player.known_rumor_ids),
             peak_field_stress=round(self.peak_field_stress, 3),
             observed_event_types=sorted(self.observed_event_types),
+            peak_load_ratio=round(self.peak_load_ratio, 3),
+            storage_pressure_events=self.storage_pressure_events,
             score=score,
             success=not failure_reasons,
             goal_counts=dict(goal_counts),
@@ -109,6 +122,8 @@ class SimulationMonkeyRunner:
             return "complete_travel", "next 1"
         if self.role == "survivor":
             return self._choose_survivor_action()
+        if self.role == "hoarder":
+            return self._choose_hoarder_action()
         if self.role == "shock_observer":
             return self._choose_shock_observer_action()
         if self.role == "rumor_verifier":
@@ -183,6 +198,19 @@ class SimulationMonkeyRunner:
             if local_npcs:
                 return "sample_local_context", f"talk {local_npcs[0].name}"
         return "wait_for_world_shift", "next 1"
+
+    def _choose_hoarder_action(self) -> tuple[str, str]:
+        if self.simulation.player.hunger >= 36 and self._best_player_food() is not None:
+            return "maintain_self", "meal"
+        if self.simulation.player.fatigue >= 70:
+            shelter = self.simulation._shelter_rating(self.simulation.player.location_id)
+            return ("recover_sleep", "sleep 1") if shelter >= 0.65 else ("recover_rest", "rest 1")
+        if self.simulation.player.location_id in {"farm", "riverside"}:
+            return "hoard_resources", "work"
+        next_hop = self._next_hop_toward({"farm", "riverside"})
+        if next_hop is not None:
+            return "reach_resource_site", next_hop
+        return "advance_time", "next 1"
 
     def _choose_altruist_action(self) -> tuple[str, str]:
         if self.simulation.player.hunger >= 34 and self._best_player_food() is not None:
@@ -416,6 +444,13 @@ class SimulationMonkeyRunner:
                 failures.append("shock_observer_missed_world_event")
             if goal_counts.get("verify_local_shock_rumor", 0) == 0:
                 failures.append("shock_observer_never_cross_checked_rumor")
+        elif self.role == "hoarder":
+            if goal_counts.get("hoard_resources", 0) < 2:
+                failures.append("hoarder_never_gathered_enough")
+            if self.storage_pressure_events == 0:
+                failures.append("hoarder_never_triggered_storage_pressure")
+            if self.peak_load_ratio < 0.85:
+                failures.append("hoarder_never_loaded_up")
         elif self.role == "altruist":
             if self._exchange_count(history, {"give"}) == 0:
                 failures.append("altruist_never_shared_resources")
@@ -445,6 +480,9 @@ class SimulationMonkeyRunner:
             "shock_observer_never_reached_stress_window": 0.24,
             "shock_observer_missed_world_event": 0.32,
             "shock_observer_never_cross_checked_rumor": 0.18,
+            "hoarder_never_gathered_enough": 0.2,
+            "hoarder_never_triggered_storage_pressure": 0.28,
+            "hoarder_never_loaded_up": 0.18,
             "altruist_never_shared_resources": 0.28,
             "altruist_overextended_self": 0.2,
             "trader_never_completed_cash_exchange": 0.28,
