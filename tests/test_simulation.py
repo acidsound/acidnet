@@ -32,6 +32,39 @@ def test_player_can_say_freeform_message_to_npc() -> None:
     assert any(entry.kind == "world" for entry in result.entries[1:])
 
 
+def test_demo_world_starts_with_multiple_distinct_rumors() -> None:
+    simulation = Simulation.create_demo()
+
+    assert len(simulation.rumors) >= 5
+    assert len({rumor.content for rumor in simulation.rumors.values()}) >= 5
+
+
+def test_player_can_collect_multiple_distinct_rumors_from_different_npcs() -> None:
+    simulation = Simulation.create_demo()
+
+    simulation.handle_command("ask neri rumor")
+    simulation.handle_command("go bakery")
+    simulation.handle_command("ask hobb rumor")
+
+    known_contents = {
+        simulation.rumors[rumor_id].content
+        for rumor_id in simulation.player.known_rumor_ids
+        if rumor_id in simulation.rumors
+    }
+
+    assert len(known_contents) >= 2
+
+
+def test_dynamic_rumors_spawn_as_world_conditions_change() -> None:
+    simulation = Simulation.create_demo()
+    starting_count = len(simulation.rumors)
+
+    simulation.advance_turn(10)
+
+    assert len(simulation.rumors) > starting_count
+    assert any(rumor_id.startswith("rumor.dynamic.") for rumor_id in simulation.rumors)
+
+
 def test_info_and_action_results_are_not_labeled_as_world_by_default() -> None:
     simulation = Simulation.create_demo()
 

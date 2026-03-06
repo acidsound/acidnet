@@ -15,6 +15,7 @@ from acidnet.models import (
     PlayerState,
     RelationshipState,
     Rumor,
+    RumorCategory,
     WorldState,
 )
 from acidnet.planner import HeuristicPlanner, PlannerContext
@@ -207,8 +208,7 @@ class Simulation:
         if not self.player.known_rumor_ids:
             return "You do not know any rumors yet."
         lines = ["Rumors you know:"]
-        for rumor_id in self.player.known_rumor_ids:
-            rumor = self.rumors[rumor_id]
+        for rumor in self._sorted_known_rumors(self.player.known_rumor_ids):
             lines.append(f"- {rumor.content} (confidence {rumor.confidence:.2f})")
         return "\n".join(lines)
 
@@ -496,6 +496,7 @@ class Simulation:
 
         self.player.hunger = min(100.0, self.player.hunger + 1.2)
         self._advance_weather()
+        self._refresh_dynamic_rumors()
         for npc in self.npcs.values():
             npc.hunger = min(100.0, npc.hunger + 1.6)
             self._refresh_beliefs_for_npc(npc)
@@ -825,6 +826,160 @@ class Simulation:
 
         npc.beliefs = sorted(belief_map.values(), key=lambda belief: (belief.subject_id, belief.predicate))
 
+    def _refresh_dynamic_rumors(self) -> None:
+        phase_index = self.turn_counter // 8
+        if self.turn_counter % 8 == 0:
+            self._spawn_weather_rumor(phase_index)
+        if self.turn_counter % 10 == 0:
+            self._spawn_market_rumor()
+        if self.turn_counter % 6 == 0:
+            self._spawn_supply_rumor()
+
+    def _spawn_weather_rumor(self, phase_index: int) -> None:
+        weather_templates = {
+            "cool_rain": (
+                "npc.anik",
+                RumorCategory.EVENT,
+                0.63,
+                "Anik says the cool rain may steady the fields if it lingers into tomorrow.",
+            ),
+            "dry_wind": (
+                "npc.anik",
+                RumorCategory.SHORTAGE,
+                0.77,
+                "People at the farm say the dry wind is scraping another layer of moisture out of the soil.",
+            ),
+            "market_day": (
+                "npc.mara",
+                RumorCategory.ECONOMY,
+                0.61,
+                "Mara expects sharper bargaining today because market-day crowds always push prices around.",
+            ),
+            "storm_front": (
+                "npc.toma",
+                RumorCategory.DANGER,
+                0.72,
+                "Toma swears a storm front is turning the riverside meaner by the hour.",
+            ),
+            "dusty_heat": (
+                "npc.hobb",
+                RumorCategory.EVENT,
+                0.66,
+                "Hobb has started talking about dusty heat settling into every oven and store room in town.",
+            ),
+            "clear": (
+                "npc.serin",
+                RumorCategory.SOCIAL,
+                0.52,
+                "Serin says the village feels briefly calmer whenever the sky clears and people breathe again.",
+            ),
+        }
+        template = weather_templates.get(self.world.weather)
+        if template is None:
+            return
+        origin_npc_id, category, value, content = template
+        rumor_id = f"rumor.dynamic.weather.{self.world.weather}.{phase_index}"
+        self._ensure_rumor(
+            rumor_id=rumor_id,
+            origin_npc_id=origin_npc_id,
+            subject_id=self.npcs[origin_npc_id].location_id,
+            content=content,
+            category=category,
+            confidence=0.74,
+            value=value,
+            holders=[origin_npc_id, "npc.neri"],
+        )
+
+    def _spawn_market_rumor(self) -> None:
+        scarcity = self.world.market.scarcity_index
+        if scarcity < 0.5:
+            return
+        severity = "tight" if scarcity < 1.2 else "strained"
+        rumor_id = f"rumor.dynamic.market.{severity}.day{self.world.day}.slot{self.turn_counter // 10}"
+        content = (
+            "Mara says traders are quietly tightening food prices because the market feels unusually thin."
+            if severity == "tight"
+            else "Mara says the square is straining under thin food stocks and impatient buyers."
+        )
+        self._ensure_rumor(
+            rumor_id=rumor_id,
+            origin_npc_id="npc.mara",
+            subject_id="square",
+            content=content,
+            category=RumorCategory.ECONOMY,
+            confidence=min(0.88, 0.58 + scarcity * 0.16),
+            value=min(0.92, 0.55 + scarcity * 0.18),
+            holders=["npc.mara", "npc.neri", "npc.iva"],
+        )
+
+    def _spawn_supply_rumor(self) -> None:
+        hobb = self.npcs["npc.hobb"]
+        if hobb.inventory.get("wheat", 0) <= 1:
+            rumor_id = f"rumor.dynamic.bakery.wheat.day{self.world.day}.slot{self.turn_counter // 6}"
+            self._ensure_rumor(
+                rumor_id=rumor_id,
+                origin_npc_id="npc.hobb",
+                subject_id="bakery",
+                content="Hobb is running low on wheat and may need to slow the bakery's next batch.",
+                category=RumorCategory.SHORTAGE,
+                confidence=0.79,
+                value=0.71,
+                holders=["npc.hobb", "npc.mara", "npc.neri"],
+            )
+        toma = self.npcs["npc.toma"]
+        if toma.inventory.get("fish", 0) <= 1:
+            rumor_id = f"rumor.dynamic.riverside.fish.day{self.world.day}.slot{self.turn_counter // 6}"
+            self._ensure_rumor(
+                rumor_id=rumor_id,
+                origin_npc_id="npc.toma",
+                subject_id="riverside",
+                content="Toma says the fish baskets are coming in lighter than usual along the riverside.",
+                category=RumorCategory.SHORTAGE,
+                confidence=0.76,
+                value=0.66,
+                holders=["npc.toma", "npc.bina", "npc.neri"],
+            )
+
+    def _ensure_rumor(
+        self,
+        *,
+        rumor_id: str,
+        origin_npc_id: str,
+        subject_id: str,
+        content: str,
+        category: RumorCategory,
+        confidence: float,
+        value: float,
+        holders: list[str],
+    ) -> None:
+        if rumor_id in self.rumors:
+            return
+        rumor = Rumor(
+            rumor_id=rumor_id,
+            origin_npc_id=origin_npc_id,
+            subject_id=subject_id,
+            content=content,
+            category=category,
+            confidence=confidence,
+            value=value,
+            distortion=0.0,
+            hop_count=0,
+            created_tick=self.world.tick,
+            last_shared_tick=self.world.tick,
+        )
+        self.rumors[rumor_id] = rumor
+        for holder_id in holders:
+            holder = self.npcs.get(holder_id)
+            if holder is not None and rumor_id not in holder.known_rumor_ids:
+                holder.known_rumor_ids.append(rumor_id)
+
+    def _sorted_known_rumors(self, rumor_ids: Iterable[str]) -> list[Rumor]:
+        available = [self.rumors[rumor_id] for rumor_id in rumor_ids if rumor_id in self.rumors]
+        return sorted(available, key=self._rumor_sort_key, reverse=True)
+
+    def _rumor_sort_key(self, rumor: Rumor) -> tuple[float, int, float, int]:
+        return (rumor.value, rumor.created_tick, rumor.confidence, -rumor.hop_count)
+
     def _advance_weather(self) -> None:
         if self.turn_counter % 8 != 0:
             return
@@ -913,18 +1068,19 @@ class Simulation:
         return None
 
     def _preferred_rumor_to_share(self, speaker: NPCState, listener: NPCState) -> Rumor | None:
-        for rumor_id in speaker.known_rumor_ids:
-            if rumor_id not in listener.known_rumor_ids:
-                return self.rumors.get(rumor_id)
-        return None
+        unknown = [
+            rumor
+            for rumor in self._sorted_known_rumors(speaker.known_rumor_ids)
+            if rumor.rumor_id not in listener.known_rumor_ids
+        ]
+        return unknown[0] if unknown else None
 
     def _preferred_rumor_to_share_to_player(self, speaker: NPCState) -> Rumor | None:
-        for rumor_id in speaker.known_rumor_ids:
-            if rumor_id not in self.player.known_rumor_ids:
-                return self.rumors.get(rumor_id)
-        if speaker.known_rumor_ids:
-            return self.rumors.get(speaker.known_rumor_ids[0])
-        return None
+        ranked = self._sorted_known_rumors(speaker.known_rumor_ids)
+        unknown = [rumor for rumor in ranked if rumor.rumor_id not in self.player.known_rumor_ids]
+        if unknown:
+            return unknown[0]
+        return ranked[0] if ranked else None
 
     def _nearest_food_vendor(self, npc: NPCState, *, affordable_only: bool = False) -> NPCState | None:
         candidates: list[tuple[int, int, float, NPCState]] = []

@@ -325,22 +325,101 @@ def build_demo_setup() -> DemoSetup:
         ),
     }
 
-    rumor = Rumor(
-        rumor_id="rumor.shortage.wheat",
-        origin_npc_id="npc.anik",
-        subject_id="farm",
-        content="The south field yield is down after the dry wind. Grain will be tight this week.",
-        category=RumorCategory.SHORTAGE,
-        confidence=0.82,
-        value=0.9,
-        distortion=0.0,
-        hop_count=0,
-        created_tick=0,
-        last_shared_tick=0,
-    )
+    rumors = {
+        "rumor.shortage.wheat": Rumor(
+            rumor_id="rumor.shortage.wheat",
+            origin_npc_id="npc.anik",
+            subject_id="farm",
+            content="The south field yield is down after the dry wind. Grain will be tight this week.",
+            category=RumorCategory.SHORTAGE,
+            confidence=0.82,
+            value=0.9,
+            distortion=0.0,
+            hop_count=0,
+            created_tick=0,
+            last_shared_tick=0,
+        ),
+        "rumor.market.bread_prices": Rumor(
+            rumor_id="rumor.market.bread_prices",
+            origin_npc_id="npc.mara",
+            subject_id="square",
+            content="Mara expects bread prices to climb if the grain wagons stay light.",
+            category=RumorCategory.ECONOMY,
+            confidence=0.76,
+            value=0.74,
+            distortion=0.04,
+            hop_count=0,
+            created_tick=0,
+            last_shared_tick=0,
+        ),
+        "rumor.bakery.night_batch": Rumor(
+            rumor_id="rumor.bakery.night_batch",
+            origin_npc_id="npc.hobb",
+            subject_id="bakery",
+            content="Hobb is planning a late oven run to keep the bakery shelves from thinning out.",
+            category=RumorCategory.SOCIAL,
+            confidence=0.71,
+            value=0.58,
+            distortion=0.03,
+            hop_count=0,
+            created_tick=0,
+            last_shared_tick=0,
+        ),
+        "rumor.riverside.catch": Rumor(
+            rumor_id="rumor.riverside.catch",
+            origin_npc_id="npc.toma",
+            subject_id="riverside",
+            content="Toma says the riverside catch has been uneven since the wind shifted.",
+            category=RumorCategory.EVENT,
+            confidence=0.69,
+            value=0.62,
+            distortion=0.05,
+            hop_count=0,
+            created_tick=0,
+            last_shared_tick=0,
+        ),
+        "rumor.square.guard_watch": Rumor(
+            rumor_id="rumor.square.guard_watch",
+            origin_npc_id="npc.iva",
+            subject_id="square",
+            content="Iva has been watching the square more closely because tense traders are snapping at each other.",
+            category=RumorCategory.DANGER,
+            confidence=0.73,
+            value=0.67,
+            distortion=0.02,
+            hop_count=0,
+            created_tick=0,
+            last_shared_tick=0,
+        ),
+        "rumor.shrine.extra_bread": Rumor(
+            rumor_id="rumor.shrine.extra_bread",
+            origin_npc_id="npc.serin",
+            subject_id="shrine",
+            content="Serin has been setting aside extra bread at the shrine for anyone who comes in hungry.",
+            category=RumorCategory.SOCIAL,
+            confidence=0.78,
+            value=0.53,
+            distortion=0.01,
+            hop_count=0,
+            created_tick=0,
+            last_shared_tick=0,
+        ),
+    }
 
-    npcs["npc.anik"].known_rumor_ids.append(rumor.rumor_id)
-    npcs["npc.neri"].known_rumor_ids.append(rumor.rumor_id)
+    initial_rumor_holders = {
+        "npc.anik": ["rumor.shortage.wheat", "rumor.market.bread_prices"],
+        "npc.neri": ["rumor.shortage.wheat", "rumor.square.guard_watch", "rumor.market.bread_prices"],
+        "npc.hobb": ["rumor.bakery.night_batch", "rumor.shortage.wheat"],
+        "npc.mara": ["rumor.market.bread_prices", "rumor.square.guard_watch"],
+        "npc.bina": ["rumor.riverside.catch", "rumor.shrine.extra_bread"],
+        "npc.toma": ["rumor.riverside.catch"],
+        "npc.serin": ["rumor.shrine.extra_bread", "rumor.square.guard_watch"],
+        "npc.iva": ["rumor.square.guard_watch"],
+    }
+    for npc_id, rumor_ids in initial_rumor_holders.items():
+        for rumor_id in rumor_ids:
+            if rumor_id not in npcs[npc_id].known_rumor_ids:
+                npcs[npc_id].known_rumor_ids.append(rumor_id)
 
     player = PlayerState(
         name="Jaeho",
@@ -351,5 +430,4 @@ def build_demo_setup() -> DemoSetup:
     )
 
     world.npc_ids = list(npcs)
-    return DemoSetup(world=world, player=player, npcs=npcs, personas=personas, rumors={rumor.rumor_id: rumor})
-
+    return DemoSetup(world=world, player=player, npcs=npcs, personas=personas, rumors=rumors)
