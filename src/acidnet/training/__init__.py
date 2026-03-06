@@ -16,7 +16,14 @@ from acidnet.training.openai_batch import (
     export_teacher_output_jsonl,
     normalize_openai_batch_output,
 )
-from acidnet.training.sft_dataset import export_sft_jsonl, export_sft_parquet, load_jsonl, merge_prompt_pack_with_teacher_outputs
+from acidnet.training.sft_dataset import (
+    coerce_sft_examples,
+    export_sft_jsonl,
+    export_sft_parquet,
+    load_jsonl,
+    merge_prompt_pack_with_teacher_outputs,
+    split_sft_examples,
+)
 from acidnet.training.teacher_prompts import TeacherConfig
 from acidnet.training.unsloth_runner import (
     RunPaths,
@@ -41,6 +48,7 @@ __all__ = [
     "export_prompt_pack_jsonl",
     "export_prompt_pack_parquet",
     "export_finetune_manifest_json",
+    "coerce_sft_examples",
     "export_sft_jsonl",
     "export_sft_parquet",
     "export_teacher_output_jsonl",
@@ -52,4 +60,5 @@ __all__ = [
     "merge_prompt_pack_with_teacher_outputs",
     "normalize_openai_batch_output",
     "recommended_experiment_order",
+    "split_sft_examples",
 ]

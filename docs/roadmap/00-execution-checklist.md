@@ -59,7 +59,9 @@ Current implementation focus is Step 13:
 - generate large GPT-5.3 teacher prompt packs in JSONL and Parquet
 - prepare OpenAI batch request artifacts for teacher completion generation
 - normalize OpenAI batch outputs into `teacher_outputs.jsonl`
+- split merged SFT data into deterministic train/eval artifacts
 - prepare the first Unsloth training script for the 4B baseline
+- keep a runnable 4B baseline launcher ready before touching 9B
 - validate prompt-only base-model behavior before any long fine-tuning run starts
 - prepare selection criteria before any long fine-tuning run starts
 
@@ -96,7 +98,9 @@ Implemented systems:
 - combined model gate for dialogue quality plus world circulation
 - OpenAI batch request preparation for teacher runs
 - OpenAI batch output normalization into teacher-output JSONL
+- deterministic train/eval SFT split export
 - Unsloth 4B baseline run-spec and training-script export
+- Unsloth 4B baseline launcher
 
 ## Exit Criteria For The Next Step
 

@@ -10,18 +10,23 @@ Implemented:
 - export script for reproducible experiment JSON
 - OpenAI teacher batch request export for `/v1/responses`
 - OpenAI batch output normalization into `teacher_outputs.jsonl`
+- deterministic train/eval SFT split export
 - Unsloth 4B baseline run-spec export
 - Unsloth 4B baseline training-script export
+- optional 4B baseline training launcher with dependency checks
 
 Code entrypoints:
 
 - `src/acidnet/training/finetune_manifest.py`
 - `run_finetune_manifest_export.py`
 - `src/acidnet/training/openai_batch.py`
+- `src/acidnet/training/sft_dataset.py`
 - `src/acidnet/training/unsloth_runner.py`
 - `run_openai_teacher_batch_prepare.py`
 - `run_openai_teacher_batch_normalize.py`
+- `run_teacher_sft_split.py`
 - `run_qwen4b_baseline_prep.py`
+- `run_qwen4b_baseline_train.py`
 
 ## Manifest Purpose
 
@@ -62,6 +67,8 @@ python run_finetune_manifest_export.py --vram 24 --train-rows 50000 --eval-rows 
 data/training/finetune_manifest.json
 data/prompt_packs/openai_batch_requests.jsonl
 data/prompt_packs/teacher_outputs.jsonl
+data/sft/train_teacher_sft_dataset.jsonl
+data/sft/eval_teacher_sft_dataset.jsonl
 data/training/qwen3_5_4b_baseline_run_spec.json
 data/training/train_qwen3_5_4b_baseline.py
 ```
@@ -82,17 +89,28 @@ python run_openai_teacher_batch_normalize.py ^
   --output data/prompt_packs/teacher_outputs.jsonl
 ```
 
+Split the merged SFT dataset into deterministic train/eval artifacts:
+
+```bash
+python run_teacher_sft_split.py --train-rows 50000 --eval-rows 4000 --format both
+```
+
 Prepare the first 4B baseline Unsloth runner:
 
 ```bash
 python run_qwen4b_baseline_prep.py
 ```
 
+Prepare and launch the 4B baseline run:
+
+```bash
+python run_qwen4b_baseline_train.py
+```
+
 ## What This Does Not Do Yet
 
 - submit or poll OpenAI batch jobs directly
-- run Unsloth training directly
 - launch distributed jobs
 - evaluate checkpoints automatically
 
-Those belong to the next concrete implementation step after artifacts are validated.
+Those belong to the next concrete implementation step after the first baseline run is validated.

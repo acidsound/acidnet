@@ -59,7 +59,9 @@
 - GPT-5.3 teacher prompt pack 을 JSONL 과 Parquet 로 대량 생성
 - teacher completion 생성을 위한 OpenAI batch request artifact 준비
 - OpenAI batch output 을 `teacher_outputs.jsonl` 로 정규화
+- merged SFT data 를 deterministic train/eval artifact 로 split
 - 4B baseline 용 첫 Unsloth training script 준비
+- 9B 로 가기 전에 실행 가능한 4B baseline launcher 유지
 - 긴 fine-tuning run 전에 prompt-only base-model 동작 검증
 - 긴 fine-tuning run 전에 selection criteria 를 고정
 
@@ -96,7 +98,9 @@
 - dialogue 품질과 world circulation 을 함께 보는 combined model gate
 - teacher run 용 OpenAI batch request 준비
 - teacher-output JSONL 로의 OpenAI batch output 정규화
+- deterministic train/eval SFT split export
 - Unsloth 4B baseline run-spec 과 training-script export
+- Unsloth 4B baseline launcher
 
 ## 다음 단계의 종료 조건
 

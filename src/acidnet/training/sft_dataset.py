@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -16,6 +17,10 @@ class SFTExample:
     user_prompt: str
     assistant_json: dict[str, Any]
     messages: list[dict[str, str]]
+
+
+def coerce_sft_examples(rows: list[dict[str, Any]]) -> list[SFTExample]:
+    return [SFTExample(**row) for row in rows]
 
 
 def load_jsonl(path: str | Path) -> list[dict[str, Any]]:
@@ -58,6 +63,48 @@ def merge_prompt_pack_with_teacher_outputs(
             )
         )
     return examples
+
+
+def split_sft_examples(
+    examples: list[SFTExample],
+    *,
+    train_rows_target: int | None = None,
+    eval_rows_target: int | None = None,
+    eval_ratio: float = 0.08,
+    seed: int = 7,
+) -> tuple[list[SFTExample], list[SFTExample]]:
+    if not examples:
+        return [], []
+
+    ordered = sorted(examples, key=lambda example: _stable_example_key(example.custom_id, seed))
+    available = len(ordered)
+
+    if train_rows_target is not None or eval_rows_target is not None:
+        target_total = min(
+            available,
+            max(1, (train_rows_target or 0) + (eval_rows_target or 0)),
+        )
+        ordered = ordered[:target_total]
+    total = len(ordered)
+    if total == 1:
+        return ordered, []
+
+    if eval_rows_target is not None:
+        eval_count = min(max(1, eval_rows_target), total - 1)
+    else:
+        eval_count = min(max(1, round(total * eval_ratio)), total - 1)
+
+    if train_rows_target is not None:
+        train_count = min(max(1, train_rows_target), total - eval_count)
+        eval_count = min(eval_count, total - train_count)
+    else:
+        train_count = total - eval_count
+
+    eval_examples = ordered[:eval_count]
+    train_examples = ordered[eval_count : eval_count + train_count]
+    if not train_examples:
+        train_examples = ordered[eval_count:]
+    return train_examples, eval_examples
 
 
 def export_sft_jsonl(path: str | Path, examples: list[SFTExample]) -> Path:
@@ -103,3 +150,7 @@ def _normalize_teacher_row(row: dict[str, Any]) -> dict[str, Any]:
             except json.JSONDecodeError as exc:
                 raise ValueError(f"Teacher output for {row.get('custom_id')} is not valid JSON text.") from exc
     raise ValueError(f"Teacher row for {row.get('custom_id')} does not contain a supported payload.")
+
+
+def _stable_example_key(custom_id: str, seed: int) -> str:
+    return hashlib.sha256(f"{seed}:{custom_id}".encode("utf-8")).hexdigest()

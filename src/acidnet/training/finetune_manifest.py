@@ -16,6 +16,12 @@ class DatasetSpec:
     train_parquet_path: str
     eval_jsonl_path: str
     eval_parquet_path: str
+    merged_sft_jsonl_path: str
+    merged_sft_parquet_path: str
+    train_sft_jsonl_path: str
+    train_sft_parquet_path: str
+    eval_sft_jsonl_path: str
+    eval_sft_parquet_path: str
     teacher_model: str
 
 
@@ -152,5 +158,11 @@ def _dataset_spec(train_rows_target: int, eval_rows_target: int) -> DatasetSpec:
         train_parquet_path="data/prompt_packs/train_teacher_requests.parquet",
         eval_jsonl_path="data/prompt_packs/eval_teacher_requests.jsonl",
         eval_parquet_path="data/prompt_packs/eval_teacher_requests.parquet",
+        merged_sft_jsonl_path="data/sft/teacher_sft_dataset.jsonl",
+        merged_sft_parquet_path="data/sft/teacher_sft_dataset.parquet",
+        train_sft_jsonl_path="data/sft/train_teacher_sft_dataset.jsonl",
+        train_sft_parquet_path="data/sft/train_teacher_sft_dataset.parquet",
+        eval_sft_jsonl_path="data/sft/eval_teacher_sft_dataset.jsonl",
+        eval_sft_parquet_path="data/sft/eval_teacher_sft_dataset.parquet",
         teacher_model="gpt-5.3",
     )

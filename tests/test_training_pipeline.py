@@ -5,6 +5,7 @@ from acidnet.training import (
     build_finetune_manifest,
     build_openai_batch_requests,
     build_unsloth_run_spec,
+    coerce_sft_examples,
     export_prompt_pack_jsonl,
     export_finetune_manifest_json,
     export_sft_jsonl,
@@ -15,6 +16,7 @@ from acidnet.training import (
     merge_prompt_pack_with_teacher_outputs,
     normalize_openai_batch_output,
     recommended_experiment_order,
+    split_sft_examples,
 )
 
 
@@ -146,6 +148,38 @@ def test_qwen4b_baseline_run_spec_can_render_unsloth_script() -> None:
     artifact_dir = Path("data") / "test_artifacts"
     artifact_dir.mkdir(parents=True, exist_ok=True)
     script_path = export_unsloth_training_script(artifact_dir / "train_qwen3_5_4b_baseline_test.py", run_spec)
+    script_text = script_path.read_text(encoding="utf-8")
 
     assert run_spec.model_name == "Qwen/Qwen3.5-4B-Base"
     assert script_path.exists()
+    assert 'optim="adamw_8bit"' in script_text
+    assert 'load_in_16bit=RUN_SPEC["bf16"]' in script_text
+
+
+def test_sft_examples_can_be_split_deterministically() -> None:
+    rows = [
+        {
+            "custom_id": f"dialogue.demo.{index}.npc.neri",
+            "task": "dialogue",
+            "npc_id": "npc.neri",
+            "scenario_id": f"scenario_{index:04d}",
+            "system_prompt": "system",
+            "user_prompt": "user",
+            "assistant_json": {"task": "dialogue", "npc_id": "npc.neri", "response": f"line {index}"},
+            "messages": [
+                {"role": "system", "content": "system"},
+                {"role": "user", "content": "user"},
+                {"role": "assistant", "content": f'{{"line": {index}}}'},
+            ],
+        }
+        for index in range(20)
+    ]
+
+    examples = coerce_sft_examples(rows)
+    train_a, eval_a = split_sft_examples(examples, train_rows_target=12, eval_rows_target=4, seed=7)
+    train_b, eval_b = split_sft_examples(examples, train_rows_target=12, eval_rows_target=4, seed=7)
+
+    assert [example.custom_id for example in train_a] == [example.custom_id for example in train_b]
+    assert [example.custom_id for example in eval_a] == [example.custom_id for example in eval_b]
+    assert len(train_a) == 12
+    assert len(eval_a) == 4

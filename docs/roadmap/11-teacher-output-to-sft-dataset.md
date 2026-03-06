@@ -8,6 +8,7 @@ Implemented:
 - OpenAI batch request export for teacher completion runs
 - OpenAI batch output normalization into teacher-output JSONL
 - merge path from teacher output JSONL into SFT-ready JSONL
+- deterministic split path from merged SFT JSONL into train/eval artifacts
 - optional Parquet export for the merged SFT dataset
 
 Entry points:
@@ -16,6 +17,7 @@ Entry points:
 - `run_openai_teacher_batch_prepare.py`
 - `run_openai_teacher_batch_normalize.py`
 - `run_teacher_sft_merge.py`
+- `run_teacher_sft_split.py`
 - `src/acidnet/training/sft_dataset.py`
 
 ## Expected Flow
@@ -25,7 +27,8 @@ Entry points:
 3. Run the teacher model externally and collect batch output JSONL keyed by `custom_id`.
 4. Normalize batch outputs into `teacher_outputs.jsonl`.
 5. Merge prompt rows and teacher outputs into SFT examples.
-6. Feed the merged SFT dataset into the first 4B baseline run.
+6. Split the merged SFT dataset into deterministic train/eval artifacts.
+7. Feed the split SFT datasets into the first 4B baseline run.
 
 ## Supported Teacher Output Shapes
 
@@ -80,8 +83,18 @@ python run_teacher_sft_merge.py ^
   --format both
 ```
 
+Split merged SFT into train/eval JSONL and Parquet:
+
+```bash
+python run_teacher_sft_split.py ^
+  --input data/sft/teacher_sft_dataset.jsonl ^
+  --train-rows 50000 ^
+  --eval-rows 4000 ^
+  --format both
+```
+
 ## Next Work
 
 - produce the first real teacher batch output file
-- define the first SFT dataset split
-- connect the merged dataset to the 4B baseline training runner
+- validate the first train/eval split against the 4B baseline run
+- connect the split datasets to the first real 4B training launch

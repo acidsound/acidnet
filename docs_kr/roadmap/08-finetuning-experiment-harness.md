@@ -10,18 +10,23 @@
 - 재현 가능한 experiment JSON export 스크립트
 - `/v1/responses` 용 OpenAI teacher batch request export
 - `teacher_outputs.jsonl` 로의 OpenAI batch output 정규화
+- merged SFT dataset 의 deterministic train/eval split export
 - Unsloth 4B baseline run-spec export
 - Unsloth 4B baseline training-script export
+- dependency check 가 있는 optional 4B baseline training launcher
 
 진입점:
 
 - `src/acidnet/training/finetune_manifest.py`
 - `run_finetune_manifest_export.py`
 - `src/acidnet/training/openai_batch.py`
+- `src/acidnet/training/sft_dataset.py`
 - `src/acidnet/training/unsloth_runner.py`
 - `run_openai_teacher_batch_prepare.py`
 - `run_openai_teacher_batch_normalize.py`
+- `run_teacher_sft_split.py`
 - `run_qwen4b_baseline_prep.py`
+- `run_qwen4b_baseline_train.py`
 
 ## Manifest 의 목적
 
@@ -62,6 +67,8 @@ python run_finetune_manifest_export.py --vram 24 --train-rows 50000 --eval-rows 
 data/training/finetune_manifest.json
 data/prompt_packs/openai_batch_requests.jsonl
 data/prompt_packs/teacher_outputs.jsonl
+data/sft/train_teacher_sft_dataset.jsonl
+data/sft/eval_teacher_sft_dataset.jsonl
 data/training/qwen3_5_4b_baseline_run_spec.json
 data/training/train_qwen3_5_4b_baseline.py
 ```
@@ -82,17 +89,28 @@ python run_openai_teacher_batch_normalize.py ^
   --output data/prompt_packs/teacher_outputs.jsonl
 ```
 
+merged SFT dataset 을 deterministic train/eval artifact 로 split:
+
+```bash
+python run_teacher_sft_split.py --train-rows 50000 --eval-rows 4000 --format both
+```
+
 첫 4B baseline Unsloth runner 준비:
 
 ```bash
 python run_qwen4b_baseline_prep.py
 ```
 
+4B baseline run 준비 후 실행:
+
+```bash
+python run_qwen4b_baseline_train.py
+```
+
 ## 아직 하지 않는 것
 
 - OpenAI batch job 제출이나 polling 자동화
-- Unsloth training 을 직접 실행하지는 않는다
 - distributed job 을 띄우지 않는다
 - checkpoint 를 자동 평가하지 않는다
 
-artifact 가 검증된 뒤 이 부분이 다음 구현 단계다.
+첫 baseline run 이 검증된 뒤 이 부분이 다음 구현 단계다.

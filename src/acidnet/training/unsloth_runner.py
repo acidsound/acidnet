@@ -70,7 +70,6 @@ def render_unsloth_training_script(run_spec: UnslothRunSpec) -> str:
     return f"""from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from datasets import load_dataset
 from trl import SFTConfig, SFTTrainer
@@ -79,8 +78,14 @@ from unsloth import FastLanguageModel
 RUN_SPEC = {spec_json}
 
 
-def format_record(record):
+def format_record(record, tokenizer):
     messages = json.loads(record["messages"]) if isinstance(record["messages"], str) else record["messages"]
+    if hasattr(tokenizer, "apply_chat_template"):
+        try:
+            text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
+            return {{"text": text}}
+        except Exception:
+            pass
     return {{"text": "\\n".join(f"{{item['role']}}: {{item['content']}}" for item in messages)}}
 
 
@@ -89,7 +94,9 @@ def main() -> None:
         model_name=RUN_SPEC["model_name"],
         max_seq_length=RUN_SPEC["max_seq_length"],
         dtype=None,
+        load_in_16bit=RUN_SPEC["bf16"],
         load_in_4bit=False,
+        full_finetuning=False,
     )
     model = FastLanguageModel.get_peft_model(
         model,
@@ -99,8 +106,12 @@ def main() -> None:
         use_gradient_checkpointing="unsloth",
     )
 
-    train_dataset = load_dataset("json", data_files=RUN_SPEC["train_dataset_path"], split="train").map(format_record)
-    eval_dataset = load_dataset("json", data_files=RUN_SPEC["eval_dataset_path"], split="train").map(format_record)
+    train_dataset = load_dataset("json", data_files=RUN_SPEC["train_dataset_path"], split="train").map(
+        lambda record: format_record(record, tokenizer)
+    )
+    eval_dataset = load_dataset("json", data_files=RUN_SPEC["eval_dataset_path"], split="train").map(
+        lambda record: format_record(record, tokenizer)
+    )
 
     trainer = SFTTrainer(
         model=model,
@@ -119,8 +130,11 @@ def main() -> None:
             eval_steps=RUN_SPEC["eval_steps"],
             save_steps=RUN_SPEC["save_steps"],
             bf16=RUN_SPEC["bf16"],
+            optim="adamw_8bit",
             logging_steps=10,
             evaluation_strategy="steps",
+            seed=3407,
+            report_to="none",
         ),
     )
     trainer.train()
