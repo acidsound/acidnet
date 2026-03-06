@@ -121,6 +121,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--lora-rank", type=int, default=None, help="Optional LoRA rank override for training launch.")
     parser.add_argument("--lora-alpha", type=int, default=None, help="Optional LoRA alpha override for training launch.")
     parser.add_argument("--optimizer", default=None, help="Optional optimizer override for training launch.")
+    parser.add_argument("--epochs", type=int, default=None, help="Optional train-epoch override for training launch.")
+    parser.add_argument("--eval-steps", type=int, default=None, help="Optional eval interval override for training launch.")
+    parser.add_argument("--save-steps", type=int, default=None, help="Optional checkpoint-save interval override for training launch.")
     parser.add_argument(
         "--load-in-4bit",
         action="store_true",
@@ -253,6 +256,12 @@ def main() -> None:
             launch_args.extend(["--lora-alpha", str(args.lora_alpha)])
         if args.optimizer:
             launch_args.extend(["--optimizer", args.optimizer])
+        if args.epochs is not None:
+            launch_args.extend(["--epochs", str(args.epochs)])
+        if args.eval_steps is not None:
+            launch_args.extend(["--eval-steps", str(args.eval_steps)])
+        if args.save_steps is not None:
+            launch_args.extend(["--save-steps", str(args.save_steps)])
         if args.load_in_4bit:
             launch_args.append("--load-in-4bit")
         if args.skip_dependency_check:

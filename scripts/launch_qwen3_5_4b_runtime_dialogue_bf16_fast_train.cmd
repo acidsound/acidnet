@@ -16,6 +16,9 @@ python run_qwen4b_baseline_train.py ^
   --script-output data/training/train_qwen3_5_4b_runtime_dialogue_full_bf16_fast.py ^
   --spec-output data/training/qwen3_5_4b_runtime_dialogue_full_bf16_fast_run_spec.json ^
   --trainer-backend hf_peft ^
+  --epochs 1 ^
+  --eval-steps 1000 ^
+  --save-steps 1000 ^
   --max-seq-length 1024 ^
   --batch-size 2 ^
   --grad-accum 8 ^

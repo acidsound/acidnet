@@ -81,6 +81,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--lora-rank", type=int, default=None, help="Override LoRA rank.")
     parser.add_argument("--lora-alpha", type=int, default=None, help="Override LoRA alpha.")
     parser.add_argument("--optimizer", default=None, help="Override optimizer name for the generated trainer script.")
+    parser.add_argument("--epochs", type=int, default=None, help="Override the number of train epochs.")
+    parser.add_argument("--eval-steps", type=int, default=None, help="Override evaluation interval in optimizer steps.")
+    parser.add_argument("--save-steps", type=int, default=None, help="Override checkpoint save interval in optimizer steps.")
     parser.add_argument(
         "--load-in-4bit",
         action="store_true",
@@ -173,6 +176,12 @@ def _apply_hf_peft_overrides(run_spec, args):
         updates["lora_alpha"] = args.lora_alpha
     if args.optimizer is not None:
         updates["optimizer"] = args.optimizer
+    if args.epochs is not None:
+        updates["num_train_epochs"] = args.epochs
+    if args.eval_steps is not None:
+        updates["eval_steps"] = args.eval_steps
+    if args.save_steps is not None:
+        updates["save_steps"] = args.save_steps
     if args.load_in_4bit:
         updates["load_in_4bit"] = True
         updates.setdefault("optimizer", "paged_adamw_8bit")

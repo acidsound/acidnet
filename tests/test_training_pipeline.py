@@ -271,6 +271,9 @@ def test_low_vram_profile_applies_hf_peft_memory_overrides() -> None:
         lora_rank=None,
         lora_alpha=None,
         optimizer=None,
+        epochs=None,
+        eval_steps=None,
+        save_steps=None,
         load_in_4bit=False,
     )
 
@@ -283,6 +286,37 @@ def test_low_vram_profile_applies_hf_peft_memory_overrides() -> None:
     assert updated.lora_alpha == 16
     assert updated.load_in_4bit is True
     assert updated.optimizer == "paged_adamw_8bit"
+
+
+def test_explicit_hf_peft_schedule_overrides_are_applied() -> None:
+    baseline = build_finetune_manifest(vram_gb=24)[0]
+    run_spec = build_hf_peft_run_spec(
+        baseline,
+        RunPaths(
+            train_dataset_path="data/sft/train_teacher_sft_dataset.jsonl",
+            eval_dataset_path="data/sft/eval_teacher_sft_dataset.jsonl",
+            output_dir="data/training/qwen3_5_4b_baseline",
+        ),
+    )
+    args = SimpleNamespace(
+        memory_profile="default",
+        max_seq_length=None,
+        batch_size=None,
+        grad_accum=None,
+        lora_rank=None,
+        lora_alpha=None,
+        optimizer=None,
+        epochs=1,
+        eval_steps=1000,
+        save_steps=1200,
+        load_in_4bit=False,
+    )
+
+    updated = _apply_hf_peft_overrides(run_spec, args)
+
+    assert updated.num_train_epochs == 1
+    assert updated.eval_steps == 1000
+    assert updated.save_steps == 1200
 
 
 def test_dialogue_preference_examples_can_be_built_from_bootstrap_rows() -> None:

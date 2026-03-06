@@ -16,6 +16,9 @@ python run_qwen4b_baseline_train.py ^
   --script-output data/training/train_qwen3_5_4b_runtime_dialogue_full_low_vram.py ^
   --spec-output data/training/qwen3_5_4b_runtime_dialogue_full_low_vram_run_spec.json ^
   --trainer-backend hf_peft ^
+  --epochs 1 ^
+  --eval-steps 1000 ^
+  --save-steps 1000 ^
   --memory-profile low_vram >> "%LOG_PATH%" 2>&1
 
 echo [%date% %time%] Training command exited with code %errorlevel% >> "%LOG_PATH%"
