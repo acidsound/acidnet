@@ -8,7 +8,7 @@ from acidnet.storage import EventLogFile, SQLiteWorldStore
 
 INTRO = """acidnet playable village MVP
 
-You can move through the village, talk to NPCs, trade with vendors, wait for the world to advance,
+You can move through the village, talk to NPCs, trade with vendors, use next to advance the world,
 and collect rumors as the NPC simulation runs around you.
 """
 

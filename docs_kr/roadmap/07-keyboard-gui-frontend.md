@@ -16,7 +16,7 @@
 - 현재 위치 기반 work 액션
 - NPC 선택 리스트
 - 선택된 NPC를 보여주는 target 패널
-- talk, inspect, direct-speech, rumor, dynamic trade, eat, wait 액션
+- talk, inspect, direct-speech, rumor, dynamic trade, eat, next 액션
 - GUI 내부 monkey mode 토글
 - event log panel
 - 선택된 NPC 전용 direct-speech 입력창

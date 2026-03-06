@@ -12,6 +12,11 @@ def test_monkey_runner_executes_deterministic_steps_without_breaking_invariants(
     assert report.role == "wanderer"
     assert report.final_player_location in simulation.world.locations
     assert 0.0 <= report.final_player_hunger <= 100.0
+    assert 0.0 <= report.final_player_fatigue <= 100.0
+    assert 0.0 <= report.score <= 1.0
+    assert isinstance(report.goal_counts, dict)
+    assert isinstance(report.command_counts, dict)
+    assert isinstance(report.failure_reasons, list)
     assert report.steps
     assert all(step.goal for step in report.steps)
     assert all(step.command for step in report.steps)
@@ -52,3 +57,17 @@ def test_rumor_verifier_monkey_targets_unasked_npc_rumors_first() -> None:
     assert goal == "collect_rumor"
     assert command.startswith("ask ")
     assert command.endswith(" rumor")
+
+
+def test_survivor_monkey_report_records_goal_counts_and_successful_score() -> None:
+    simulation = Simulation.create_demo()
+    simulation.player.hunger = 80.0
+    simulation.player.inventory["bread"] = 1
+    runner = SimulationMonkeyRunner(simulation, seed=5, role="survivor")
+
+    report = runner.run_steps(1)
+
+    assert report.goal_counts.get("eat_available_food") == 1
+    assert report.command_counts.get("meal") == 1
+    assert report.score > 0.5
+    assert "survivor_failed_to_stabilize_hunger" not in report.failure_reasons

@@ -207,7 +207,7 @@ class WebSimulationRuntime:
             },
             {"label": "Rest", "command": "rest 1"},
             {"label": "Sleep", "command": "sleep 3"},
-            {"label": "Wait", "command": "wait 1"},
+            {"label": "Next", "command": "next 1"},
         ]
         consume = [
             {

@@ -289,16 +289,17 @@ def test_go_starts_multi_turn_travel_instead_of_teleporting() -> None:
     assert simulation.player.travel_state.ticks_remaining > 0
 
 
-def test_wait_completes_travel_and_arrives_after_eta() -> None:
+def test_next_completes_travel_and_arrives_after_eta() -> None:
     simulation = Simulation.create_demo()
     simulation.world.weather = "clear"
 
     simulation.handle_command("go tavern")
-    result = simulation.handle_command("wait 1")
+    result = simulation.handle_command("next 1")
 
     assert simulation.player.location_id == "tavern"
     assert simulation.player.travel_state.is_traveling is False
     assert any("You arrive at Copper Cup Tavern." in line for line in result.lines)
+
 
 
 def test_storm_front_blocks_riverside_route() -> None:

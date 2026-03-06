@@ -67,7 +67,7 @@ Current note:
   Progress:
   - initial role-driven runner landed with `wanderer`, `survivor`, `trader`, `rumor_verifier`, and `altruist`
   - each step now records a goal label alongside the chosen command
-  - rule-based scoring and actionable failure summaries still remain
+  - rule-based scoring and actionable failure summaries now land in the monkey report
 
 - [ ] Step 20F: Add the first controllable external shock.
   Exit criteria:

@@ -11,7 +11,7 @@ Current interaction surface:
 - talk to NPCs
 - ask NPCs for rumors
 - buy and sell items with vendor NPCs
-- wait while the world advances
+- use `next` while the world advances
 
 ## Runtime Features
 
@@ -45,7 +45,7 @@ acidnet
 - `trade mara buy bread 1`
 - `status`
 - `rumors`
-- `wait 3`
+- `next 3`
 
 ## Limits Of This MVP
 

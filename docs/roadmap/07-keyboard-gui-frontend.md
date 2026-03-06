@@ -16,7 +16,7 @@ Implemented:
 - player work action for earning gold or gathering food
 - NPC selection list
 - explicit selected-target panel for the NPC list
-- talk, inspect, direct-speech, rumor, dynamic trade, eat, and wait actions
+- talk, inspect, direct-speech, rumor, dynamic trade, eat, and next actions
 - in-GUI monkey toggle for observation runs
 - event log panel
 - dedicated direct-speech input for the selected NPC
@@ -105,7 +105,7 @@ python run_monkey_world.py --steps 240 --dialogue-backend heuristic
 - `B`: run the current trade from the trade controls
 - `E`: eat the best food in inventory
 - `M`: toggle monkey mode on or off
-- `Space`: wait one turn
+- `Space`: next one turn
 - `L`: refresh the current scene/location text
 - `Settings` button in the `Dialogue` panel: open the system-prompt modal
 - `Enter` in the direct-speech box: send `say <npc> <message>`

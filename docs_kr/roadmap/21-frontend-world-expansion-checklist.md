@@ -67,7 +67,7 @@
   Progress:
   - `wanderer`, `survivor`, `trader`, `rumor_verifier`, `altruist` role 이 있는 초기 role-driven runner 가 들어갔다
   - 각 step 은 선택된 command 와 함께 goal label 을 남긴다
-  - rule-based scoring 과 actionable failure summary 는 아직 남아 있다
+  - rule-based scoring 과 actionable failure summary 가 이제 monkey report 에 들어간다
 
 - [ ] Step 20F: 첫 controllable external shock 추가
   Exit criteria:

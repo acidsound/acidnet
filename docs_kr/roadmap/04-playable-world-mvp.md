@@ -45,7 +45,7 @@ acidnet
 - `trade mara buy bread 1`
 - `status`
 - `rumors`
-- `wait 3`
+- `next 3`
 
 ## 이 MVP의 한계
 

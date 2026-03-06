@@ -85,7 +85,7 @@ Response shape:
       {"label": "Look", "command": "look"},
       {"label": "Work", "command": "work"},
       {"label": "Meal", "command": "meal", "enabled": true, "item": "bread"},
-      {"label": "Wait", "command": "wait 1"}
+      {"label": "Next", "command": "next 1"}
     ],
     "consume": [
       {"label": "Eat Bread", "command": "eat bread", "item": "bread", "quantity": 1}
@@ -369,7 +369,7 @@ Important command groups:
 - targeting: `focus <npc>`, `focus clear`, `inspect [npc]`
 - dialogue: `talk [npc]`, `say <npc> <message>`, `ask [npc] rumor`
 - economy: `trade [npc] buy <item> <qty>`, `trade [npc] sell <item> <qty>`, `trade [npc] ask <item> <qty>`, `trade [npc] give <item> <qty>`
-- survival: `meal`, `eat [item]`, `work`, `wait [turns]`
+- survival: `meal`, `eat [item]`, `work`, `next [turns]`
 - travel and recovery: `go <location>`, `rest [turns]`, `sleep [turns]`
 
 ## Error Contract

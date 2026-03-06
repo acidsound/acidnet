@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import random
+from collections import Counter
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -30,7 +31,13 @@ class MonkeyReport:
     final_tick: int
     final_player_location: str
     final_player_hunger: float
+    final_player_fatigue: float
     known_rumors: int
+    score: float
+    success: bool
+    goal_counts: dict[str, int]
+    command_counts: dict[str, int]
+    failure_reasons: list[str]
     steps: list[MonkeyStep]
 
 
@@ -42,6 +49,8 @@ class SimulationMonkeyRunner:
         self.rng = random.Random(seed)
         self.step_index = 0
         self.asked_rumor_npc_ids: set[str] = set()
+        self.start_player_money = simulation.player.money
+        self.start_known_rumors = len(simulation.player.known_rumor_ids)
 
     def run_one_step(self) -> MonkeyStep:
         goal, command = self.choose_action()
@@ -64,6 +73,10 @@ class SimulationMonkeyRunner:
 
     def run_steps(self, steps: int) -> MonkeyReport:
         history = [self.run_one_step() for _ in range(max(0, steps))]
+        goal_counts = Counter(step.goal for step in history)
+        command_counts = Counter(step.command.split()[0] for step in history if step.command)
+        failure_reasons = self._collect_failure_reasons(history, goal_counts, command_counts)
+        score = self._score_run(failure_reasons)
         return MonkeyReport(
             seed=self.seed,
             role=self.role,
@@ -73,13 +86,19 @@ class SimulationMonkeyRunner:
             final_tick=self.simulation.world.tick,
             final_player_location=self.simulation.player.location_id,
             final_player_hunger=self.simulation.player.hunger,
+            final_player_fatigue=self.simulation.player.fatigue,
             known_rumors=len(self.simulation.player.known_rumor_ids),
+            score=score,
+            success=not failure_reasons,
+            goal_counts=dict(goal_counts),
+            command_counts=dict(command_counts),
+            failure_reasons=failure_reasons,
             steps=history,
         )
 
     def choose_action(self) -> tuple[str, str]:
         if self.simulation.player.travel_state.is_traveling:
-            return "complete_travel", "wait 1"
+            return "complete_travel", "next 1"
         if self.role == "survivor":
             return self._choose_survivor_action()
         if self.role == "rumor_verifier":
@@ -171,7 +190,7 @@ class SimulationMonkeyRunner:
         weighted_commands: list[str] = []
 
         weighted_commands.extend(["look", "status"])
-        weighted_commands.extend(["wait 1"] * 3)
+        weighted_commands.extend(["next 1"] * 3)
 
         current_location = self.simulation.world.locations[self.simulation.player.location_id]
         for neighbor_id in current_location.neighbors:
@@ -193,7 +212,7 @@ class SimulationMonkeyRunner:
             weighted_commands.extend([f"eat {food_item}"] * 2)
 
         if not weighted_commands:
-            return "idle", "wait 1"
+            return "idle", "next 1"
         return "wander", self.rng.choice(weighted_commands)
 
     def _best_player_food(self) -> str | None:
@@ -325,6 +344,89 @@ class SimulationMonkeyRunner:
             npc = self.simulation._resolve_npc_here(" ".join(parts[1:-1]))
             return npc.npc_id if npc is not None else None
         return None
+
+    def _collect_failure_reasons(
+        self,
+        history: list[MonkeyStep],
+        goal_counts: Counter[str],
+        command_counts: Counter[str],
+    ) -> list[str]:
+        failures: list[str] = []
+        if self.simulation.player.hunger >= 88.0:
+            failures.append("player_starving")
+        if self.simulation.player.fatigue >= 90.0:
+            failures.append("player_exhausted")
+
+        if self.role == "wanderer":
+            if self._movement_count(history) == 0:
+                failures.append("wanderer_never_moved")
+            if self._social_count(history) == 0:
+                failures.append("wanderer_never_engaged_socially")
+        elif self.role == "survivor":
+            if self.simulation.player.hunger >= 60.0:
+                failures.append("survivor_failed_to_stabilize_hunger")
+            if not any(
+                goal_counts.get(goal, 0) > 0
+                for goal in {"eat_available_food", "request_food", "buy_food", "secure_food_or_income"}
+            ):
+                failures.append("survivor_never_pursued_food")
+            if self.simulation.player.fatigue >= 78.0:
+                failures.append("survivor_failed_to_recover")
+        elif self.role == "rumor_verifier":
+            if len(self.asked_rumor_npc_ids) < 2:
+                failures.append("rumor_verifier_insufficient_sources")
+            if (len(self.simulation.player.known_rumor_ids) - self.start_known_rumors) < 2:
+                failures.append("rumor_verifier_low_rumor_gain")
+        elif self.role == "altruist":
+            if self._exchange_count(history, {"give"}) == 0:
+                failures.append("altruist_never_shared_resources")
+            if self.simulation.player.hunger >= 70.0:
+                failures.append("altruist_overextended_self")
+        elif self.role == "trader":
+            if self._exchange_count(history, {"buy", "sell"}) == 0:
+                failures.append("trader_never_completed_cash_exchange")
+            if self.simulation.player.money <= self.start_player_money and self._exchange_count(history, {"sell"}) == 0:
+                failures.append("trader_never_realized_value")
+
+        if command_counts.get("next", 0) == len(history) and history:
+            failures.append("monkey_stalled_into_pure_time_advance")
+        return failures
+
+    def _score_run(self, failure_reasons: list[str]) -> float:
+        penalties = {
+            "player_starving": 0.4,
+            "player_exhausted": 0.25,
+            "wanderer_never_moved": 0.18,
+            "wanderer_never_engaged_socially": 0.18,
+            "survivor_failed_to_stabilize_hunger": 0.3,
+            "survivor_never_pursued_food": 0.22,
+            "survivor_failed_to_recover": 0.18,
+            "rumor_verifier_insufficient_sources": 0.25,
+            "rumor_verifier_low_rumor_gain": 0.25,
+            "altruist_never_shared_resources": 0.28,
+            "altruist_overextended_self": 0.2,
+            "trader_never_completed_cash_exchange": 0.28,
+            "trader_never_realized_value": 0.18,
+            "monkey_stalled_into_pure_time_advance": 0.25,
+        }
+        score = 1.0
+        for reason in failure_reasons:
+            score -= penalties.get(reason, 0.15)
+        return round(max(0.0, score), 3)
+
+    def _movement_count(self, history: list[MonkeyStep]) -> int:
+        return sum(1 for step in history if step.command.startswith("go ") or step.goal == "complete_travel")
+
+    def _social_count(self, history: list[MonkeyStep]) -> int:
+        return sum(1 for step in history if step.command.startswith("talk ") or step.command.startswith("ask "))
+
+    def _exchange_count(self, history: list[MonkeyStep], modes: set[str]) -> int:
+        count = 0
+        for step in history:
+            parts = step.command.split()
+            if len(parts) >= 4 and parts[0] == "trade" and parts[-3] in modes:
+                count += 1
+        return count
 
     def _assert_invariants(self) -> None:
         assert 0.0 <= self.simulation.player.hunger <= 100.0

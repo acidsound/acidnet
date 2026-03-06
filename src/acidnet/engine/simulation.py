@@ -211,7 +211,7 @@ class Simulation:
                 "  status                   Show player and world status.",
                 "  rumors                   Show rumors you know.",
                 "  npcs                     List NPCs at your location.",
-                "  wait [turns]             Advance the world.",
+                "  next [turns]             Advance the world.",
                 "  help                     Show this help.",
                 "  quit                     Exit the simulation.",
             ]
@@ -772,13 +772,13 @@ class Simulation:
             except ValueError:
                 return TurnResult(self._events("system", ["Trade quantity must be an integer."]))
             return self.trade_with_npc(" ".join(parts[1:-3]) if len(parts) > 4 else None, parts[-3], parts[-2], qty)
-        if command == "wait":
+        if command == "next":
             turns = 1
             if len(parts) >= 2:
                 try:
                     turns = int(parts[1])
                 except ValueError:
-                    return TurnResult(self._events("system", ["Wait amount must be an integer."]))
+                    return TurnResult(self._events("system", ["Next amount must be an integer."]))
             return self.advance_turn(turns)
         return TurnResult(self._events("system", ['Unknown command. Type "help" to see valid commands.']))
 
@@ -1735,7 +1735,7 @@ class Simulation:
         destination_name = self.world.locations[destination_id].name
         return (
             f"You are already on the road to {destination_name}. "
-            "Wait, look, check status, eat, rest later, or sleep after you arrive."
+            "Use next, look, check status, eat, rest later, or sleep after you arrive."
         )
 
     def _player_travel_text(self) -> str:
