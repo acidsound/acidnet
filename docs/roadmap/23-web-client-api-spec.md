@@ -56,8 +56,10 @@ Response shape:
     "day": 1,
     "tick": 0,
     "weather": "dry_wind",
+    "field_stress": 0.18,
     "location_id": "square",
-    "location_name": "Market Square"
+    "location_name": "Market Square",
+    "active_events": []
   },
   "player": {
     "name": "Jaeho",
@@ -215,7 +217,9 @@ Failure response:
 ### `world`
 
 - `day`, `tick`, `weather`: current simulation time and broad environment
+- `field_stress`: current farm-yield pressure scalar used by the first shock chain
 - `location_id`, `location_name`: current player anchor location
+- `active_events`: currently active world shock/event summaries
 - when the player is traveling, the scene description and player travel state are the authoritative source for route progress
 
 ### `player`

@@ -56,8 +56,10 @@
     "day": 1,
     "tick": 0,
     "weather": "dry_wind",
+    "field_stress": 0.18,
     "location_id": "square",
-    "location_name": "Market Square"
+    "location_name": "Market Square",
+    "active_events": []
   },
   "player": {
     "name": "Jaeho",
@@ -215,7 +217,9 @@
 ### `world`
 
 - `day`, `tick`, `weather`: 현재 시뮬레이션 시간과 환경
+- `field_stress`: 첫 shock chain 에서 쓰는 현재 농장 yield 압박 수치
 - `location_id`, `location_name`: 현재 player anchor location
+- `active_events`: 현재 살아 있는 world shock/event summary 목록
 - 플레이어가 traveling 중일 때는 route progress 의 기준 정보는 `scene.description` 과 `player.travel_state` 다
 
 ### `player`

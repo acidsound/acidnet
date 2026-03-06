@@ -313,6 +313,30 @@ def test_storm_front_blocks_riverside_route() -> None:
     assert simulation.player.travel_state.is_traveling is False
 
 
+def test_dry_wind_builds_field_stress_and_starts_harvest_shortfall_event() -> None:
+    simulation = Simulation.create_demo()
+    simulation.world.weather = "dry_wind"
+
+    result = simulation.advance_turn(4)
+
+    assert simulation.world.field_stress >= 0.55
+    assert any(event.event_id == "event.farm.harvest_shortfall" for event in simulation.world.active_events)
+    assert any("harvest shortfall" in line.lower() for line in result.lines)
+
+
+def test_cool_rain_recovers_field_stress_and_clears_harvest_shortfall_event() -> None:
+    simulation = Simulation.create_demo()
+    simulation.world.weather = "dry_wind"
+    simulation.advance_turn(4)
+    simulation.world.weather = "cool_rain"
+
+    result = simulation.advance_turn(2)
+
+    assert simulation.world.field_stress <= 0.24
+    assert not any(event.event_id == "event.farm.harvest_shortfall" for event in simulation.world.active_events)
+    assert any("steadier yield" in line.lower() for line in result.lines)
+
+
 def test_traveling_blocks_location_bound_interactions() -> None:
     simulation = Simulation.create_demo()
     simulation.world.weather = "clear"
@@ -338,6 +362,19 @@ def test_sleep_recovers_more_fatigue_than_rest_when_shelter_is_better() -> None:
     assert shrine_simulation.player.fatigue < square_simulation.player.fatigue
 
 
+def test_field_stress_reduces_player_farm_work_yield() -> None:
+    simulation = Simulation.create_demo()
+    simulation.player.location_id = "farm"
+    simulation.world.field_stress = 0.72
+    simulation.world.weather = "dry_wind"
+    starting_wheat = simulation.player.inventory.get("wheat", 0)
+
+    result = simulation.handle_command("work")
+
+    assert any("gather 1 wheat" in line.lower() for line in result.lines)
+    assert simulation.player.inventory.get("wheat", 0) == starting_wheat + 1
+
+
 def test_player_can_work_for_gold_and_resources() -> None:
     simulation = Simulation.create_demo()
 
@@ -348,6 +385,8 @@ def test_player_can_work_for_gold_and_resources() -> None:
     assert simulation.player.money == square_money + 4
 
     simulation.player.location_id = "farm"
+    simulation.world.weather = "clear"
+    simulation.world.field_stress = 0.0
     farm_wheat = simulation.player.inventory.get("wheat", 0)
     farm_result = simulation.handle_command("work")
 

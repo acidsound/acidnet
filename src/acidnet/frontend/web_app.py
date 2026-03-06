@@ -299,8 +299,17 @@ class WebSimulationRuntime:
                     "day": self.simulation.world.day,
                     "tick": self.simulation.world.tick,
                     "weather": self.simulation.world.weather,
+                    "field_stress": round(self.simulation.world.field_stress, 2),
                     "location_id": location.location_id,
                     "location_name": location_name,
+                    "active_events": [
+                        {
+                            "event_id": event.event_id,
+                            "event_type": event.event_type,
+                            "summary": event.summary,
+                        }
+                        for event in self.simulation.world.active_events
+                    ],
                 },
                 "player": {
                     "name": self.simulation.player.name,

@@ -51,6 +51,7 @@ The current project baseline is:
 - add one controllable state-dependent shock chain
 - make shocks visible in rumors, logs, and world state
 - make every destructive chain include a plausible recovery path
+- the first weather -> field stress -> harvest shortfall -> rain recovery chain is now in place
 
 ### Phase 6: Multi-Settlement Scaling
 

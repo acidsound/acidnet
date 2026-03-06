@@ -76,6 +76,10 @@
   - downside 와 regenerative 또는 recovery-side effect 가 함께 들어간다
   - shock 이 log 와 rumor generation 에 드러난다
   - manual reset 없이 회복 가능한지 검증한다
+  Progress:
+  - 첫 체인은 `dry_wind/dusty_heat -> field_stress -> harvest_shortfall -> cool_rain recovery` 로 들어갔다
+  - `field_stress` 와 `active_events` 가 simulation status 와 web state 에 노출된다
+  - 남은 공백은 더 넓은 blast radius 와 장기 economic knock-on effect 다
 
 - [ ] Step 20G: 경제 루프에 entropy sink 추가
   Exit criteria:

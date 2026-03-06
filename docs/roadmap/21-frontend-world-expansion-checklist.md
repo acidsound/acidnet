@@ -76,6 +76,10 @@ Current note:
   - include both downside and regenerative or recovery-side effects
   - expose the shock in logs and rumor generation
   - verify that the world can recover without manual reset
+  Progress:
+  - the first chain now exists as `dry_wind/dusty_heat -> field_stress -> harvest_shortfall -> cool_rain recovery`
+  - `field_stress` and `active_events` are exposed through simulation status and web state
+  - the remaining gap is broader blast radius and longer economic knock-on effects
 
 - [ ] Step 20G: Add entropy sinks to the economy loop.
   Exit criteria:

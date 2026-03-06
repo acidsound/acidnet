@@ -208,6 +208,7 @@ class WorldState(BaseModel):
     tick: int = Field(default=0, ge=0)
     day: int = Field(default=0, ge=0)
     weather: str = "clear"
+    field_stress: float = Field(default=0.0, ge=0.0, le=1.0)
     locations: dict[str, Location] = Field(default_factory=dict)
     market: MarketState = Field(default_factory=MarketState)
     active_events: list[WorldEvent] = Field(default_factory=list)

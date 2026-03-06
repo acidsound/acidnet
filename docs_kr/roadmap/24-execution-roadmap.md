@@ -51,6 +51,7 @@
 - 하나의 controllable state-dependent shock chain 을 추가한다
 - shock 이 rumor, log, world state 에 드러나게 만든다
 - 모든 파괴적 chain 에 plausable recovery path 가 포함되게 만든다
+- 첫 weather -> field stress -> harvest shortfall -> rain recovery 체인은 이제 들어가 있다
 
 ### Phase 6: Multi-Settlement Scaling
 

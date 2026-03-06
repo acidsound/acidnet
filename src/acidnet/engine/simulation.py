@@ -17,6 +17,7 @@ from acidnet.models import (
     Rumor,
     RumorCategory,
     TravelState,
+    WorldEvent,
     WorldState,
 )
 from acidnet.planner import HeuristicPlanner, PlannerContext
@@ -68,6 +69,15 @@ SHELTER_RATINGS = {
     "market": 0.55,
     "resource": 0.34,
 }
+FIELD_STRESS_WEATHER_DELTA = {
+    "cool_rain": -0.26,
+    "clear": -0.12,
+    "market_day": -0.05,
+    "dry_wind": 0.18,
+    "dusty_heat": 0.24,
+    "storm_front": 0.08,
+}
+HARVEST_SHORTFALL_EVENT_ID = "event.farm.harvest_shortfall"
 
 
 @dataclass(slots=True, frozen=True)
@@ -261,6 +271,7 @@ class Simulation:
             f"Target: {focused_npc.name if focused_npc is not None else 'none'}",
             f"Hunger: {self.player.hunger:.1f}/100",
             f"Fatigue: {self.player.fatigue:.1f}/100",
+            f"Field stress: {self.world.field_stress:.2f}",
             f"Load: {self.player.carried_weight:.1f}/{self.player.carry_capacity:.1f}",
             f"Money: {self.player.money} gold",
             f"Inventory: {self._format_inventory(self.player.inventory)}",
@@ -269,6 +280,9 @@ class Simulation:
         if self.player.travel_state.is_traveling:
             destination = self.player.travel_state.destination_location_id or "unknown"
             lines.append(f"Travel: en route to {destination} ({self.player.travel_state.ticks_remaining} ticks remaining)")
+        if self.world.active_events:
+            lines.append("Active world events:")
+            lines.extend(f"- {event.summary}" for event in self.world.active_events)
         if self.tick_log:
             lines.append("Recent world events:")
             lines.extend(f"- {entry}" for entry in list(self.tick_log)[-5:])
@@ -559,8 +573,9 @@ class Simulation:
         location = self.world.locations[self.player.location_id]
         lines: list[str] = []
         if location.location_id == "farm":
-            self._adjust_item(self.player.inventory, "wheat", 2)
-            lines.append("You help in the south field and gather 2 wheat.")
+            wheat_yield = self._farm_yield_amount()
+            self._adjust_item(self.player.inventory, "wheat", wheat_yield)
+            lines.append(f"You help in the south field and gather {wheat_yield} wheat.")
         elif location.location_id == "riverside":
             self._adjust_item(self.player.inventory, "fish", 1)
             lines.append("You spend a shift on the riverside and catch 1 fish.")
@@ -792,6 +807,9 @@ class Simulation:
         self.player.fatigue = min(100.0, self.player.fatigue + 0.45)
         lines.extend(self._advance_player_travel())
         self._advance_weather()
+        shock_events = self._advance_world_shocks()
+        lines.extend(shock_events)
+        self.tick_log.extend(shock_events)
         self._refresh_dynamic_rumors()
         self._decay_rumors()
         for npc in self.npcs.values():
@@ -1333,13 +1351,74 @@ class Simulation:
         else:
             self.world.weather = cycle[(self.turn_counter // 8) % len(cycle)]
 
+    def _advance_world_shocks(self) -> list[str]:
+        events: list[str] = []
+        delta = FIELD_STRESS_WEATHER_DELTA.get(self.world.weather, 0.0)
+        self.world.field_stress = max(0.0, min(1.0, round(self.world.field_stress + delta, 3)))
+
+        active_shortfall = self._world_event(HARVEST_SHORTFALL_EVENT_ID)
+        if self.world.field_stress >= 0.55:
+            summary = "The south field is slipping into a harvest shortfall after repeated drying weather."
+            if active_shortfall is None:
+                self.world.active_events.append(
+                    WorldEvent(
+                        event_id=HARVEST_SHORTFALL_EVENT_ID,
+                        event_type="harvest_shortfall",
+                        summary=summary,
+                        start_tick=self.world.tick,
+                    )
+                )
+                events.append(summary)
+                self._ensure_rumor(
+                    rumor_id=f"rumor.dynamic.shock.harvest_shortfall.day{self.world.day}.slot{self.turn_counter // 4}",
+                    origin_npc_id="npc.anik",
+                    subject_id="farm",
+                    content="Anik says the south field is slipping into a real harvest shortfall after too many drying days.",
+                    category=RumorCategory.SHORTAGE,
+                    confidence=min(0.92, 0.62 + self.world.field_stress * 0.22),
+                    value=min(0.94, 0.6 + self.world.field_stress * 0.2),
+                    holders=["npc.anik", "npc.mara", "npc.neri"],
+                )
+            else:
+                active_shortfall.summary = summary
+        elif active_shortfall is not None and self.world.field_stress <= 0.24:
+            self.world.active_events = [
+                event for event in self.world.active_events if event.event_id != HARVEST_SHORTFALL_EVENT_ID
+            ]
+            recovery_summary = "Cool moisture is easing the south field back toward a steadier yield."
+            events.append(recovery_summary)
+            self._ensure_rumor(
+                rumor_id=f"rumor.dynamic.shock.harvest_recovery.day{self.world.day}.slot{self.turn_counter // 4}",
+                origin_npc_id="npc.anik",
+                subject_id="farm",
+                content="Anik says the south field is drinking again and the next yield may recover if the rain holds.",
+                category=RumorCategory.EVENT,
+                confidence=0.71,
+                value=0.62,
+                holders=["npc.anik", "npc.serin", "npc.neri"],
+            )
+        return events
+
+    def _world_event(self, event_id: str) -> WorldEvent | None:
+        for event in self.world.active_events:
+            if event.event_id == event_id:
+                return event
+        return None
+
+    def _farm_yield_amount(self) -> int:
+        amount = 2
+        if self.world.weather in {"cool_rain", "market_day"}:
+            amount += 1
+        elif self.world.weather in {"dry_wind", "dusty_heat"}:
+            amount = max(1, amount - 1)
+        if self.world.field_stress >= 0.55:
+            amount = max(1, amount - 1)
+        return amount
+
     def _work_output_for(self, profession: str) -> tuple[str, int]:
         item, amount = WORK_OUTPUT[profession]
         if profession == "farmer":
-            if self.world.weather in {"cool_rain", "market_day"}:
-                amount += 1
-            elif self.world.weather in {"dry_wind", "dusty_heat"}:
-                amount = max(1, amount - 1)
+            amount = self._farm_yield_amount()
         if profession == "fisher" and self.world.weather == "storm_front":
             amount = max(1, amount - 1)
         return item, amount

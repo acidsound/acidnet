@@ -26,6 +26,8 @@ def test_scene_payload_exposes_player_view_contract() -> None:
 
     assert state["world"]["location_id"] == "square"
     assert state["player"]["location_id"] == "square"
+    assert "field_stress" in state["world"]
+    assert "active_events" in state["world"]
     assert any(node["location_id"] == "square" and node["is_player_here"] for node in state["scene"]["map_nodes"])
     assert any(action["command"] == "look" for action in state["actions"]["common"])
     assert any(action["command"] == "meal" for action in state["actions"]["common"])
@@ -87,3 +89,16 @@ def test_scene_payload_hides_people_during_travel() -> None:
     assert state["player"]["travel_state"]["is_traveling"] is True
     assert state["scene"]["people"] == []
     assert "On the road to" in state["world"]["location_name"]
+
+
+def test_scene_payload_exposes_active_shock_state() -> None:
+    runtime = build_runtime("web_frontend_shock_state_test")
+    try:
+        runtime.simulation.world.weather = "dry_wind"
+        runtime.simulation.advance_turn(4)
+        state = runtime.scene_payload()
+    finally:
+        runtime.close()
+
+    assert state["world"]["field_stress"] >= 0.55
+    assert any(event["event_type"] == "harvest_shortfall" for event in state["world"]["active_events"])

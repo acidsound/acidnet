@@ -842,12 +842,17 @@
 
       const worldStatus = document.getElementById('world-status');
       worldStatus.innerHTML = '';
-      for (const text of [
+      const statusPills = [
         `day ${String(state.world.day).padStart(2, '0')}`,
         `tick ${String(state.world.tick).padStart(4, '0')}`,
         state.world.weather,
         `location ${state.world.location_name}`,
-      ]) {
+        `field stress ${Number(state.world.field_stress || 0).toFixed(2)}`,
+      ];
+      for (const event of state.world.active_events || []) {
+        statusPills.push(`event ${event.event_type}`);
+      }
+      for (const text of statusPills) {
         const node = document.createElement('span');
         node.className = 'status-pill';
         node.textContent = text;
