@@ -47,6 +47,7 @@ class AcidNetApp(tk.Tk):
         dialogue_backend: str = "heuristic",
         dialogue_model: str | None = None,
         dialogue_endpoint: str | None = None,
+        dialogue_adapter_path: str | None = None,
         monkey: bool = False,
         monkey_steps: int = 160,
         monkey_delay_ms: int = 350,
@@ -63,6 +64,7 @@ class AcidNetApp(tk.Tk):
             dialogue_backend=dialogue_backend,
             dialogue_model=dialogue_model,
             dialogue_endpoint=dialogue_endpoint,
+            dialogue_adapter_path=dialogue_adapter_path,
         )
         self.store = SQLiteWorldStore(db_path) if persist else None
         self.event_log = EventLogFile(event_log_path) if event_log_path is not None else None
@@ -598,7 +600,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--dialogue-backend",
-        choices=("heuristic", "openai_compat"),
+        choices=("heuristic", "openai_compat", "local_peft"),
         default="heuristic",
         help="Dialogue backend to use for NPC interactions.",
     )
@@ -611,6 +613,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--dialogue-endpoint",
         default=None,
         help="OpenAI-compatible endpoint for runtime dialogue generation.",
+    )
+    parser.add_argument(
+        "--dialogue-adapter-path",
+        default=None,
+        help="Local LoRA adapter path for the local_peft backend.",
     )
     parser.add_argument(
         "--event-log",
@@ -656,6 +663,7 @@ def main() -> None:
         dialogue_backend=args.dialogue_backend,
         dialogue_model=args.dialogue_model,
         dialogue_endpoint=args.dialogue_endpoint,
+        dialogue_adapter_path=args.dialogue_adapter_path,
         event_log_path=None if args.no_event_log else args.event_log,
         monkey=args.monkey,
         monkey_steps=args.monkey_steps,

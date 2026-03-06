@@ -17,12 +17,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run a combined dialogue and world-circulation gate for a backend.")
     parser.add_argument(
         "--dialogue-backend",
-        choices=("heuristic", "openai_compat"),
+        choices=("heuristic", "openai_compat", "local_peft"),
         default="heuristic",
         help="Dialogue backend to evaluate.",
     )
     parser.add_argument("--dialogue-model", default=None, help="Model identifier for the dialogue backend.")
     parser.add_argument("--dialogue-endpoint", default=None, help="OpenAI-compatible endpoint for dialogue generation.")
+    parser.add_argument("--dialogue-adapter-path", default=None, help="Local LoRA adapter path for the local_peft backend.")
     parser.add_argument("--turns", type=int, default=120, help="Number of circulation turns to simulate.")
     parser.add_argument(
         "--output",
@@ -38,6 +39,7 @@ def main() -> None:
         dialogue_backend=args.dialogue_backend,
         dialogue_model=args.dialogue_model,
         dialogue_endpoint=args.dialogue_endpoint,
+        dialogue_adapter_path=args.dialogue_adapter_path,
         circulation_turns=args.turns,
     )
     output_path = export_model_gate_json(args.output, report)

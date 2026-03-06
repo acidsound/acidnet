@@ -30,11 +30,13 @@ def run_prompt_only_baseline_eval(
     dialogue_backend: str = "heuristic",
     dialogue_model: str | None = None,
     dialogue_endpoint: str | None = None,
+    dialogue_adapter_path: str | None = None,
 ) -> list[PromptOnlyEvalRow]:
     simulation = Simulation.create_demo(
         dialogue_backend=dialogue_backend,
         dialogue_model=dialogue_model,
         dialogue_endpoint=dialogue_endpoint,
+        dialogue_adapter_path=dialogue_adapter_path,
     )
     rows: list[PromptOnlyEvalRow] = []
 

@@ -37,7 +37,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--dialogue-backend",
-        choices=("heuristic", "openai_compat"),
+        choices=("heuristic", "openai_compat", "local_peft"),
         default="heuristic",
         help="Dialogue backend to use for NPC talk interactions.",
     )
@@ -51,6 +51,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="OpenAI-compatible endpoint for runtime dialogue generation.",
     )
+    parser.add_argument(
+        "--dialogue-adapter-path",
+        default=None,
+        help="Local LoRA adapter path for the local_peft backend.",
+    )
     return parser
 
 
@@ -60,6 +65,7 @@ def main() -> None:
         dialogue_backend=args.dialogue_backend,
         dialogue_model=args.dialogue_model,
         dialogue_endpoint=args.dialogue_endpoint,
+        dialogue_adapter_path=args.dialogue_adapter_path,
     )
     store = None if args.no_persist else SQLiteWorldStore(args.db)
     event_log = None if args.no_event_log else EventLogFile(args.event_log)

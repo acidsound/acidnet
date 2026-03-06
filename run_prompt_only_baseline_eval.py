@@ -17,12 +17,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Evaluate prompt-only dialogue behavior before fine-tuning.")
     parser.add_argument(
         "--dialogue-backend",
-        choices=("heuristic", "openai_compat"),
+        choices=("heuristic", "openai_compat", "local_peft"),
         default="heuristic",
         help="Dialogue backend to evaluate.",
     )
     parser.add_argument("--dialogue-model", default=None, help="Model identifier for the dialogue backend.")
     parser.add_argument("--dialogue-endpoint", default=None, help="OpenAI-compatible endpoint for dialogue generation.")
+    parser.add_argument("--dialogue-adapter-path", default=None, help="Local LoRA adapter path for the local_peft backend.")
     parser.add_argument(
         "--output",
         default=str(Path("data") / "eval" / "prompt_only_baseline_report.json"),
@@ -37,6 +38,7 @@ def main() -> None:
         dialogue_backend=args.dialogue_backend,
         dialogue_model=args.dialogue_model,
         dialogue_endpoint=args.dialogue_endpoint,
+        dialogue_adapter_path=args.dialogue_adapter_path,
     )
     output_path = export_prompt_only_eval_json(args.output, rows)
     print(summarize_scores(rows))

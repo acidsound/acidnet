@@ -69,18 +69,25 @@ See:
 ## Smoke Fine-Tune Result
 
 A tiny HF/PEFT LoRA smoke run already completed successfully against the bootstrap dataset shape.
+A stronger runtime-dialogue smoke run also completed successfully on a `2048 train / 256 eval` subset of the regenerated full bootstrap dataset.
 
 Artifacts:
 
 - `data/test_artifacts/train_bootstrap_smoke.jsonl`
 - `data/test_artifacts/eval_bootstrap_smoke.jsonl`
 - `data/test_artifacts/qwen3_5_4b_bootstrap_smoke_adapter/`
+- `data/test_artifacts/train_runtime_dialogue_smoke_2048.jsonl`
+- `data/test_artifacts/eval_runtime_dialogue_smoke_256.jsonl`
+- `data/test_artifacts/qwen3_5_4b_runtime_dialogue_smoke_adapter/`
 
 Observed result:
 
 - training completed for 2 epochs
 - adapter weights were written successfully
 - the adapter can be served through the local runtime server
+- the same adapter now runs directly through the in-process `local_peft` backend
+- the runtime-dialogue smoke adapter clears the combined model gate
+- current gate result: `prompt_avg=1.000`, `prompt_fail_rows=0`, `prompt_latency_ms=1672.6`, `circulation=0.925`
 
 ## Local Adapter Runtime
 
@@ -110,18 +117,36 @@ powershell -ExecutionPolicy Bypass -File run_local_adapter_dev_loop.ps1 `
   -NoMonkey
 ```
 
+Run the same adapter directly inside the CLI or GUI without an HTTP bridge:
+
+```bash
+python run_acidnet.py ^
+  --no-persist ^
+  --dialogue-backend local_peft ^
+  --dialogue-model Qwen/Qwen3.5-4B ^
+  --dialogue-adapter-path data/test_artifacts/qwen3_5_4b_runtime_dialogue_smoke_adapter
+```
+
+```bash
+python run_acidnet_gui.py ^
+  --no-persist ^
+  --dialogue-backend local_peft ^
+  --dialogue-model Qwen/Qwen3.5-4B ^
+  --dialogue-adapter-path data/test_artifacts/qwen3_5_4b_runtime_dialogue_smoke_adapter
+```
+
 ## Current Read
 
 - the end-to-end technical path is working
-- the tiny smoke adapter is not good enough for promotion
-- prompt quality is still below the model gate threshold
+- the first tiny smoke adapter was not good enough for promotion
+- the runtime-dialogue smoke adapter is good enough to use as the current local-model baseline
 - `thinking` must stay disabled in both training and runtime for the small-model path
 - runtime dialogue SFT is now the default promotion path for NPC speech
 - world circulation remains stable because the rule-based simulation still owns world mutation
 
 ## Immediate Next Work
 
-- run a larger 4B LoRA job from the full bootstrap dataset
+- run a larger 4B LoRA job from the full bootstrap dataset now that the smoke gate is cleared
 - add runtime transcripts back into the dataset mix
-- reduce latency on the adapter server path
-- only after a 4B checkpoint clears the gate, prepare the GGUF export path
+- reduce latency on the direct `local_peft` path
+- after the larger checkpoint lands, prepare the GGUF export path

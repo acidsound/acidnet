@@ -69,6 +69,7 @@ class Simulation:
         dialogue_backend: str = "heuristic",
         dialogue_model: str | None = None,
         dialogue_endpoint: str | None = None,
+        dialogue_adapter_path: str | None = None,
     ) -> "Simulation":
         setup = build_demo_setup()
         return cls(
@@ -81,6 +82,7 @@ class Simulation:
                 dialogue_backend,
                 model=dialogue_model,
                 endpoint=dialogue_endpoint,
+                adapter_path=dialogue_adapter_path,
             ),
         )
 

@@ -71,6 +71,12 @@
 - 월드 순환성과 entropy 안정성이 UI 확장보다 더 중요하다
 - player 생존과 earning loop는 계속 같은 rule-based economy 안에 있어야 한다
 
+현재 측정 상태:
+
+- `local_peft` runtime 경로가 HTTP bridge 없이 최신 `Qwen/Qwen3.5-4B` LoRA adapter를 직접 실행한다
+- 최신 runtime-dialogue smoke adapter가 combined model gate를 통과했다
+- 현재 gate 결과: `prompt_avg=1.000`, `prompt_fail_rows=0`, `prompt_latency_ms=1672.6`, `circulation=0.925`
+
 ## 프로토타입 상태
 
 현재 저장소에는 다음이 있다.
@@ -81,6 +87,7 @@
 - bootstrap teacher data path: `run_bootstrap_qwen4b_pipeline.py`
 - baseline launcher: `run_qwen4b_baseline_train.py`
 - local adapter runtime path: `run_local_adapter_server.py`
+- direct local adapter runtime path: `--dialogue-backend local_peft --dialogue-adapter-path ...`
 
 구현된 시스템:
 

@@ -52,6 +52,7 @@ def build_dialogue_adapter(
     *,
     model: str | None = None,
     endpoint: str | None = None,
+    adapter_path: str | None = None,
     api_key_env: str = "OPENAI_API_KEY",
 ) -> DialogueModelAdapter:
     backend = backend.lower()
@@ -64,6 +65,16 @@ def build_dialogue_adapter(
             model=model or "local-npc-model",
             endpoint=endpoint or "http://127.0.0.1:8000/v1/chat/completions",
             api_key_env=api_key_env,
+        )
+        return FallbackDialogueAdapter(primary=primary, fallback=RuleBasedDialogueAdapter())
+    if backend == "local_peft":
+        from acidnet.llm.local_peft import LocalPeftDialogueAdapter
+
+        if not adapter_path:
+            raise ValueError("`adapter_path` is required for the local_peft dialogue backend.")
+        primary = LocalPeftDialogueAdapter(
+            model=model or "Qwen/Qwen3.5-4B",
+            adapter_path=adapter_path,
         )
         return FallbackDialogueAdapter(primary=primary, fallback=RuleBasedDialogueAdapter())
     raise ValueError(f"Unsupported dialogue backend: {backend}")

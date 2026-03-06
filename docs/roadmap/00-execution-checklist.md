@@ -71,6 +71,12 @@ In practical terms, this means:
 - world circulation and entropy stability matter more than UI scale-up
 - player survival and earning loops must stay inside the same rule-based economy
 
+Current measured status:
+
+- the `local_peft` runtime path now runs the latest `Qwen/Qwen3.5-4B` LoRA adapter directly without an HTTP bridge
+- the latest runtime-dialogue smoke adapter clears the combined model gate
+- current gate result: `prompt_avg=1.000`, `prompt_fail_rows=0`, `prompt_latency_ms=1672.6`, `circulation=0.925`
+
 ## Prototype Status
 
 There is now a playable prototype in the repo with:
@@ -81,6 +87,7 @@ There is now a playable prototype in the repo with:
 - bootstrap teacher data path: `run_bootstrap_qwen4b_pipeline.py`
 - baseline launcher: `run_qwen4b_baseline_train.py`
 - local adapter runtime path: `run_local_adapter_server.py`
+- direct local adapter runtime path: `--dialogue-backend local_peft --dialogue-adapter-path ...`
 
 Implemented systems:
 

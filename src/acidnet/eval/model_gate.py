@@ -32,12 +32,14 @@ def run_model_gate(
     dialogue_backend: str,
     dialogue_model: str | None = None,
     dialogue_endpoint: str | None = None,
+    dialogue_adapter_path: str | None = None,
     circulation_turns: int = 120,
 ) -> ModelGateReport:
     prompt_rows = run_prompt_only_baseline_eval(
         dialogue_backend=dialogue_backend,
         dialogue_model=dialogue_model,
         dialogue_endpoint=dialogue_endpoint,
+        dialogue_adapter_path=dialogue_adapter_path,
     )
     prompt_average_score = sum(row.score for row in prompt_rows) / max(1, len(prompt_rows))
     prompt_average_latency_ms = sum(row.latency_ms for row in prompt_rows) / max(1, len(prompt_rows))
@@ -58,6 +60,7 @@ def run_model_gate(
             dialogue_backend=dialogue_backend,
             dialogue_model=dialogue_model,
             dialogue_endpoint=dialogue_endpoint,
+            dialogue_adapter_path=dialogue_adapter_path,
         ),
         turns=circulation_turns,
     )
