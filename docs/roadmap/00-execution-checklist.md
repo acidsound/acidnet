@@ -93,6 +93,7 @@ Implemented systems:
 - synthetic teacher prompt generation for planner and dialogue tasks
 - prompt-only baseline evaluation harness
 - world circulation evaluation harness
+- combined model gate for dialogue quality plus world circulation
 - OpenAI batch request preparation for teacher runs
 - OpenAI batch output normalization into teacher-output JSONL
 - Unsloth 4B baseline run-spec and training-script export

@@ -1,0 +1,49 @@
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parent
+SRC = ROOT / "src"
+
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
+
+from acidnet.eval import export_model_gate_json, run_model_gate, summarize_model_gate
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Run a combined dialogue and world-circulation gate for a backend.")
+    parser.add_argument(
+        "--dialogue-backend",
+        choices=("heuristic", "openai_compat"),
+        default="heuristic",
+        help="Dialogue backend to evaluate.",
+    )
+    parser.add_argument("--dialogue-model", default=None, help="Model identifier for the dialogue backend.")
+    parser.add_argument("--dialogue-endpoint", default=None, help="OpenAI-compatible endpoint for dialogue generation.")
+    parser.add_argument("--turns", type=int, default=120, help="Number of circulation turns to simulate.")
+    parser.add_argument(
+        "--output",
+        default=str(Path("data") / "eval" / "model_gate_report.json"),
+        help="Output report path.",
+    )
+    return parser
+
+
+def main() -> None:
+    args = build_parser().parse_args()
+    report = run_model_gate(
+        dialogue_backend=args.dialogue_backend,
+        dialogue_model=args.dialogue_model,
+        dialogue_endpoint=args.dialogue_endpoint,
+        circulation_turns=args.turns,
+    )
+    output_path = export_model_gate_json(args.output, report)
+    print(summarize_model_gate(report))
+    print(f"Output: {output_path}")
+
+
+if __name__ == "__main__":
+    main()

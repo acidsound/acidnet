@@ -93,6 +93,7 @@
 - planner/dialogue 용 synthetic teacher prompt generation
 - prompt-only baseline evaluation harness
 - world circulation evaluation harness
+- dialogue 품질과 world circulation 을 함께 보는 combined model gate
 - teacher run 용 OpenAI batch request 준비
 - teacher-output JSONL 로의 OpenAI batch output 정규화
 - Unsloth 4B baseline run-spec 과 training-script export
