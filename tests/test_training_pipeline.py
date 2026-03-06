@@ -2,7 +2,7 @@ from pathlib import Path
 from dataclasses import asdict
 from types import SimpleNamespace
 
-from run_qwen4b_baseline_train import _apply_hf_peft_overrides
+from run_qwen4b_baseline_train import _apply_hf_peft_overrides, _apply_unsloth_overrides
 
 from acidnet.training import (
     baseline_pipeline_artifacts_to_dict,
@@ -225,6 +225,10 @@ def test_qwen4b_baseline_run_spec_can_render_unsloth_script() -> None:
     assert "ROOT = _project_root()" in script_text
     assert 'optim="adamw_8bit"' in script_text
     assert 'load_in_16bit=RUN_SPEC["bf16"]' in script_text
+    assert 'processing_class=tokenizer' in script_text
+    assert 'dataset_text_field=RUN_SPEC["dataset_text_field"]' in script_text
+    assert 'max_length=RUN_SPEC["max_seq_length"]' in script_text
+    assert 'eval_strategy="steps"' in script_text
 
 
 def test_qwen4b_baseline_run_spec_can_render_hf_peft_script() -> None:
@@ -317,6 +321,42 @@ def test_explicit_hf_peft_schedule_overrides_are_applied() -> None:
     assert updated.num_train_epochs == 1
     assert updated.eval_steps == 1000
     assert updated.save_steps == 1200
+
+
+def test_unsloth_overrides_are_applied() -> None:
+    baseline = build_finetune_manifest(vram_gb=24)[0]
+    run_spec = build_unsloth_run_spec(
+        baseline,
+        RunPaths(
+            train_dataset_path="data/sft/train_teacher_sft_dataset.jsonl",
+            eval_dataset_path="data/sft/eval_teacher_sft_dataset.jsonl",
+            output_dir="data/training/qwen3_5_4b_baseline",
+        ),
+    )
+    args = SimpleNamespace(
+        memory_profile="default",
+        max_seq_length=1024,
+        batch_size=2,
+        grad_accum=8,
+        lora_rank=16,
+        lora_alpha=16,
+        optimizer=None,
+        epochs=1,
+        eval_steps=128,
+        save_steps=256,
+        load_in_4bit=False,
+    )
+
+    updated = _apply_unsloth_overrides(run_spec, args)
+
+    assert updated.max_seq_length == 1024
+    assert updated.per_device_train_batch_size == 2
+    assert updated.gradient_accumulation_steps == 8
+    assert updated.lora_rank == 16
+    assert updated.lora_alpha == 16
+    assert updated.num_train_epochs == 1
+    assert updated.eval_steps == 128
+    assert updated.save_steps == 256
 
 
 def test_dialogue_preference_examples_can_be_built_from_bootstrap_rows() -> None:

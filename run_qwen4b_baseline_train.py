@@ -13,16 +13,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from acidnet.training import (
-    RunPaths,
-    build_finetune_manifest,
-    build_hf_peft_run_spec,
-    build_unsloth_run_spec,
-    export_hf_peft_run_spec,
-    export_hf_peft_training_script,
-    export_unsloth_run_spec,
-    export_unsloth_training_script,
-)
+from acidnet.training.finetune_manifest import build_finetune_manifest
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -96,16 +87,31 @@ def main() -> None:
     args = build_parser().parse_args()
     baseline = build_finetune_manifest(vram_gb=24)[0]
     backend = _resolve_backend(args.trainer_backend)
+    from acidnet.training.unsloth_runner import RunPaths
+
     run_paths = RunPaths(
         train_dataset_path=args.train_dataset,
         eval_dataset_path=args.eval_dataset,
         output_dir=args.output_dir,
     )
     if backend == "unsloth":
+        from acidnet.training.unsloth_runner import (
+            build_unsloth_run_spec,
+            export_unsloth_run_spec,
+            export_unsloth_training_script,
+        )
+
         run_spec = build_unsloth_run_spec(baseline, run_paths)
+        run_spec = _apply_unsloth_overrides(run_spec, args)
         spec_path = export_unsloth_run_spec(args.spec_output, run_spec)
         script_path = export_unsloth_training_script(args.script_output, run_spec)
     else:
+        from acidnet.training.hf_peft_runner import (
+            build_hf_peft_run_spec,
+            export_hf_peft_run_spec,
+            export_hf_peft_training_script,
+        )
+
         run_spec = build_hf_peft_run_spec(baseline, run_paths)
         run_spec = _apply_hf_peft_overrides(run_spec, args)
         spec_path = export_hf_peft_run_spec(args.spec_output, run_spec)
@@ -185,6 +191,37 @@ def _apply_hf_peft_overrides(run_spec, args):
     if args.load_in_4bit:
         updates["load_in_4bit"] = True
         updates.setdefault("optimizer", "paged_adamw_8bit")
+    return replace(run_spec, **updates) if updates else run_spec
+
+
+def _apply_unsloth_overrides(run_spec, args):
+    updates: dict[str, object] = {}
+    if args.memory_profile == "low_vram":
+        updates.update(
+            {
+                "max_seq_length": min(run_spec.max_seq_length, 2048),
+                "per_device_train_batch_size": 1,
+                "gradient_accumulation_steps": max(run_spec.gradient_accumulation_steps, 16),
+                "lora_rank": min(run_spec.lora_rank, 16),
+                "lora_alpha": min(run_spec.lora_alpha, 16),
+            }
+        )
+    if args.max_seq_length is not None:
+        updates["max_seq_length"] = args.max_seq_length
+    if args.batch_size is not None:
+        updates["per_device_train_batch_size"] = args.batch_size
+    if args.grad_accum is not None:
+        updates["gradient_accumulation_steps"] = args.grad_accum
+    if args.lora_rank is not None:
+        updates["lora_rank"] = args.lora_rank
+    if args.lora_alpha is not None:
+        updates["lora_alpha"] = args.lora_alpha
+    if args.epochs is not None:
+        updates["num_train_epochs"] = args.epochs
+    if args.eval_steps is not None:
+        updates["eval_steps"] = args.eval_steps
+    if args.save_steps is not None:
+        updates["save_steps"] = args.save_steps
     return replace(run_spec, **updates) if updates else run_spec
 
 

@@ -41,7 +41,7 @@ def build_unsloth_run_spec(experiment: FineTuneExperiment, paths: RunPaths) -> U
         experiment_key=experiment.key,
         model_name=experiment.train_model_id,
         output_dir=paths.output_dir,
-        dataset_text_field="messages",
+        dataset_text_field="text",
         max_seq_length=experiment.max_seq_length,
         learning_rate=experiment.learning_rate,
         per_device_train_batch_size=experiment.per_device_batch_size,
@@ -88,9 +88,9 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+from unsloth import FastLanguageModel
 from datasets import load_dataset
 from trl import SFTConfig, SFTTrainer
-from unsloth import FastLanguageModel
 
 RUN_SPEC = {spec_repr}
 
@@ -128,22 +128,25 @@ def main() -> None:
         use_gradient_checkpointing="unsloth",
     )
 
-    train_dataset = load_dataset("json", data_files=RUN_SPEC["train_dataset_path"], split="train").map(
-        lambda record: format_record(record, tokenizer)
+    train_raw = load_dataset("json", data_files=RUN_SPEC["train_dataset_path"], split="train")
+    train_dataset = train_raw.map(
+        lambda record: format_record(record, tokenizer),
+        remove_columns=train_raw.column_names,
     )
-    eval_dataset = load_dataset("json", data_files=RUN_SPEC["eval_dataset_path"], split="train").map(
-        lambda record: format_record(record, tokenizer)
+    eval_raw = load_dataset("json", data_files=RUN_SPEC["eval_dataset_path"], split="train")
+    eval_dataset = eval_raw.map(
+        lambda record: format_record(record, tokenizer),
+        remove_columns=eval_raw.column_names,
     )
 
     trainer = SFTTrainer(
         model=model,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        dataset_text_field="text",
         args=SFTConfig(
             output_dir=RUN_SPEC["output_dir"],
-            max_seq_length=RUN_SPEC["max_seq_length"],
+            max_length=RUN_SPEC["max_seq_length"],
             learning_rate=RUN_SPEC["learning_rate"],
             per_device_train_batch_size=RUN_SPEC["per_device_train_batch_size"],
             gradient_accumulation_steps=RUN_SPEC["gradient_accumulation_steps"],
@@ -154,7 +157,9 @@ def main() -> None:
             bf16=RUN_SPEC["bf16"],
             optim="adamw_8bit",
             logging_steps=10,
-            evaluation_strategy="steps",
+            eval_strategy="steps",
+            save_strategy="steps",
+            dataset_text_field=RUN_SPEC["dataset_text_field"],
             seed=3407,
             report_to="none",
         ),

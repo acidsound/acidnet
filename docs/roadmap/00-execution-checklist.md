@@ -59,7 +59,7 @@ Current implementation focus is promotion quality:
 - keep thinking disabled across runtime and training so small-model dialogue stays terse and game-usable
 - keep `Qwen/Qwen3.5-4B` as the primary training checkpoint
 - keep `Qwen/Qwen3.5-9B` as a challenger only after the 4B run is stable
-- run bf16 LoRA through the HF/PEFT Windows-safe path by default
+- prefer WSL2 + Unsloth for 4B LoRA when WSL2 is available and stable; keep HF/PEFT on Windows as the fallback path
 - validate adapters through the local OpenAI-compatible runtime before promotion
 - promote only checkpoints that beat the heuristic control on dialogue quality without breaking world circulation
 
@@ -76,6 +76,9 @@ Current measured status:
 - the `local_peft` runtime path now runs the latest `Qwen/Qwen3.5-4B` LoRA adapter directly without an HTTP bridge
 - the latest runtime-dialogue smoke adapter clears the combined model gate
 - current gate result: `prompt_avg=1.000`, `prompt_fail_rows=0`, `prompt_latency_ms=1672.6`, `circulation=0.925`
+- the WSL2 + Unsloth smoke path is now validated with fast-path kernels installed
+- current WSL smoke gate result: `prompt_avg=1.000`, `prompt_fail_rows=0`, `prompt_latency_ms=2554.396`, `circulation=0.925`
+- current WSL smoke `2048 / 256` benchmark train runtime: `335 s`
 
 ## Prototype Status
 

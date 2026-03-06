@@ -59,7 +59,7 @@
 - 작은 모델 대사가 장황해지지 않도록 runtime과 training 모두에서 thinking을 끈다
 - `Qwen/Qwen3.5-4B`를 기본 학습 checkpoint로 유지한다
 - `Qwen/Qwen3.5-9B`는 4B가 안정화된 뒤 challenger로만 본다
-- Windows 기본 학습 backend는 HF/PEFT LoRA 경로로 유지한다
+- WSL2가 안정적으로 사용 가능하면 4B LoRA는 WSL2 + Unsloth 경로를 우선한다. Windows HF/PEFT는 fallback 경로로 둔다
 - local OpenAI-compatible adapter runtime에서 먼저 검증한다
 - dialogue 품질은 heuristic control을 이기되, world circulation은 깨지지 않는 checkpoint만 승격한다
 
@@ -76,6 +76,9 @@
 - `local_peft` runtime 경로가 HTTP bridge 없이 최신 `Qwen/Qwen3.5-4B` LoRA adapter를 직접 실행한다
 - 최신 runtime-dialogue smoke adapter가 combined model gate를 통과했다
 - 현재 gate 결과: `prompt_avg=1.000`, `prompt_fail_rows=0`, `prompt_latency_ms=1672.6`, `circulation=0.925`
+- WSL2 + Unsloth smoke 경로도 이제 fast-path kernel 설치 상태로 검증됐다
+- 현재 WSL smoke gate 결과: `prompt_avg=1.000`, `prompt_fail_rows=0`, `prompt_latency_ms=2554.396`, `circulation=0.925`
+- 현재 WSL smoke `2048 / 256` benchmark 학습 시간: `335 s`
 
 ## 프로토타입 상태
 
