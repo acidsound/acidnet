@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from acidnet.training import (
+    baseline_pipeline_artifacts_to_dict,
     RunPaths,
     build_finetune_manifest,
     build_openai_batch_requests,
@@ -15,6 +16,7 @@ from acidnet.training import (
     generate_synthetic_prompt_pack,
     merge_prompt_pack_with_teacher_outputs,
     normalize_openai_batch_output,
+    prepare_qwen4b_baseline_artifacts,
     recommended_experiment_order,
     split_sft_examples,
 )
@@ -183,3 +185,61 @@ def test_sft_examples_can_be_split_deterministically() -> None:
     assert [example.custom_id for example in eval_a] == [example.custom_id for example in eval_b]
     assert len(train_a) == 12
     assert len(eval_a) == 4
+
+
+def test_qwen4b_baseline_pipeline_prepares_split_and_run_artifacts() -> None:
+    artifact_dir = Path("data") / "test_artifacts"
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    prompt_pack_path = artifact_dir / "pipeline_teacher_requests.jsonl"
+    teacher_output_path = artifact_dir / "pipeline_teacher_outputs.jsonl"
+
+    prompt_pack_path.write_text(
+        "\n".join(
+            [
+                '{"custom_id":"dialogue.demo.0.npc.neri","task":"dialogue","system_prompt":"system","user_prompt":"user","metadata":{"npc_id":"npc.neri","scenario_id":"scenario_0000"}}',
+                '{"custom_id":"dialogue.demo.1.npc.mara","task":"dialogue","system_prompt":"system","user_prompt":"user","metadata":{"npc_id":"npc.mara","scenario_id":"scenario_0001"}}',
+                '{"custom_id":"planner.demo.2.npc.anik","task":"planner","system_prompt":"system","user_prompt":"user","metadata":{"npc_id":"npc.anik","scenario_id":"scenario_0002"}}',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    teacher_output_path.write_text(
+        "\n".join(
+            [
+                '{"custom_id":"dialogue.demo.0.npc.neri","assistant_json":{"task":"dialogue","npc_id":"npc.neri","response":"line 0"}}',
+                '{"custom_id":"dialogue.demo.1.npc.mara","assistant_json":{"task":"dialogue","npc_id":"npc.mara","response":"line 1"}}',
+                '{"custom_id":"planner.demo.2.npc.anik","assistant_json":{"task":"planner","npc_id":"npc.anik","intent":"work"}}',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    artifacts = prepare_qwen4b_baseline_artifacts(
+        prompt_pack_path=str(prompt_pack_path),
+        teacher_output_path=str(teacher_output_path),
+        merged_jsonl_path=str(artifact_dir / "pipeline_teacher_sft_dataset.jsonl"),
+        merged_parquet_path=str(artifact_dir / "pipeline_teacher_sft_dataset.parquet"),
+        train_jsonl_path=str(artifact_dir / "pipeline_train_teacher_sft_dataset.jsonl"),
+        train_parquet_path=str(artifact_dir / "pipeline_train_teacher_sft_dataset.parquet"),
+        eval_jsonl_path=str(artifact_dir / "pipeline_eval_teacher_sft_dataset.jsonl"),
+        eval_parquet_path=str(artifact_dir / "pipeline_eval_teacher_sft_dataset.parquet"),
+        training_output_dir=str(artifact_dir / "pipeline_qwen3_5_4b_baseline"),
+        run_spec_path=str(artifact_dir / "pipeline_qwen3_5_4b_baseline_run_spec.json"),
+        training_script_path=str(artifact_dir / "pipeline_train_qwen3_5_4b_baseline.py"),
+        export_format="jsonl",
+        train_rows_target=2,
+        eval_rows_target=1,
+        seed=7,
+    )
+    artifact_map = baseline_pipeline_artifacts_to_dict(artifacts)
+
+    assert artifacts.train_rows == 2
+    assert artifacts.eval_rows == 1
+    assert Path(artifacts.merged_jsonl_path).exists()
+    assert Path(artifacts.train_jsonl_path).exists()
+    assert Path(artifacts.eval_jsonl_path).exists()
+    assert Path(artifacts.run_spec_path).exists()
+    assert Path(artifacts.training_script_path).exists()
+    assert artifact_map["experiment_key"] == "qwen3_5_4b_baseline"

@@ -1,5 +1,10 @@
 """Training experiment and dataset generation helpers."""
 
+from acidnet.training.baseline_pipeline import (
+    BaselinePipelineArtifacts,
+    baseline_pipeline_artifacts_to_dict,
+    prepare_qwen4b_baseline_artifacts,
+)
 from acidnet.training.dataset_builder import (
     export_prompt_pack_jsonl,
     export_prompt_pack_parquet,
@@ -38,9 +43,11 @@ __all__ = [
     "ModelCandidate",
     "OpenAIBatchRequest",
     "RunPaths",
+    "BaselinePipelineArtifacts",
     "TeacherConfig",
     "TeacherOutputRow",
     "UnslothRunSpec",
+    "baseline_pipeline_artifacts_to_dict",
     "build_openai_batch_requests",
     "build_finetune_manifest",
     "build_unsloth_run_spec",
@@ -59,6 +66,7 @@ __all__ = [
     "load_jsonl",
     "merge_prompt_pack_with_teacher_outputs",
     "normalize_openai_batch_output",
+    "prepare_qwen4b_baseline_artifacts",
     "recommended_experiment_order",
     "split_sft_examples",
 ]

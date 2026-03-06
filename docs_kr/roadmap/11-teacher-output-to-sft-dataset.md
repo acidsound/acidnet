@@ -18,6 +18,7 @@
 - `run_openai_teacher_batch_normalize.py`
 - `run_teacher_sft_merge.py`
 - `run_teacher_sft_split.py`
+- `run_qwen4b_baseline_pipeline.py`
 - `src/acidnet/training/sft_dataset.py`
 
 ## 기대 흐름
@@ -90,6 +91,14 @@ python run_teacher_sft_split.py ^
   --input data/sft/teacher_sft_dataset.jsonl ^
   --train-rows 50000 ^
   --eval-rows 4000 ^
+  --format both
+```
+
+4B baseline data-prep 경로를 한 번에 실행:
+
+```bash
+python run_qwen4b_baseline_pipeline.py ^
+  --teacher-output data/prompt_packs/teacher_outputs.jsonl ^
   --format both
 ```
 

@@ -27,6 +27,7 @@
 - `run_teacher_sft_split.py`
 - `run_qwen4b_baseline_prep.py`
 - `run_qwen4b_baseline_train.py`
+- `run_qwen4b_baseline_pipeline.py`
 
 ## Manifest 의 목적
 
@@ -71,6 +72,7 @@ data/sft/train_teacher_sft_dataset.jsonl
 data/sft/eval_teacher_sft_dataset.jsonl
 data/training/qwen3_5_4b_baseline_run_spec.json
 data/training/train_qwen3_5_4b_baseline.py
+data/training/qwen3_5_4b_baseline_pipeline.json
 ```
 
 ## 실행 예시
@@ -105,6 +107,14 @@ python run_qwen4b_baseline_prep.py
 
 ```bash
 python run_qwen4b_baseline_train.py
+```
+
+merged SFT, split artifact, 4B run 준비를 한 번에 처리:
+
+```bash
+python run_qwen4b_baseline_pipeline.py ^
+  --teacher-output data/prompt_packs/teacher_outputs.jsonl ^
+  --format both
 ```
 
 ## 아직 하지 않는 것

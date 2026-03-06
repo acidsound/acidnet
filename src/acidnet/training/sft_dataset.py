@@ -25,7 +25,7 @@ def coerce_sft_examples(rows: list[dict[str, Any]]) -> list[SFTExample]:
 
 def load_jsonl(path: str | Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    with Path(path).open("r", encoding="utf-8") as handle:
+    with Path(path).open("r", encoding="utf-8-sig") as handle:
         for line in handle:
             line = line.strip()
             if line:

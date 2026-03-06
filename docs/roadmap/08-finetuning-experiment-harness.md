@@ -27,6 +27,7 @@ Code entrypoints:
 - `run_teacher_sft_split.py`
 - `run_qwen4b_baseline_prep.py`
 - `run_qwen4b_baseline_train.py`
+- `run_qwen4b_baseline_pipeline.py`
 
 ## Manifest Purpose
 
@@ -71,6 +72,7 @@ data/sft/train_teacher_sft_dataset.jsonl
 data/sft/eval_teacher_sft_dataset.jsonl
 data/training/qwen3_5_4b_baseline_run_spec.json
 data/training/train_qwen3_5_4b_baseline.py
+data/training/qwen3_5_4b_baseline_pipeline.json
 ```
 
 ## Example Commands
@@ -105,6 +107,14 @@ Prepare and launch the 4B baseline run:
 
 ```bash
 python run_qwen4b_baseline_train.py
+```
+
+Prepare merged SFT, split artifacts, and the 4B run in one pass:
+
+```bash
+python run_qwen4b_baseline_pipeline.py ^
+  --teacher-output data/prompt_packs/teacher_outputs.jsonl ^
+  --format both
 ```
 
 ## What This Does Not Do Yet
