@@ -107,7 +107,9 @@ Current note:
   - route-aware delay events now surface in world state, `regions`, and web regional route payloads
   - route pressure now raises inter-region ETA and weakens summarized throughput under bad weather
   - offscreen regional shortages and route delays now seed local regional rumors
-  - the remaining gap is offscreen actor movement and stronger multi-settlement observation runs
+  - summarized `regional_transits` now move goods between settlements without spawning full offscreen NPC loops
+  - web regional route payloads now expose summarized `transit_count`
+  - the remaining gap is stronger multi-settlement observation runs and deciding how much downstream economy impact transit should have
 
 ## Recommended Order After This
 

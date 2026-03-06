@@ -364,6 +364,11 @@ class WebSimulationRuntime:
                             "cargo_risk": round(route.cargo_risk, 2),
                             "weather_sensitivity": round(route.weather_sensitivity, 2),
                             "seasonal_capacity": round(route.seasonal_capacity, 2),
+                            "transit_count": sum(
+                                1
+                                for transit in self.simulation.world.regional_transits
+                                if transit.route_id == route.route_id
+                            ),
                             "status": "unknown"
                             if not self.simulation._is_route_visible_to_player(route)
                             else "delayed"

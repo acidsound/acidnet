@@ -1,5 +1,5 @@
 from acidnet.engine import Simulation
-from acidnet.models import WorldEvent
+from acidnet.models import RegionalTransit, WorldEvent
 
 
 def test_demo_simulation_boots_with_interactable_square() -> None:
@@ -574,6 +574,75 @@ def test_offscreen_regional_summaries_drift_over_time() -> None:
 
     after = simulation.world.regions["region.hollowmarket"].stock_signals
     assert after != before
+
+
+def test_regional_transit_spawns_from_summary_stock_imbalance() -> None:
+    simulation = Simulation.create_demo()
+    simulation.world.regions["region.greenfall"].stock_signals["wheat"] = 18
+    simulation.world.regions["region.hollowmarket"].stock_signals["wheat"] = 2
+
+    simulation.advance_turn(10)
+
+    assert any(transit.route_id == "route.greenfall.hollowmarket" for transit in simulation.world.regional_transits)
+
+
+def test_regional_transit_delivery_moves_stock_between_regions() -> None:
+    simulation = Simulation.create_demo()
+    simulation.world.weather = "clear"
+    simulation.world.regions["region.greenfall"].stock_signals["bread"] = 12
+    simulation.world.regions["region.hollowmarket"].stock_signals["bread"] = 4
+    simulation.world.regional_transits.append(
+        RegionalTransit(
+            transit_id="transit.test.delivery",
+            route_id="route.greenfall.hollowmarket",
+            from_region_id="region.greenfall",
+            to_region_id="region.hollowmarket",
+            cargo_item="bread",
+            quantity=2,
+            ticks_remaining=1,
+        )
+    )
+
+    simulation.advance_turn(1)
+
+    assert simulation.world.regions["region.greenfall"].stock_signals["bread"] == 10
+    assert simulation.world.regions["region.hollowmarket"].stock_signals["bread"] == 6
+
+
+def test_route_pressure_slows_regional_transit_progress() -> None:
+    clear_simulation = Simulation.create_demo()
+    clear_simulation.world.regional_transits.append(
+        RegionalTransit(
+            transit_id="transit.clear",
+            route_id="route.greenfall.hollowmarket",
+            from_region_id="region.greenfall",
+            to_region_id="region.hollowmarket",
+            cargo_item="bread",
+            quantity=1,
+            ticks_remaining=96,
+        )
+    )
+    clear_simulation.world.weather = "clear"
+    clear_simulation.advance_turn(1)
+    clear_remaining = clear_simulation.world.regional_transits[0].ticks_remaining
+
+    storm_simulation = Simulation.create_demo()
+    storm_simulation.world.regional_transits.append(
+        RegionalTransit(
+            transit_id="transit.storm",
+            route_id="route.greenfall.hollowmarket",
+            from_region_id="region.greenfall",
+            to_region_id="region.hollowmarket",
+            cargo_item="bread",
+            quantity=1,
+            ticks_remaining=96,
+        )
+    )
+    storm_simulation.world.weather = "storm_front"
+    storm_simulation.advance_turn(1)
+    storm_remaining = storm_simulation.world.regional_transits[0].ticks_remaining
+
+    assert storm_remaining > clear_remaining
 
 
 def test_regional_route_delay_event_appears_under_storm_front() -> None:

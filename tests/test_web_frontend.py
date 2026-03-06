@@ -34,6 +34,7 @@ def test_scene_payload_exposes_player_view_contract() -> None:
     assert any(node["is_current_region"] for node in state["scene"]["regional_nodes"])
     assert all("stock_signals" in node for node in state["scene"]["regional_nodes"])
     assert state["scene"]["regional_routes"]
+    assert all("transit_count" in route for route in state["scene"]["regional_routes"])
     assert any(action["command"] == "look" for action in state["actions"]["common"])
     assert any(action["command"] == "meal" for action in state["actions"]["common"])
     assert "people" in state["scene"]
@@ -155,3 +156,16 @@ def test_scene_payload_hides_remote_route_delay_after_region_travel() -> None:
 
     assert "route.greenfall.hollowmarket" in delayed_routes
     assert "route.greenfall.stonewatch" in unknown_routes
+
+
+def test_scene_payload_exposes_regional_transit_counts() -> None:
+    runtime = build_runtime("web_frontend_regional_transit_test")
+    try:
+        runtime.simulation.world.regions["region.greenfall"].stock_signals["wheat"] = 18
+        runtime.simulation.world.regions["region.hollowmarket"].stock_signals["wheat"] = 2
+        runtime.simulation.advance_turn(10)
+        state = runtime.scene_payload()
+    finally:
+        runtime.close()
+
+    assert any(route["transit_count"] > 0 for route in state["scene"]["regional_routes"])

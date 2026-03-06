@@ -9,6 +9,7 @@ from acidnet.models import (
     PlayerState,
     RegionNode,
     RegionalRoute,
+    RegionalTransit,
     Rumor,
     RumorCategory,
     TravelState,
@@ -146,8 +147,20 @@ def test_world_state_supports_regional_summary_fields() -> None:
                 seasonal_capacity=0.9,
             )
         ],
+        regional_transits=[
+            RegionalTransit(
+                transit_id="transit.a.b.0",
+                route_id="route.a.b",
+                from_region_id="region.a",
+                to_region_id="region.b",
+                cargo_item="bread",
+                quantity=2,
+                ticks_remaining=48,
+            )
+        ],
     )
 
     assert world.locations["square"].region_id == "region.a"
     assert world.regions["region.a"].stock_signals["bread"] == 4
     assert world.regional_routes[0].travel_ticks == 96
+    assert world.regional_transits[0].cargo_item == "bread"

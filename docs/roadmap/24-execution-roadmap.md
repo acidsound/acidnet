@@ -75,7 +75,9 @@ The current project baseline is:
 - route-aware delay events now surface in world state, regional command output, and web route metadata
 - route pressure now slows inter-region travel and dampens summarized route throughput
 - regional shortage or delay rumors now propagate into the local rumor layer from offscreen summaries
-- next work is offscreen actor movement and stronger cross-settlement circulation checks
+- summarized regional transit pulses now move goods across routes without instantiating full offscreen NPCs
+- web route payloads now surface player-visible route transit counts
+- next work is stronger cross-settlement observation roles and deciding whether summarized transit should produce richer downstream economy effects
 
 ## Immediate Next Work
 

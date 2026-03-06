@@ -59,6 +59,18 @@ class RegionalRoute(BaseModel):
     seasonal_capacity: float = Field(default=1.0, gt=0.0)
 
 
+class RegionalTransit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    transit_id: str
+    route_id: str
+    from_region_id: str
+    to_region_id: str
+    cargo_item: str
+    quantity: int = Field(default=1, ge=1)
+    ticks_remaining: int = Field(default=0, ge=0)
+
+
 class MarketItemState(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -242,6 +254,7 @@ class WorldState(BaseModel):
     locations: dict[str, Location] = Field(default_factory=dict)
     regions: dict[str, RegionNode] = Field(default_factory=dict)
     regional_routes: list[RegionalRoute] = Field(default_factory=list)
+    regional_transits: list[RegionalTransit] = Field(default_factory=list)
     market: MarketState = Field(default_factory=MarketState)
     active_events: list[WorldEvent] = Field(default_factory=list)
     npc_ids: list[str] = Field(default_factory=list)

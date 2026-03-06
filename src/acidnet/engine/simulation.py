@@ -16,6 +16,7 @@ from acidnet.models import (
     RelationshipState,
     Rumor,
     RumorCategory,
+    RegionalTransit,
     TravelState,
     WorldEvent,
     WorldState,
@@ -291,8 +292,10 @@ class Simulation:
                 right = self.world.regions[route.to_region_id].name
                 route_event = self._visible_route_delay_event_for_player(route.route_id)
                 route_status = f" | {route_event.summary}" if route_event is not None else ""
+                transit_count = sum(1 for transit in self.world.regional_transits if transit.route_id == route.route_id)
+                transit_suffix = f" | transit {transit_count}" if transit_count > 0 else ""
                 lines.append(
-                    f"- {left} <-> {right}: {self._travel_eta_turns(route.travel_ticks)} turns, risk {route.cargo_risk:.2f}{route_status}"
+                    f"- {left} <-> {right}: {self._travel_eta_turns(route.travel_ticks)} turns, risk {route.cargo_risk:.2f}{transit_suffix}{route_status}"
                 )
         return "\n".join(lines)
 
@@ -916,6 +919,9 @@ class Simulation:
         route_events = self._advance_regional_route_events()
         lines.extend(route_events)
         self.tick_log.extend(route_events)
+        transit_events = self._advance_regional_transits()
+        lines.extend(transit_events)
+        self.tick_log.extend(transit_events)
         shock_events = self._advance_world_shocks()
         lines.extend(shock_events)
         self.tick_log.extend(shock_events)
@@ -1008,6 +1014,93 @@ class Simulation:
                 self.world.active_events = [event for event in self.world.active_events if event.event_id != event_id]
                 events.append(self._route_recovery_summary(route))
         return events
+
+    def _advance_regional_transits(self) -> list[str]:
+        events: list[str] = []
+        active_transits: list[RegionalTransit] = []
+        for transit in self.world.regional_transits:
+            route = next((candidate for candidate in self.world.regional_routes if candidate.route_id == transit.route_id), None)
+            if route is None:
+                continue
+            progress_ticks = max(1, int(round(self.turn_ticks * (1.0 - self._regional_route_pressure(route) * 0.6))))
+            transit.ticks_remaining = max(0, transit.ticks_remaining - progress_ticks)
+            if transit.ticks_remaining > 0:
+                active_transits.append(transit)
+                continue
+            delivery_event = self._deliver_regional_transit(transit)
+            if delivery_event is not None:
+                events.append(delivery_event)
+        self.world.regional_transits = active_transits
+        if self.turn_counter % 10 == 0:
+            events.extend(self._spawn_regional_transits())
+        return events
+
+    def _spawn_regional_transits(self) -> list[str]:
+        events: list[str] = []
+        active_route_ids = {transit.route_id for transit in self.world.regional_transits}
+        for route in self.world.regional_routes:
+            if route.route_id in active_route_ids:
+                continue
+            planned = self._plan_regional_transit(route)
+            if planned is None:
+                continue
+            self.world.regional_transits.append(planned)
+            if self._is_route_visible_to_player(route):
+                events.append(self._regional_transit_departure_summary(planned))
+        return events
+
+    def _plan_regional_transit(self, route) -> RegionalTransit | None:
+        left = self.world.regions[route.from_region_id]
+        right = self.world.regions[route.to_region_id]
+        best_item = None
+        best_diff = 0
+        source = left
+        destination = right
+        for item in ("bread", "wheat", "fish", "tool"):
+            left_qty = left.stock_signals.get(item, 0)
+            right_qty = right.stock_signals.get(item, 0)
+            diff = abs(left_qty - right_qty)
+            if diff <= best_diff:
+                continue
+            if left_qty > right_qty:
+                source = left
+                destination = right
+            else:
+                source = right
+                destination = left
+            best_item = item
+            best_diff = diff
+        if best_item is None or best_diff < 4:
+            return None
+        source_qty = source.stock_signals.get(best_item, 0)
+        quantity = min(3, max(1, best_diff // 4))
+        if source_qty - quantity < 2:
+            return None
+        return RegionalTransit(
+            transit_id=f"transit.{route.route_id}.{best_item}.day{self.world.day}.turn{self.turn_counter}",
+            route_id=route.route_id,
+            from_region_id=source.region_id,
+            to_region_id=destination.region_id,
+            cargo_item=best_item,
+            quantity=quantity,
+            ticks_remaining=route.travel_ticks,
+        )
+
+    def _deliver_regional_transit(self, transit: RegionalTransit) -> str | None:
+        from_region = self.world.regions.get(transit.from_region_id)
+        to_region = self.world.regions.get(transit.to_region_id)
+        if from_region is None or to_region is None:
+            return None
+        max_signal = 18 if transit.cargo_item in {"fish", "tool"} else 24
+        transferable = min(transit.quantity, max(0, from_region.stock_signals.get(transit.cargo_item, 0)))
+        if transferable <= 0:
+            return None
+        from_region.stock_signals[transit.cargo_item] = max(0, from_region.stock_signals.get(transit.cargo_item, 0) - transferable)
+        to_region.stock_signals[transit.cargo_item] = min(max_signal, to_region.stock_signals.get(transit.cargo_item, 0) + transferable)
+        route = next((candidate for candidate in self.world.regional_routes if candidate.route_id == transit.route_id), None)
+        if route is None or not self._is_route_visible_to_player(route):
+            return None
+        return self._regional_transit_arrival_summary(transit)
 
     def _build_planner_context(self, npc: NPCState) -> PlannerContext:
         top_goals: list[str] = []
@@ -1724,6 +1817,15 @@ class Simulation:
     def _route_recovery_summary(self, route) -> str:
         destination = self.world.regions[route.to_region_id].name
         return f"The road toward {destination} is moving more cleanly again."
+
+    def _regional_transit_departure_summary(self, transit: RegionalTransit) -> str:
+        source = self.world.regions[transit.from_region_id].name
+        destination = self.world.regions[transit.to_region_id].name
+        return f"A small caravan leaves {source} for {destination} carrying {transit.cargo_item} x{transit.quantity}."
+
+    def _regional_transit_arrival_summary(self, transit: RegionalTransit) -> str:
+        destination = self.world.regions[transit.to_region_id].name
+        return f"A caravan reaches {destination} with {transit.cargo_item} x{transit.quantity}."
 
     def _farm_yield_amount(self) -> int:
         amount = 2

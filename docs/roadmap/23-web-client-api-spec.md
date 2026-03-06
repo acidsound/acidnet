@@ -337,6 +337,7 @@ Per-route shape:
   "cargo_risk": 0.24,
   "weather_sensitivity": 0.45,
   "seasonal_capacity": 1.0,
+  "transit_count": 1,
   "status": "delayed",
   "status_summary": "The road toward Hollow Market is slowing under the storm front, and caravans are arriving late."
 }
@@ -344,6 +345,7 @@ Per-route shape:
 
 Notes:
 
+- `transit_count` is a player-visible summarized logistics count for that route, not a full NPC list
 - `status` is player-visible route knowledge, not an omniscient logistics channel
 - expected values are currently `stable`, `delayed`, or `unknown`
 - `unknown` means the route exists in the known regional graph but the player does not currently have direct visibility into its disruption state
