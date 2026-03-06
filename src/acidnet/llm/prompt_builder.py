@@ -38,6 +38,15 @@ Do not explain your reasoning.
 """
 
 
+def preferred_output_language(system_prompt: str | None, *, default: str = "en") -> str:
+    prompt = str(system_prompt or "").lower()
+    if "한국어" in prompt or "korean" in prompt:
+        return "ko"
+    if "영어" in prompt or "english" in prompt:
+        return "en"
+    return default
+
+
 def build_system_prompt(context: DialogueContext | None = None) -> str:
     if context is not None and context.system_prompt:
         return context.system_prompt

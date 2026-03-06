@@ -70,6 +70,8 @@
 - player-facing NPC speech에서는 teacher JSON fidelity보다 runtime-aligned dialogue SFT가 중요하다
 - 월드 순환성과 entropy 안정성이 UI 확장보다 중요하다
 - player의 생존과 돈벌이 루프는 계속 같은 rule-based economy 안에 있어야 한다
+- Tk GUI 는 이제 레거시 실험 클라이언트로 보고, 새 시뮬레이션 시스템의 parity 목표로 두지 않는다
+- 프런트엔드 반복은 공유 가능한 웹 프로브를 주 관찰면으로 삼는다
 
 ## 현재 측정 상태
 
@@ -86,13 +88,22 @@
 - GUI에는 dialogue model startup readiness가 표시되고, `loading -> ready` 이벤트가 UI와 event log에 모두 남는다
 - 공유 dialogue system prompt는 이제 GUI에서 수정 가능하며, SQLite의 읽기 전용 preset 테이블과 수정 가능한 runtime settings 테이블에 저장된다
 - rumor 다양성은 더 이상 단일 wheat shortage rumor에 고정되지 않고, demo world는 여러 seeded rumor로 시작하며 weather, scarcity, supply 변화에 따라 dynamic rumor를 생성한다
+- 반복된 rumor 내용은 signature 기준으로 dedupe 되며, 오래된 dynamic rumor 는 월드에서 decay out 된다
+- 다음 월드 설계 기준선은 `docs/roadmap/20-spatial-time-exchange-model.md` 에 정리되어 있다
+- 단계별 후속 작업은 `docs/roadmap/21-frontend-world-expansion-checklist.md` 에 추적된다
+- 공유 가능한 웹 프런트엔드 기준선은 `docs/roadmap/22-web-frontend-shareable.md` 에 정리되어 있다
+- 브라우저 런타임 계약은 `docs/roadmap/23-web-client-api-spec.md` 에 정리되어 있다
+- 현재 구현 순서는 `docs/roadmap/24-execution-roadmap.md` 에 정리되어 있다
+- actor travel-cost baseline 필드로 fatigue, load, carry capacity, serialized travel state 가 추가되었다
+- stdlib 기반 첫 웹 프로브가 브라우저 URL 을 통해 derived player-view state 와 raw-command submission 을 노출한다
 
 ## 프로토타입 상태
 
 현재 저장소에는 다음이 있다.
 
 - terminal runtime: `run_acidnet.py`
-- keyboard GUI runtime: `run_acidnet_gui.py`
+- shareable web runtime: `run_acidnet_web.py`
+- keyboard GUI runtime: `run_acidnet_gui.py` (legacy exploratory client)
 - SQLite persistence path: `data/acidnet.sqlite`
 - bootstrap teacher data path: `run_bootstrap_qwen4b_pipeline.py`
 - baseline launcher: `run_qwen4b_baseline_train.py`
@@ -110,6 +121,7 @@
 - memory retrieval scoring과 belief refresh
 - deterministic fallback이 붙은 openai-compatible dialogue adapter 경계
 - world snapshot persistence
+- derived player-view scene state 위에 올린 shareable web probe
 - planner/dialogue용 synthetic teacher prompt generation
 - 외부 completion 없이 동작하는 bootstrap teacher output generation
 - latency와 fallback 측정이 들어간 prompt-only evaluation harness

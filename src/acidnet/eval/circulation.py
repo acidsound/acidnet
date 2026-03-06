@@ -94,7 +94,12 @@ def export_circulation_report_json(path: str | Path, report: CirculationReport) 
 
 
 def _classify_event(line: str) -> str:
-    if " moves to " in line or " heads toward " in line:
+    if (
+        " moves to " in line
+        or " heads toward " in line
+        or " sets out toward " in line
+        or " arrives at " in line
+    ):
         return "move"
     if " buys " in line:
         return "buy"

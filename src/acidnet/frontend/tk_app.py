@@ -85,8 +85,13 @@ class AcidNetApp(tk.Tk):
         self.dialogue_var = tk.StringVar()
         self.footer_var = tk.StringVar()
         self.monkey_button_var = tk.StringVar()
+        self.trade_mode_var = tk.StringVar(value="buy")
+        self.trade_item_var = tk.StringVar()
+        self.trade_qty_var = tk.StringVar(value="1")
+        self.trade_summary_var = tk.StringVar()
         self._location_items: dict[str, tuple[int, int]] = {}
-        self._npc_name_by_index: list[str] = []
+        self._npc_id_by_index: list[str] = []
+        self.selected_npc_id: str | None = None
         self.monkey_enabled = monkey
         self.monkey_default_steps = monkey_steps
         self.monkey_steps_remaining = monkey_steps
@@ -109,7 +114,8 @@ class AcidNetApp(tk.Tk):
             [
                 "acidnet GUI loaded.",
                 "Use arrow keys or WASD to move. Click an adjacent location on the map to travel there.",
-                "T to talk, Y to focus direct speech, R for rumor, X to work, B to buy bread, E to eat, Space to wait.",
+                "Pick a target in NPCs Here before talking or trading.",
+                "T to talk, I to inspect, Y to focus direct speech, R for rumor, B to trade the selected item, X to work, E to eat, Space to wait.",
                 f"Dialogue backend: {dialogue_backend}",
                 "Dialogue system prompt loaded from database.",
             ],
@@ -231,11 +237,12 @@ class AcidNetApp(tk.Tk):
         info_frame.columnconfigure(0, weight=1)
         info_frame.rowconfigure(1, weight=1)
         info_frame.rowconfigure(3, weight=1)
+        info_frame.rowconfigure(5, weight=1)
 
         tk.Label(info_frame, text="Location", font=FONT_TITLE, fg=FG_TEXT, bg=BG_PANEL, anchor="w").grid(
             row=0, column=0, sticky="ew"
         )
-        self.location_text = self._make_text(info_frame, height=9)
+        self.location_text = self._make_text(info_frame, height=8)
         self.location_text.grid(row=1, column=0, sticky="nsew", pady=(4, 10))
 
         tk.Label(info_frame, text="NPCs Here", font=FONT_TITLE, fg=FG_TEXT, bg=BG_PANEL, anchor="w").grid(
@@ -251,8 +258,16 @@ class AcidNetApp(tk.Tk):
             relief="flat",
             highlightthickness=0,
             font=FONT_BODY,
+            exportselection=False,
         )
         self.npc_list.grid(row=3, column=0, sticky="nsew", pady=(4, 10))
+        self.npc_list.bind("<<ListboxSelect>>", self._on_npc_selection_changed)
+
+        tk.Label(info_frame, text="Target", font=FONT_TITLE, fg=FG_TEXT, bg=BG_PANEL, anchor="w").grid(
+            row=4, column=0, sticky="ew"
+        )
+        self.target_text = self._make_text(info_frame, height=7)
+        self.target_text.grid(row=5, column=0, sticky="nsew", pady=(4, 0))
 
         action_frame = tk.Frame(sidebar, bg=BG_PANEL)
         action_frame.grid(row=5, column=0, sticky="ew", pady=(0, 10))
@@ -261,7 +276,7 @@ class AcidNetApp(tk.Tk):
 
         self._make_button(action_frame, "Talk (T)", self._talk_selected).grid(row=0, column=0, sticky="ew", padx=(0, 6))
         self._make_button(action_frame, "Rumor (R)", self._ask_rumor_selected).grid(row=0, column=1, sticky="ew", padx=3)
-        self._make_button(action_frame, "Buy Bread (B)", self._buy_bread_selected).grid(
+        self._make_button(action_frame, "Inspect (I)", self._inspect_selected).grid(
             row=0, column=2, sticky="ew", padx=(6, 0)
         )
         self._make_button(action_frame, "Work (X)", self._player_work).grid(row=1, column=0, sticky="ew", padx=(0, 6), pady=(6, 0))
@@ -282,11 +297,61 @@ class AcidNetApp(tk.Tk):
             pady=6,
         ).grid(row=2, column=1, columnspan=2, sticky="ew", padx=(3, 0), pady=(6, 0))
 
-        tk.Label(sidebar, text="Direct Speech", font=FONT_TITLE, fg=FG_TEXT, bg=BG_PANEL, anchor="w").grid(
+        tk.Label(sidebar, text="Trade", font=FONT_TITLE, fg=FG_TEXT, bg=BG_PANEL, anchor="w").grid(
             row=6, column=0, sticky="ew"
         )
+        trade_frame = tk.Frame(sidebar, bg=BG_PANEL)
+        trade_frame.grid(row=7, column=0, sticky="ew", pady=(4, 10))
+        trade_frame.columnconfigure(1, weight=1)
+        self.trade_mode_menu = self._make_option_menu(
+            trade_frame,
+            self.trade_mode_var,
+            ("buy", "sell"),
+            command=lambda _value: self._refresh_trade_controls(),
+        )
+        self.trade_mode_menu.grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        self.trade_item_menu = self._make_option_menu(
+            trade_frame,
+            self.trade_item_var,
+            ("",),
+            command=lambda _value: self._update_trade_summary(),
+        )
+        self.trade_item_menu.grid(row=0, column=1, sticky="ew", padx=3)
+        self.trade_qty_spinbox = tk.Spinbox(
+            trade_frame,
+            from_=1,
+            to=9,
+            width=4,
+            textvariable=self.trade_qty_var,
+            bg="#13171B",
+            fg=FG_TEXT,
+            insertbackground=FG_TEXT,
+            relief="flat",
+            font=FONT_BODY,
+            justify="center",
+            command=self._update_trade_summary,
+        )
+        self.trade_qty_spinbox.grid(row=0, column=2, sticky="ew", padx=3)
+        self.trade_qty_spinbox.bind("<KeyRelease>", lambda _event: self._update_trade_summary())
+        self.trade_button = self._make_button(trade_frame, "Trade (B)", self._trade_selected)
+        self.trade_button.grid(row=0, column=3, sticky="ew", padx=(6, 0))
+        self.trade_summary_label = tk.Label(
+            trade_frame,
+            textvariable=self.trade_summary_var,
+            font=("Consolas", 10),
+            justify="left",
+            anchor="w",
+            fg=FG_MUTED,
+            bg=BG_PANEL,
+            wraplength=380,
+        )
+        self.trade_summary_label.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(6, 0))
+
+        tk.Label(sidebar, text="Direct Speech", font=FONT_TITLE, fg=FG_TEXT, bg=BG_PANEL, anchor="w").grid(
+            row=8, column=0, sticky="ew"
+        )
         speak_frame = tk.Frame(sidebar, bg=BG_PANEL)
-        speak_frame.grid(row=7, column=0, sticky="ew", pady=(4, 10))
+        speak_frame.grid(row=9, column=0, sticky="ew", pady=(4, 10))
         speak_frame.columnconfigure(0, weight=1)
         self.say_entry = tk.Entry(
             speak_frame,
@@ -301,10 +366,10 @@ class AcidNetApp(tk.Tk):
         self._make_button(speak_frame, "Say", self._submit_say_selected).grid(row=0, column=1, sticky="ew")
 
         tk.Label(sidebar, text="Raw Command", font=FONT_TITLE, fg=FG_TEXT, bg=BG_PANEL, anchor="w").grid(
-            row=8, column=0, sticky="ew"
+            row=10, column=0, sticky="ew"
         )
         command_frame = tk.Frame(sidebar, bg=BG_PANEL)
-        command_frame.grid(row=9, column=0, sticky="ew", pady=(4, 0))
+        command_frame.grid(row=11, column=0, sticky="ew", pady=(4, 0))
         command_frame.columnconfigure(0, weight=1)
         self.command_entry = tk.Entry(
             command_frame,
@@ -327,7 +392,7 @@ class AcidNetApp(tk.Tk):
             bg=BG_PANEL,
             font=("Consolas", 10),
         )
-        footer.grid(row=10, column=0, sticky="ew", pady=(12, 0))
+        footer.grid(row=12, column=0, sticky="ew", pady=(12, 0))
 
     def _make_text(self, parent: tk.Widget, *, height: int) -> tk.Text:
         widget = tk.Text(
@@ -361,6 +426,38 @@ class AcidNetApp(tk.Tk):
             pady=6,
         )
 
+    def _make_option_menu(
+        self,
+        parent: tk.Widget,
+        variable: tk.StringVar,
+        values: tuple[str, ...],
+        *,
+        command=None,
+    ) -> tk.OptionMenu:
+        initial = values[0] if values else ""
+        if initial:
+            variable.set(initial)
+        widget = tk.OptionMenu(parent, variable, *values, command=command)
+        widget.configure(
+            bg="#13171B",
+            fg=FG_TEXT,
+            activebackground="#20262C",
+            activeforeground=FG_TEXT,
+            relief="flat",
+            highlightthickness=0,
+            font=FONT_BODY,
+            anchor="w",
+        )
+        widget["menu"].configure(
+            bg="#13171B",
+            fg=FG_TEXT,
+            activebackground=ACCENT,
+            activeforeground="#1A1308",
+            relief="flat",
+            font=FONT_BODY,
+        )
+        return widget
+
     def _bind_shortcuts(self) -> None:
         self.bind("<Up>", lambda _event: self._run_shortcut(lambda: self._move_direction(0, -1)))
         self.bind("<Down>", lambda _event: self._run_shortcut(lambda: self._move_direction(0, 1)))
@@ -371,9 +468,10 @@ class AcidNetApp(tk.Tk):
         self.bind("a", lambda _event: self._run_shortcut(lambda: self._move_direction(-1, 0)))
         self.bind("d", lambda _event: self._run_shortcut(lambda: self._move_direction(1, 0)))
         self.bind("t", lambda _event: self._run_shortcut(self._talk_selected))
+        self.bind("i", lambda _event: self._run_shortcut(self._inspect_selected))
         self.bind("y", lambda _event: self._focus_say_entry())
         self.bind("r", lambda _event: self._run_shortcut(self._ask_rumor_selected))
-        self.bind("b", lambda _event: self._run_shortcut(self._buy_bread_selected))
+        self.bind("b", lambda _event: self._run_shortcut(self._trade_selected))
         self.bind("x", lambda _event: self._run_shortcut(self._player_work))
         self.bind("e", lambda _event: self._run_shortcut(self._eat_best_food))
         self.bind("l", lambda _event: self._run_shortcut(self._look))
@@ -455,30 +553,128 @@ class AcidNetApp(tk.Tk):
         )
 
     def _refresh_panels(self) -> None:
-        selected_npc_name = self._selected_npc_name()
         self.selected_location_id = self.simulation.player.location_id
         self.status_var.set(self.simulation.player_status())
         self.footer_var.set(
-            "Controls: arrows/WASD move | click adjacent node | T talk | Y direct speech | R rumor | X work | B buy bread | E eat | M monkey | Space wait | L look"
+            "Controls: arrows/WASD move | click adjacent node | select target in NPC list | T talk | I inspect | Y direct speech | R rumor | B trade selected item | E eat | M monkey | Space wait | L look"
         )
         self._set_text(self.location_text, self.simulation.describe_location())
         self._set_text(self.rumor_text, self.simulation.known_rumors_text())
 
         npcs_here = [npc for npc in self.simulation.npcs.values() if npc.location_id == self.simulation.player.location_id]
+        self._sync_selected_npc(npcs_here)
         self.npc_list.delete(0, tk.END)
-        self._npc_name_by_index = []
+        self._npc_id_by_index = []
         for npc in npcs_here:
             entry = f"{npc.name} ({npc.profession})"
             self.npc_list.insert(tk.END, entry)
-            self._npc_name_by_index.append(npc.name)
-        if npcs_here:
+            self._npc_id_by_index.append(npc.npc_id)
+        self.npc_list.selection_clear(0, tk.END)
+        if self.selected_npc_id is not None:
             try:
-                selected_index = self._npc_name_by_index.index(selected_npc_name) if selected_npc_name else 0
+                selected_index = self._npc_id_by_index.index(self.selected_npc_id)
             except ValueError:
-                selected_index = 0
-            self.npc_list.selection_set(selected_index)
+                selected_index = None
+            if selected_index is not None:
+                self.npc_list.selection_set(selected_index)
 
+        self._refresh_target_panel()
+        self._refresh_trade_controls()
         self._render_world()
+
+    def _sync_selected_npc(self, npcs_here) -> None:
+        npc_ids = {npc.npc_id for npc in npcs_here}
+        focused_npc = self.simulation.player.focused_npc_id
+        if focused_npc in npc_ids:
+            self.selected_npc_id = focused_npc
+        elif self.selected_npc_id not in npc_ids:
+            self.selected_npc_id = npcs_here[0].npc_id if len(npcs_here) == 1 else None
+        self.simulation.player.focused_npc_id = self.selected_npc_id
+
+    def _refresh_target_panel(self) -> None:
+        npc = self._selected_npc()
+        if npc is None:
+            self._set_text(self.target_text, "No target selected.\nPick someone in NPCs Here to talk, inspect, or trade.")
+            return
+        self._set_text(self.target_text, self.simulation.npc_detail_text(npc.npc_id))
+
+    def _set_option_menu_values(self, widget: tk.OptionMenu, variable: tk.StringVar, values: list[str], *, command=None) -> None:
+        menu = widget["menu"]
+        menu.delete(0, "end")
+        if not values:
+            variable.set("")
+            menu.add_command(label="(none)", command=lambda: None)
+            widget.configure(state="disabled")
+            return
+        for value in values:
+            menu.add_command(label=value, command=tk._setit(variable, value, command))
+        widget.configure(state="normal")
+        if variable.get() not in values:
+            variable.set(values[0])
+
+    def _refresh_trade_controls(self) -> None:
+        npc = self._selected_npc()
+        if npc is None:
+            self.trade_button.configure(state="disabled")
+            self._set_option_menu_values(self.trade_item_menu, self.trade_item_var, [])
+            self.trade_summary_var.set("Select a target before trading.")
+            self.trade_qty_spinbox.configure(to=1)
+            self.trade_qty_var.set("1")
+            return
+
+        options = self.simulation.player_trade_options(npc.npc_id, mode=self.trade_mode_var.get())
+        self._set_option_menu_values(
+            self.trade_item_menu,
+            self.trade_item_var,
+            [option.item for option in options],
+            command=lambda _value: self._update_trade_summary(),
+        )
+        max_quantity = max((option.quantity for option in options), default=1)
+        self.trade_qty_spinbox.configure(to=max_quantity)
+        try:
+            quantity = int(self.trade_qty_var.get())
+        except ValueError:
+            quantity = 1
+        if quantity < 1 or quantity > max_quantity:
+            self.trade_qty_var.set("1")
+        self.trade_button.configure(state="normal" if options else "disabled")
+        if not options:
+            if self.trade_mode_var.get() == "sell" and not npc.is_vendor:
+                self.trade_summary_var.set(f"{npc.name} is not buying goods right now.")
+            elif self.trade_mode_var.get() == "sell":
+                self.trade_summary_var.set("You have nothing to sell here.")
+            else:
+                self.trade_summary_var.set(f"{npc.name} has nothing available to buy right now.")
+            return
+        self._update_trade_summary()
+
+    def _update_trade_summary(self) -> None:
+        npc = self._selected_npc()
+        if npc is None:
+            self.trade_summary_var.set("Select a target before trading.")
+            return
+        option = None
+        for candidate in self.simulation.player_trade_options(npc.npc_id, mode=self.trade_mode_var.get()):
+            if candidate.item == self.trade_item_var.get():
+                option = candidate
+                break
+        if option is None:
+            self.trade_summary_var.set("Select an item to trade.")
+            return
+        try:
+            quantity = max(1, int(self.trade_qty_var.get()))
+        except ValueError:
+            quantity = 1
+            self.trade_qty_var.set("1")
+        total = option.price * quantity
+        if self.trade_mode_var.get() == "buy":
+            self.trade_summary_var.set(
+                f"{npc.name} offers {option.item} x{option.quantity} at {option.price}g each. Total {total}g. You have {self.simulation.player.money}g."
+            )
+            return
+        self.trade_summary_var.set(
+            f"You can sell up to {option.quantity} {option.item} to {npc.name} at {option.price}g each. Total {total}g."
+        )
 
     def _set_text(self, widget: tk.Text, content: str) -> None:
         widget.configure(state="normal")
@@ -533,11 +729,37 @@ class AcidNetApp(tk.Tk):
         location = self.simulation.world.locations[location_id]
         self._append_log([f"Selected {location.name}."], kind="ui")
 
-    def _selected_npc_name(self) -> str | None:
+    def _on_npc_selection_changed(self, _event=None) -> None:
         selection = self.npc_list.curselection()
-        if selection:
-            return self._npc_name_by_index[selection[0]]
-        return self._npc_name_by_index[0] if self._npc_name_by_index else None
+        self.selected_npc_id = self._npc_id_by_index[selection[0]] if selection else None
+        self.simulation.player.focused_npc_id = self.selected_npc_id
+        self._refresh_target_panel()
+        self._refresh_trade_controls()
+        self._render_world()
+
+    def _selected_npc(self):
+        if self.selected_npc_id is None:
+            return None
+        npc = self.simulation.npcs.get(self.selected_npc_id)
+        if npc is None or npc.location_id != self.simulation.player.location_id:
+            self.selected_npc_id = None
+            self.simulation.player.focused_npc_id = None
+            return None
+        return npc
+
+    def _selected_npc_name(self) -> str | None:
+        npc = self._selected_npc()
+        return npc.name if npc is not None else None
+
+    def _require_selected_npc(self, action: str):
+        npc = self._selected_npc()
+        if npc is not None:
+            return npc
+        if self._npc_id_by_index:
+            self._append_log([f"Choose who to {action} from NPCs Here first."], kind="ui")
+            return None
+        self._append_log(["No NPC is available here."], kind="ui")
+        return None
 
     def _text_input_has_focus(self) -> bool:
         return self.focus_get() in {self.command_entry, self.say_entry}
@@ -665,9 +887,8 @@ class AcidNetApp(tk.Tk):
             self._run_command(command)
 
     def _submit_say_selected(self, _event=None) -> None:
-        npc_name = self._selected_npc_name()
-        if npc_name is None:
-            self._append_log(["No NPC is available here."], kind="ui")
+        npc = self._require_selected_npc("speak to")
+        if npc is None:
             return
         message = self.say_entry.get().strip()
         if not message:
@@ -675,28 +896,41 @@ class AcidNetApp(tk.Tk):
             self.say_entry.focus_set()
             return
         self.say_entry.delete(0, tk.END)
-        self._run_command(f"say {npc_name} {message}")
+        self._run_command(f"say {npc.name} {message}")
 
     def _talk_selected(self) -> None:
-        npc_name = self._selected_npc_name()
-        if npc_name is None:
-            self._append_log(["No NPC is available here."], kind="ui")
+        npc = self._require_selected_npc("talk to")
+        if npc is None:
             return
-        self._run_command(f"talk {npc_name}")
+        self._run_command(f"talk {npc.name}")
 
     def _ask_rumor_selected(self) -> None:
-        npc_name = self._selected_npc_name()
-        if npc_name is None:
-            self._append_log(["No NPC is available here."], kind="ui")
+        npc = self._require_selected_npc("ask")
+        if npc is None:
             return
-        self._run_command(f"ask {npc_name} rumor")
+        self._run_command(f"ask {npc.name} rumor")
 
-    def _buy_bread_selected(self) -> None:
-        npc_name = self._selected_npc_name()
-        if npc_name is None:
-            self._append_log(["No vendor is available here."], kind="ui")
+    def _inspect_selected(self) -> None:
+        npc = self._require_selected_npc("inspect")
+        if npc is None:
             return
-        self._run_command(f"trade {npc_name} buy bread 1")
+        self._run_command(f"inspect {npc.name}")
+
+    def _trade_selected(self) -> None:
+        npc = self._require_selected_npc("trade with")
+        if npc is None:
+            return
+        item = self.trade_item_var.get().strip()
+        if not item:
+            self._append_log(["Choose an item in the Trade section first."], kind="ui")
+            return
+        try:
+            quantity = int(self.trade_qty_var.get())
+        except ValueError:
+            self.trade_qty_var.set("1")
+            self._append_log(["Trade quantity must be an integer."], kind="ui")
+            return
+        self._run_command(f"trade {npc.name} {self.trade_mode_var.get()} {item} {quantity}")
 
     def _player_work(self) -> None:
         self._run_command("work")

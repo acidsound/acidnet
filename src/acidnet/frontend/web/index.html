@@ -1,0 +1,869 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>acidnet web probe</title>
+  <style>
+    :root {
+      --bg: #13100d;
+      --panel: rgba(36, 29, 22, 0.92);
+      --panel-strong: rgba(53, 41, 30, 0.96);
+      --ink: #f4ead2;
+      --muted: #c6b79b;
+      --accent: #d08c3f;
+      --accent-soft: #8d6b43;
+      --line: rgba(255, 233, 194, 0.14);
+      --input: #e6b66a;
+      --focus: rgba(110, 211, 184, 0.45);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Aptos", "Segoe UI Variable", "Trebuchet MS", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top, rgba(208, 140, 63, 0.18), transparent 34%),
+        linear-gradient(160deg, #19130f 0%, #0f1216 100%);
+    }
+
+    .shell {
+      width: min(1560px, calc(100vw - 24px));
+      margin: 12px auto;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: rgba(15, 12, 9, 0.84);
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+      backdrop-filter: blur(14px);
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 1.8fr 1fr;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .hero,
+    .status-strip,
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 14px 16px;
+    }
+
+    .hero h1 {
+      margin: 0;
+      font-family: "Cascadia Code", "Consolas", monospace;
+      font-size: 1.3rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .hero p,
+    .status-strip p {
+      margin: 6px 0 0;
+      color: var(--muted);
+    }
+
+    .status-strip {
+      display: grid;
+      align-content: center;
+      gap: 8px;
+    }
+
+    .status-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      font-family: "Cascadia Code", "Consolas", monospace;
+      font-size: 0.92rem;
+    }
+
+    .status-pill {
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(360px, 0.85fr);
+      gap: 12px;
+      align-items: start;
+    }
+
+    .main-column,
+    .side-column {
+      display: grid;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .panel h2 {
+      margin: 0 0 10px;
+      font-family: "Cascadia Code", "Consolas", monospace;
+      font-size: 0.96rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #f5cd8b;
+    }
+
+    .scene-text,
+    .detail-text,
+    .feed-entry,
+    .help-text,
+    textarea {
+      white-space: pre-wrap;
+      line-height: 1.45;
+    }
+
+    .command-row,
+    .actions,
+    .trade-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    button,
+    select,
+    input,
+    textarea {
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: var(--panel-strong);
+      color: var(--ink);
+      padding: 10px 12px;
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+      transition: transform 140ms ease, border-color 140ms ease, background 140ms ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      border-color: rgba(245, 205, 139, 0.45);
+    }
+
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    button.primary {
+      background: linear-gradient(180deg, rgba(208, 140, 63, 0.36), rgba(121, 77, 35, 0.86));
+    }
+
+    .command-row input {
+      flex: 1 1 320px;
+      min-width: 0;
+    }
+
+    .feed-panel {
+      min-height: 72vh;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    .feed-list {
+      display: grid;
+      gap: 10px;
+      align-content: start;
+      max-height: 72vh;
+      overflow: auto;
+      padding-right: 6px;
+    }
+
+    .feed-entry {
+      border-left: 3px solid var(--accent-soft);
+      padding-left: 10px;
+      font-size: 0.95rem;
+    }
+
+    .feed-entry small {
+      display: block;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .feed-entry.system { border-color: #90c0ff; }
+    .feed-entry.npc { border-color: #6ed3b8; }
+    .feed-entry.input { border-color: var(--input); }
+    .feed-entry.world { border-color: #e6d7a6; }
+    .feed-entry.ui { border-color: #d9a441; }
+
+    .map-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      min-height: 280px;
+    }
+
+    .tile {
+      min-height: 84px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent),
+        rgba(76, 58, 42, 0.72);
+      display: grid;
+      place-items: center;
+      text-align: center;
+      padding: 10px;
+      cursor: pointer;
+    }
+
+    .tile.current {
+      background:
+        linear-gradient(180deg, rgba(74, 163, 162, 0.3), transparent),
+        rgba(34, 68, 74, 0.88);
+      border-color: var(--focus);
+    }
+
+    .tile.disabled {
+      opacity: 0.52;
+      cursor: not-allowed;
+    }
+
+    .glyph {
+      font-family: "Cascadia Code", "Consolas", monospace;
+      font-size: 1.9rem;
+      line-height: 1;
+    }
+
+    .tile-name {
+      margin-top: 6px;
+      font-size: 0.9rem;
+    }
+
+    .tile-meta {
+      margin-top: 2px;
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+
+    .people {
+      display: grid;
+      gap: 10px;
+    }
+
+    .person {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.03);
+      cursor: pointer;
+      transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+    }
+
+    .person:hover {
+      transform: translateY(-1px);
+      border-color: rgba(245, 205, 139, 0.36);
+    }
+
+    .person.target {
+      border-color: rgba(245, 205, 139, 0.48);
+      background: rgba(208, 140, 63, 0.09);
+    }
+
+    .person-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      font-weight: 700;
+      align-items: center;
+    }
+
+    .person-meta,
+    .subtle {
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+
+    .stock,
+    .inventory-list {
+      margin-top: 8px;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .chip {
+      border-radius: 999px;
+      padding: 4px 8px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.04);
+      font-size: 0.76rem;
+    }
+
+    .trade-row > * {
+      flex: 1 1 120px;
+      min-width: 0;
+    }
+
+    .panel-stack {
+      display: grid;
+      gap: 10px;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 220px;
+      resize: vertical;
+    }
+
+    .details-panel summary {
+      cursor: pointer;
+      color: #f5cd8b;
+      font-family: "Cascadia Code", "Consolas", monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      list-style: none;
+    }
+
+    .details-panel summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .details-panel[open] summary {
+      margin-bottom: 10px;
+    }
+
+    .empty {
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    @media (max-width: 1200px) {
+      .layout,
+      .topbar {
+        grid-template-columns: 1fr;
+      }
+
+      .feed-panel {
+        min-height: 52vh;
+      }
+
+      .feed-list {
+        max-height: 52vh;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="topbar">
+      <section class="hero">
+        <h1>acidnet web probe</h1>
+        <p>The feed is the main observation surface. Everything else should support simulation reading and action, not compete with it.</p>
+      </section>
+      <section class="status-strip">
+        <div class="status-row" id="world-status"></div>
+        <p id="dialogue-status">Loading simulation state...</p>
+      </section>
+    </div>
+
+    <div class="layout">
+      <div class="main-column">
+        <section class="panel">
+          <h2>Village Map</h2>
+          <div class="map-grid" id="map-grid"></div>
+        </section>
+
+        <section class="panel">
+          <h2>Command</h2>
+          <div class="command-row">
+            <input id="command-input" placeholder="Type any raw command">
+            <button type="button" onclick="runCommandInput()" class="primary">Run</button>
+          </div>
+          <div class="actions" id="common-actions" style="margin-top: 10px;"></div>
+        </section>
+
+        <section class="panel feed-panel">
+          <h2>Event Feed</h2>
+          <div class="feed-list" id="feed-list"></div>
+        </section>
+      </div>
+
+      <div class="side-column">
+        <section class="panel">
+          <h2>Scene</h2>
+          <div class="scene-text" id="scene-text"></div>
+        </section>
+
+        <section class="panel">
+          <h2>Player</h2>
+          <div class="detail-text" id="player-text"></div>
+          <div class="inventory-list" id="player-inventory" style="margin-top: 10px;"></div>
+        </section>
+
+        <section class="panel">
+          <h2>People Here</h2>
+          <div class="subtle">Click a person card to focus them. Click the focused card again to clear the target.</div>
+          <div class="people" id="people-list" style="margin-top: 10px;"></div>
+        </section>
+
+        <section class="panel">
+          <h2>Target</h2>
+          <div class="detail-text" id="target-text"></div>
+          <div class="actions" id="target-actions" style="margin-top: 10px;"></div>
+        </section>
+
+        <section class="panel">
+          <h2>Trade</h2>
+          <div class="trade-row">
+            <select id="trade-mode">
+              <option value="buy">buy</option>
+              <option value="sell">sell</option>
+            </select>
+            <select id="trade-item"></select>
+            <input id="trade-qty" type="number" min="1" value="1">
+            <button type="button" onclick="runTrade()" class="primary">Trade</button>
+          </div>
+          <p id="trade-summary" class="empty" style="margin: 10px 0 0;"></p>
+        </section>
+
+        <section class="panel">
+          <h2>Known Rumors</h2>
+          <div class="panel-stack" id="rumor-list"></div>
+        </section>
+
+        <details class="panel details-panel">
+          <summary>System Prompt</summary>
+          <div class="subtle" id="prompt-status">Loading prompt...</div>
+          <textarea id="prompt-editor" spellcheck="false"></textarea>
+          <div class="actions" style="margin-top: 10px;">
+            <button type="button" onclick="savePrompt()" class="primary">Save</button>
+            <button type="button" onclick="resetPrompt()">Reset Default</button>
+            <button type="button" onclick="loadPrompt()">Reload</button>
+          </div>
+        </details>
+
+        <details class="panel details-panel">
+          <summary>Help</summary>
+          <div class="help-text" id="help-text"></div>
+        </details>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let latestState = null;
+
+    function appendButton(parent, label, onClick, options = {}) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = label;
+      if (options.primary) {
+        button.classList.add('primary');
+      }
+      if (options.disabled) {
+        button.disabled = true;
+      }
+      button.onclick = onClick;
+      parent.appendChild(button);
+      return button;
+    }
+
+    function appendEmpty(parent, text) {
+      const node = document.createElement('div');
+      node.className = 'empty';
+      node.textContent = text;
+      parent.appendChild(node);
+    }
+
+    async function fetchState() {
+      const response = await fetch('/api/state');
+      latestState = await response.json();
+      render(latestState);
+    }
+
+    async function sendCommand(command) {
+      const response = await fetch('/api/command', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({command}),
+      });
+      const payload = await response.json();
+      latestState = payload.state || latestState;
+      render(latestState);
+      if (!response.ok && payload.error) {
+        alert(payload.error);
+      }
+    }
+
+    async function loadPrompt() {
+      const response = await fetch('/api/dialogue-prompt');
+      const payload = await response.json();
+      document.getElementById('prompt-editor').value = payload.current_prompt;
+      document.getElementById('prompt-status').textContent = `Current prompt: ${payload.current_lines} lines, ${payload.current_chars} chars.`;
+    }
+
+    async function savePrompt() {
+      const prompt = document.getElementById('prompt-editor').value;
+      const response = await fetch('/api/dialogue-prompt', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({prompt}),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        alert(payload.error || 'Failed to save prompt.');
+        return;
+      }
+      document.getElementById('prompt-editor').value = payload.prompt.current_prompt;
+      document.getElementById('prompt-status').textContent = payload.message;
+      await fetchState();
+    }
+
+    async function resetPrompt() {
+      const response = await fetch('/api/dialogue-prompt', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({reset_default: true}),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        alert(payload.error || 'Failed to reset prompt.');
+        return;
+      }
+      document.getElementById('prompt-editor').value = payload.prompt.current_prompt;
+      document.getElementById('prompt-status').textContent = payload.message;
+      await fetchState();
+    }
+
+    function runCommandInput() {
+      const input = document.getElementById('command-input');
+      const command = input.value.trim();
+      if (!command) {
+        return;
+      }
+      input.value = '';
+      sendCommand(command);
+    }
+
+    function toggleNpcTarget(npcId, isTarget) {
+      sendCommand(isTarget ? 'focus clear' : `focus ${npcId}`);
+    }
+
+    function talkTo(npcId) {
+      sendCommand(`talk ${npcId}`);
+    }
+
+    function askRumor(npcId) {
+      sendCommand(`ask ${npcId} rumor`);
+    }
+
+    function goTo(locationId, isAdjacent, isCurrent) {
+      if (isCurrent) {
+        sendCommand('look');
+        return;
+      }
+      if (!isAdjacent) {
+        alert('That location is not directly connected from here yet.');
+        return;
+      }
+      sendCommand(`go ${locationId}`);
+    }
+
+    function currentTarget() {
+      const focusedId = latestState?.player?.focused_npc_id;
+      return latestState?.scene?.people?.find((person) => person.npc_id === focusedId) || null;
+    }
+
+    function updateTradeControls() {
+      const mode = document.getElementById('trade-mode').value;
+      const itemSelect = document.getElementById('trade-item');
+      const qtyInput = document.getElementById('trade-qty');
+      const summary = document.getElementById('trade-summary');
+      const target = currentTarget();
+      const options = target ? (mode === 'buy' ? target.buy_options : target.sell_options) : [];
+
+      itemSelect.innerHTML = '';
+      if (!target) {
+        summary.textContent = 'Pick a target before trading.';
+        return;
+      }
+      if (!options.length) {
+        summary.textContent = mode === 'buy'
+          ? `${target.name} has nothing available to buy right now.`
+          : `${target.name} is not taking anything from you right now.`;
+        return;
+      }
+
+      for (const option of options) {
+        const element = document.createElement('option');
+        element.value = option.item;
+        element.textContent = `${option.item} (${option.price}g, x${option.quantity})`;
+        itemSelect.appendChild(element);
+      }
+
+      const selected = options.find((entry) => entry.item === itemSelect.value) || options[0];
+      const qty = Math.max(1, Math.min(Number(qtyInput.value || '1'), selected.quantity));
+      qtyInput.max = String(selected.quantity);
+      qtyInput.value = String(qty);
+      const total = selected.price * qty;
+      summary.textContent = mode === 'buy'
+        ? `${target.name} offers ${selected.item} x${selected.quantity}. Buying ${qty} costs ${total} gold.`
+        : `${target.name} will take up to ${selected.quantity} ${selected.item}. Selling ${qty} returns ${total} gold.`;
+    }
+
+    function runTrade() {
+      const target = currentTarget();
+      if (!target) {
+        alert('Pick a target before trading.');
+        return;
+      }
+      const mode = document.getElementById('trade-mode').value;
+      const item = document.getElementById('trade-item').value;
+      const qty = Number(document.getElementById('trade-qty').value || '1');
+      if (!item) {
+        alert('Choose an item to trade.');
+        return;
+      }
+      sendCommand(`trade ${target.npc_id} ${mode} ${item} ${qty}`);
+    }
+
+    function renderCommonActions(state) {
+      const commonActions = document.getElementById('common-actions');
+      commonActions.innerHTML = '';
+      for (const action of state.actions.common) {
+        const label = action.command === 'meal' && action.item ? `Meal (${action.item})` : action.label;
+        appendButton(commonActions, label, () => sendCommand(action.command), {
+          primary: action.command === 'meal',
+          disabled: action.enabled === false,
+        });
+      }
+    }
+
+    function renderTargetActions(state) {
+      const targetActions = document.getElementById('target-actions');
+      targetActions.innerHTML = '';
+      for (const action of state.actions.target) {
+        appendButton(targetActions, action.label, () => sendCommand(action.command), {
+          primary: action.command === 'inspect',
+          disabled: action.enabled === false,
+        });
+      }
+    }
+
+    function renderMap(state) {
+      const mapGrid = document.getElementById('map-grid');
+      mapGrid.innerHTML = '';
+      for (const node of state.scene.map_nodes) {
+        const tile = document.createElement('button');
+        tile.type = 'button';
+        tile.className = `tile${node.is_player_here ? ' current' : ''}${(!node.is_adjacent && !node.is_player_here) ? ' disabled' : ''}`;
+        tile.style.gridRow = node.row;
+        tile.style.gridColumn = node.column;
+        tile.onclick = () => goTo(node.location_id, node.is_adjacent, node.is_player_here);
+
+        const shell = document.createElement('div');
+        const glyph = document.createElement('div');
+        const name = document.createElement('div');
+        const meta = document.createElement('div');
+
+        glyph.className = 'glyph';
+        glyph.textContent = node.is_player_here ? '@' : node.glyph;
+        name.className = 'tile-name';
+        name.textContent = node.name;
+        meta.className = 'tile-meta';
+        meta.textContent = `${node.kind} | npcs ${node.occupant_count}`;
+
+        shell.appendChild(glyph);
+        shell.appendChild(name);
+        shell.appendChild(meta);
+        tile.appendChild(shell);
+        mapGrid.appendChild(tile);
+      }
+    }
+
+    function renderPeople(state) {
+      const peopleList = document.getElementById('people-list');
+      peopleList.innerHTML = '';
+
+      for (const person of state.scene.people) {
+        const card = document.createElement('div');
+        const head = document.createElement('div');
+        const name = document.createElement('span');
+        const profession = document.createElement('span');
+        const meta = document.createElement('div');
+        const stock = document.createElement('div');
+        const actions = document.createElement('div');
+
+        card.className = `person${person.is_target ? ' target' : ''}`;
+        card.tabIndex = 0;
+        card.onclick = () => toggleNpcTarget(person.npc_id, person.is_target);
+        card.onkeydown = (event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            toggleNpcTarget(person.npc_id, person.is_target);
+          }
+        };
+        head.className = 'person-head';
+        meta.className = 'person-meta';
+        stock.className = 'stock';
+        actions.className = 'actions';
+        actions.style.marginTop = '8px';
+
+        name.textContent = person.name;
+        profession.textContent = person.profession;
+        meta.textContent = `${person.mood}${person.is_vendor ? ' | vendor' : ''}`;
+
+        head.appendChild(name);
+        head.appendChild(profession);
+
+        if (person.stock.length) {
+          for (const entry of person.stock) {
+            const chip = document.createElement('span');
+            chip.className = 'chip';
+            chip.textContent = `${entry.item} x${entry.quantity}`;
+            stock.appendChild(chip);
+          }
+        } else {
+          appendEmpty(stock, 'no visible stock');
+        }
+
+        appendButton(actions, 'Talk', (event) => {
+          event?.stopPropagation?.();
+          talkTo(person.npc_id);
+        });
+        appendButton(actions, 'Rumor', (event) => {
+          event?.stopPropagation?.();
+          askRumor(person.npc_id);
+        });
+        for (const button of actions.querySelectorAll('button')) {
+          button.addEventListener('click', (event) => event.stopPropagation());
+        }
+
+        card.appendChild(head);
+        card.appendChild(meta);
+        card.appendChild(stock);
+        card.appendChild(actions);
+        peopleList.appendChild(card);
+      }
+
+      if (!state.scene.people.length) {
+        appendEmpty(peopleList, 'No one is here.');
+      }
+    }
+
+    function renderPlayer(state) {
+      const travel = state.player.travel_state;
+      const travelLine = travel?.is_traveling
+        ? `\ntravel: ${travel.destination_location_id || 'unknown'} (${travel.ticks_remaining} ticks left)`
+        : '';
+      document.getElementById('player-text').textContent =
+        `${state.player.name}\n` +
+        `money: ${state.player.money} gold\n` +
+        `hunger: ${state.player.hunger}/100\n` +
+        `fatigue: ${state.player.fatigue}/100\n` +
+        `load: ${state.player.carried_weight}/${state.player.carry_capacity}` +
+        travelLine;
+
+      const inventory = document.getElementById('player-inventory');
+      inventory.innerHTML = '';
+      if (state.player.inventory.length) {
+        for (const entry of state.player.inventory) {
+          const chip = document.createElement('span');
+          chip.className = 'chip';
+          chip.textContent = `${entry.item} x${entry.quantity}`;
+          inventory.appendChild(chip);
+        }
+      } else {
+        appendEmpty(inventory, 'inventory empty');
+      }
+    }
+
+    function renderRumors(state) {
+      const rumorList = document.getElementById('rumor-list');
+      rumorList.innerHTML = '';
+      for (const rumor of state.scene.rumors) {
+        const entry = document.createElement('div');
+        const meta = document.createElement('small');
+        entry.className = 'feed-entry';
+        entry.textContent = rumor.content;
+        meta.textContent = `confidence ${rumor.confidence.toFixed(2)}`;
+        entry.appendChild(meta);
+        rumorList.appendChild(entry);
+      }
+      if (!state.scene.rumors.length) {
+        appendEmpty(rumorList, 'You do not know any rumors yet.');
+      }
+    }
+
+    function renderFeed(state) {
+      const feedList = document.getElementById('feed-list');
+      feedList.innerHTML = '';
+      for (const event of [...state.recent_events].reverse()) {
+        const entry = document.createElement('div');
+        const meta = document.createElement('small');
+        entry.className = `feed-entry ${event.kind}`;
+        entry.textContent = event.text;
+        meta.textContent = `day ${String(event.day).padStart(2, '0')} tick ${String(event.tick).padStart(4, '0')} | ${event.kind}`;
+        entry.appendChild(meta);
+        feedList.appendChild(entry);
+      }
+    }
+
+    function render(state) {
+      if (!state) {
+        return;
+      }
+
+      const worldStatus = document.getElementById('world-status');
+      worldStatus.innerHTML = '';
+      for (const text of [
+        `day ${String(state.world.day).padStart(2, '0')}`,
+        `tick ${String(state.world.tick).padStart(4, '0')}`,
+        state.world.weather,
+        `location ${state.world.location_name}`,
+      ]) {
+        const node = document.createElement('span');
+        node.className = 'status-pill';
+        node.textContent = text;
+        worldStatus.appendChild(node);
+      }
+
+      document.getElementById('dialogue-status').textContent = state.dialogue.message;
+      document.getElementById('scene-text').textContent = state.scene.description;
+      document.getElementById('target-text').textContent = state.target?.detail_text || 'No interaction target selected.';
+      document.getElementById('help-text').textContent = state.help.join('\n');
+
+      renderCommonActions(state);
+      renderPlayer(state);
+      renderPeople(state);
+      renderTargetActions(state);
+      renderMap(state);
+      renderRumors(state);
+      renderFeed(state);
+      updateTradeControls();
+    }
+
+    document.getElementById('trade-mode').addEventListener('change', updateTradeControls);
+    document.getElementById('trade-item').addEventListener('change', updateTradeControls);
+    document.getElementById('trade-qty').addEventListener('input', updateTradeControls);
+    document.getElementById('command-input').addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        runCommandInput();
+      }
+    });
+
+    loadPrompt();
+    fetchState();
+    setInterval(fetchState, 2500);
+  </script>
+</body>
+</html>

@@ -144,6 +144,17 @@ class Intent(BaseModel):
     priority: float = Field(default=0.5, ge=0.0, le=1.0)
 
 
+class TravelState(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    is_traveling: bool = False
+    route_id: str | None = None
+    origin_location_id: str | None = None
+    destination_location_id: str | None = None
+    ticks_remaining: int = Field(default=0, ge=0)
+    risk_budget: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
 class NPCState(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -159,11 +170,15 @@ class NPCState(BaseModel):
     workplace_id: str | None = None
     inventory: dict[str, int] = Field(default_factory=dict)
     hunger: float = Field(default=0.0, ge=0.0, le=100.0)
+    fatigue: float = Field(default=0.0, ge=0.0, le=100.0)
+    carried_weight: float = Field(default=0.0, ge=0.0)
+    carry_capacity: float = Field(default=12.0, gt=0.0)
     energy: float = Field(default=100.0, ge=0.0, le=100.0)
     money: int = Field(default=0, ge=0)
     health: float = Field(default=100.0, ge=0.0, le=100.0)
     social_status: float = Field(default=0.0, ge=0.0, le=1.0)
     is_vendor: bool = False
+    travel_state: TravelState = Field(default_factory=TravelState)
     current_intent: Intent | None = None
     relationships: dict[str, RelationshipState] = Field(default_factory=dict)
     beliefs: list[Belief] = Field(default_factory=list)
@@ -176,9 +191,14 @@ class PlayerState(BaseModel):
     player_id: str = "player"
     name: str = "Player"
     location_id: str
+    focused_npc_id: str | None = None
     inventory: dict[str, int] = Field(default_factory=dict)
     hunger: float = Field(default=5.0, ge=0.0, le=100.0)
+    fatigue: float = Field(default=0.0, ge=0.0, le=100.0)
+    carried_weight: float = Field(default=0.0, ge=0.0)
+    carry_capacity: float = Field(default=14.0, gt=0.0)
     money: int = Field(default=40, ge=0)
+    travel_state: TravelState = Field(default_factory=TravelState)
     known_rumor_ids: list[str] = Field(default_factory=list)
 
 

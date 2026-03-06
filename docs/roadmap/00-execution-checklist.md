@@ -70,6 +70,11 @@ In practical terms, this means:
 - runtime-aligned dialogue SFT matters more than teacher JSON fidelity for player-facing NPC speech
 - world circulation and entropy stability matter more than UI scale-up
 - player survival and earning loops must stay inside the same rule-based economy
+- before a larger frontend push, lock graph-based travel time, actor movement cost, and unified exchange as core simulation rules
+- let the frontend consume derived player-view scene state, not raw persistence snapshots
+- use bounded goal-monkey evaluation to stress travel, exchange, and shock handling before expanding world scale
+- treat the Tk GUI as a legacy exploratory client, not as a parity target for new simulation systems
+- use the shareable web probe as the main feedback surface for frontend-facing iteration
 
 Current measured status:
 
@@ -86,13 +91,22 @@ Current measured status:
 - the GUI now shows dialogue-model startup readiness and logs both loading and ready events
 - the shared dialogue system prompt is now editable through the GUI and stored in SQLite with a read-only preset table plus editable runtime settings
 - rumor diversity is no longer anchored to a single wheat-shortage rumor; the demo world now starts with multiple seeded rumors and generates additional dynamic rumors from weather, scarcity, and supply shifts
+- repeated rumor content is now deduped by signature and stale dynamic rumors now decay out of the world instead of stacking forever
+- the next world-design baseline is now documented in `docs/roadmap/20-spatial-time-exchange-model.md`
+- phased follow-up work is now tracked in `docs/roadmap/21-frontend-world-expansion-checklist.md`
+- the shareable web-frontend baseline is now documented in `docs/roadmap/22-web-frontend-shareable.md`
+- the browser-facing runtime contract is now documented in `docs/roadmap/23-web-client-api-spec.md`
+- the current implementation sequence is now documented in `docs/roadmap/24-execution-roadmap.md`
+- actor travel-cost baseline fields now exist for fatigue, load, carry capacity, and serialized travel state
+- a first stdlib-backed web probe now exposes derived player-view state and raw-command submission through a browser URL
 
 ## Prototype Status
 
 There is now a playable prototype in the repo with:
 
 - terminal runtime: `run_acidnet.py`
-- keyboard GUI runtime: `run_acidnet_gui.py`
+- shareable web runtime: `run_acidnet_web.py`
+- keyboard GUI runtime: `run_acidnet_gui.py` (legacy exploratory client)
 - SQLite persistence path: `data/acidnet.sqlite`
 - bootstrap teacher data path: `run_bootstrap_qwen4b_pipeline.py`
 - baseline launcher: `run_qwen4b_baseline_train.py`
@@ -110,6 +124,7 @@ Implemented systems:
 - memory retrieval scoring and belief refresh
 - openai-compatible dialogue adapter boundary with deterministic fallback
 - world snapshot persistence
+- shareable web probe over derived player-view scene state
 - synthetic teacher prompt generation for planner and dialogue tasks
 - bootstrap teacher output generation without external completion dependency
 - prompt-only baseline evaluation harness with latency and fallback reporting

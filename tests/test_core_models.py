@@ -1,6 +1,6 @@
 from pydantic import ValidationError
 
-from acidnet.models import Intent, IntentType, NPCState, PersonaProfile, Rumor, RumorCategory
+from acidnet.models import Intent, IntentType, NPCState, PersonaProfile, PlayerState, Rumor, RumorCategory, TravelState
 
 
 def test_persona_profile_supports_bias_fields() -> None:
@@ -67,3 +67,38 @@ def test_npc_state_embeds_intent_and_rumor_ids() -> None:
     assert npc.current_intent is not None
     assert npc.current_intent.intent_type == IntentType.SHARE_RUMOR
     assert rumor.category == RumorCategory.SHORTAGE
+
+
+def test_travel_state_bounds_are_validated() -> None:
+    travel_state = TravelState(
+        is_traveling=True,
+        route_id="route.square.bakery",
+        origin_location_id="square",
+        destination_location_id="bakery",
+        ticks_remaining=24,
+        risk_budget=0.35,
+    )
+
+    assert travel_state.is_traveling is True
+    assert travel_state.ticks_remaining == 24
+
+    try:
+        TravelState(ticks_remaining=-1)
+    except ValidationError:
+        return
+
+    raise AssertionError("TravelState ticks_remaining should be validated")
+
+
+def test_player_state_supports_travel_and_load_fields() -> None:
+    player = PlayerState(
+        location_id="square",
+        fatigue=14.0,
+        carried_weight=3.5,
+        carry_capacity=14.0,
+        travel_state=TravelState(destination_location_id="bakery", ticks_remaining=18),
+    )
+
+    assert player.fatigue == 14.0
+    assert player.carried_weight == 3.5
+    assert player.travel_state.destination_location_id == "bakery"

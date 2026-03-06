@@ -16,6 +16,7 @@ from acidnet.models import (
     RelationshipState,
     Rumor,
     RumorCategory,
+    TravelState,
     WorldState,
 )
 from acidnet.planner import HeuristicPlanner, PlannerContext
@@ -24,6 +25,10 @@ from acidnet.world import build_demo_setup
 FOOD_ITEMS = ("stew", "bread", "fish", "wheat")
 ITEM_VALUES = {"wheat": 2, "bread": 5, "fish": 4, "stew": 7, "tool": 15}
 CONSUMPTION_VALUE = {"wheat": 10.0, "bread": 26.0, "fish": 21.0, "stew": 34.0}
+ITEM_WEIGHTS = {"wheat": 0.6, "bread": 0.5, "fish": 0.8, "stew": 1.1, "tool": 3.0}
+RUMOR_DECAY_PER_TURN = 0.003
+RUMOR_VALUE_DECAY_PER_TURN = 0.002
+RUMOR_DYNAMIC_STALE_TICKS = 8 * 60
 WORK_OUTPUT = {
     "farmer": ("wheat", 2),
     "fisher": ("fish", 2),
@@ -34,6 +39,34 @@ WORK_WAGES = {
     "guard": 6,
     "priest": 6,
     "tailor": 6,
+}
+TRAVEL_EDGE_BASE_TICKS = {
+    frozenset(("square", "tavern")): 24,
+    frozenset(("square", "bakery")): 18,
+    frozenset(("square", "smithy")): 18,
+    frozenset(("square", "farm")): 28,
+    frozenset(("square", "shrine")): 16,
+    frozenset(("tavern", "riverside")): 26,
+    frozenset(("farm", "riverside")): 24,
+}
+WEATHER_TRAVEL_MULTIPLIERS = {
+    "clear": 1.0,
+    "cool_rain": 1.1,
+    "dry_wind": 1.08,
+    "market_day": 1.0,
+    "dusty_heat": 1.15,
+    "storm_front": 1.35,
+}
+STORM_BLOCKED_EDGES = {
+    frozenset(("tavern", "riverside")),
+    frozenset(("farm", "riverside")),
+}
+SHELTER_RATINGS = {
+    "rest": 0.95,
+    "social": 0.82,
+    "workshop": 0.62,
+    "market": 0.55,
+    "resource": 0.34,
 }
 
 
@@ -64,6 +97,13 @@ class TurnResult:
         return [{"kind": entry.kind, "text": entry.text} for entry in self.entries]
 
 
+@dataclass(slots=True, frozen=True)
+class TradeOption:
+    item: str
+    quantity: int
+    price: int
+
+
 class Simulation:
     def __init__(
         self,
@@ -87,6 +127,8 @@ class Simulation:
         self.dialogue_system_prompt = dialogue_system_prompt or DEFAULT_SYSTEM_PROMPT
         self.turn_ticks = 12
         self.turn_counter = 0
+        self._normalize_rumor_state()
+        self._refresh_actor_loads()
 
     @classmethod
     def create_demo(
@@ -115,6 +157,7 @@ class Simulation:
         )
 
     def snapshot(self) -> dict[str, Any]:
+        self._refresh_actor_loads()
         return {
             "world": self.world.model_dump(mode="json"),
             "player": self.player.model_dump(mode="json"),
@@ -145,16 +188,23 @@ class Simulation:
             [
                 "Commands:",
                 "  look                     Show the current location.",
+                "  look <npc>               Inspect a person at your location.",
+                "  inspect [npc]            Inspect the focused or named NPC.",
                 "  where                    Show nearby locations.",
                 "  map                      List all locations.",
                 "  go <location>            Move to a neighboring location.",
-                "  talk <npc>               Talk to an NPC at your location.",
+                "  focus <npc>              Set the current interaction target.",
+                "  focus clear              Clear the current interaction target.",
+                "  talk [npc]               Talk to the focused or named NPC.",
                 "  say <npc> <message>      Speak to an NPC using your own words.",
-                "  ask <npc> rumor          Ask an NPC for their latest rumor.",
+                "  ask [npc] rumor          Ask the focused or named NPC for their latest rumor.",
                 "  work                     Do local work or gather resources here.",
-                "  eat <item>               Consume food from your inventory.",
-                "  trade <npc> buy <item> <qty>",
-                "  trade <npc> sell <item> <qty>",
+                "  eat [item]               Consume a named food, or the best meal if omitted.",
+                "  meal                     Consume the best available food.",
+                "  rest [turns]             Recover a little fatigue in place.",
+                "  sleep [turns]            Recover more fatigue, affected by shelter quality.",
+                "  trade [npc] buy <item> <qty>",
+                "  trade [npc] sell <item> <qty>",
                 "  inventory                Show your inventory and gold.",
                 "  status                   Show player and world status.",
                 "  rumors                   Show rumors you know.",
@@ -166,13 +216,17 @@ class Simulation:
         )
 
     def describe_location(self) -> str:
+        if self.player.travel_state.is_traveling:
+            return self._player_travel_text()
         location = self.world.locations[self.player.location_id]
         npcs = self._npcs_at(location.location_id)
+        focused_npc = self._focused_npc_here()
         npc_lines = []
         for npc in npcs:
             mood = self._npc_mood(npc)
             stock = self._vendor_stock_line(npc)
-            npc_lines.append(f"- {npc.name} ({npc.profession}, {mood}){stock}")
+            marker = " [target]" if focused_npc is not None and focused_npc.npc_id == npc.npc_id else ""
+            npc_lines.append(f"- {npc.name}{marker} ({npc.profession}, {mood}){stock}")
         exits = ", ".join(self.world.locations[loc_id].name for loc_id in location.neighbors)
         return "\n".join(
             [
@@ -191,14 +245,28 @@ class Simulation:
         return "\n".join(lines)
 
     def player_status(self) -> str:
+        self._refresh_actor_loads()
+        focused_npc = self._focused_npc_here()
+        location_line = f"{self.player.name} is at {self.world.locations[self.player.location_id].name}."
+        if self.player.travel_state.is_traveling:
+            origin_name = self.world.locations[self.player.travel_state.origin_location_id or self.player.location_id].name
+            destination_id = self.player.travel_state.destination_location_id or self.player.location_id
+            destination_name = self.world.locations[destination_id].name
+            location_line = f"{self.player.name} is traveling from {origin_name} to {destination_name}."
         lines = [
             f"Day {self.world.day}, tick {self.world.tick}, weather: {self.world.weather}",
-            f"{self.player.name} is at {self.world.locations[self.player.location_id].name}.",
+            location_line,
+            f"Target: {focused_npc.name if focused_npc is not None else 'none'}",
             f"Hunger: {self.player.hunger:.1f}/100",
+            f"Fatigue: {self.player.fatigue:.1f}/100",
+            f"Load: {self.player.carried_weight:.1f}/{self.player.carry_capacity:.1f}",
             f"Money: {self.player.money} gold",
             f"Inventory: {self._format_inventory(self.player.inventory)}",
             f"Known rumors: {len(self.player.known_rumor_ids)}",
         ]
+        if self.player.travel_state.is_traveling:
+            destination = self.player.travel_state.destination_location_id or "unknown"
+            lines.append(f"Travel: en route to {destination} ({self.player.travel_state.ticks_remaining} ticks remaining)")
         if self.tick_log:
             lines.append("Recent world events:")
             lines.extend(f"- {entry}" for entry in list(self.tick_log)[-5:])
@@ -208,15 +276,83 @@ class Simulation:
         if not self.player.known_rumor_ids:
             return "You do not know any rumors yet."
         lines = ["Rumors you know:"]
-        for rumor in self._sorted_known_rumors(self.player.known_rumor_ids):
+        for rumor in self._sorted_known_rumors(self.player.known_rumor_ids, dedupe_by_signature=True):
             lines.append(f"- {rumor.content} (confidence {rumor.confidence:.2f})")
         return "\n".join(lines)
 
     def npcs_here_text(self) -> str:
+        if self.player.travel_state.is_traveling:
+            return "You are on the road right now and cannot interact with anyone."
         npcs = self._npcs_at(self.player.location_id)
         if not npcs:
             return "There are no NPCs here."
-        return "\n".join(f"- {npc.name} ({npc.profession})" for npc in npcs)
+        focused_npc = self._focused_npc_here()
+        lines = []
+        for npc in npcs:
+            marker = " [target]" if focused_npc is not None and focused_npc.npc_id == npc.npc_id else ""
+            lines.append(f"- {npc.name}{marker} ({npc.profession})")
+        return "\n".join(lines)
+
+    def player_trade_options(self, npc_query: str | None = None, *, mode: str = "buy") -> list[TradeOption]:
+        npc = self._resolve_npc_here(npc_query) if npc_query else self._focused_npc_here()
+        if npc is None:
+            return []
+
+        mode = mode.lower()
+        if mode == "buy":
+            inventory = npc.inventory
+            buy_from_vendor = True
+        elif mode == "sell":
+            if not npc.is_vendor:
+                return []
+            inventory = self.player.inventory
+            buy_from_vendor = False
+        else:
+            return []
+
+        options: list[TradeOption] = []
+        for item in ITEM_VALUES:
+            quantity = inventory.get(item, 0)
+            if quantity <= 0:
+                continue
+            options.append(
+                TradeOption(
+                    item=item,
+                    quantity=quantity,
+                    price=self._price_for(npc, item, buy_from_vendor=buy_from_vendor),
+                )
+            )
+        return options
+
+    def npc_detail_text(self, npc_query: str | None = None) -> str:
+        self._refresh_actor_loads()
+        npc = self._resolve_npc_here(npc_query) if npc_query else self._focused_npc_here()
+        if npc is None:
+            return "No interaction target selected."
+
+        location = self.world.locations[npc.location_id].name
+        buy_options = self.player_trade_options(npc.npc_id, mode="buy")
+        sell_options = self.player_trade_options(npc.npc_id, mode="sell")
+        lines = [
+            f"Target: {npc.name} ({npc.profession})",
+            f"Location: {location}",
+            f"Mood: {self._npc_mood(npc)} | Money: {npc.money} gold",
+            f"Fatigue: {npc.fatigue:.1f}/100 | Load: {npc.carried_weight:.1f}/{npc.carry_capacity:.1f}",
+            f"Inventory: {self._format_inventory(npc.inventory)}",
+            "Buy: " + (", ".join(f"{option.item} x{option.quantity} ({option.price}g)" for option in buy_options) if buy_options else "nothing available."),
+        ]
+        if npc.is_vendor:
+            sell_line = (
+                ", ".join(f"{option.item} x{option.quantity} ({option.price}g)" for option in sell_options)
+                if sell_options
+                else "nothing from your inventory."
+            )
+            lines.append(f"Sell: {sell_line}")
+        else:
+            lines.append("Sell: this NPC is not buying goods.")
+        if npc.known_rumor_ids:
+            lines.append(f"Rumors known: {len(npc.known_rumor_ids)}")
+        return "\n".join(lines)
 
     def _events(self, kind: str, lines: Iterable[str]) -> list[TurnEvent]:
         return [TurnEvent(kind=kind, text=line) for line in lines if line]
@@ -226,21 +362,52 @@ class Simulation:
         return TurnEvent(kind="npc", text=f"{npc.name}: {cleaned}")
 
     def move_player(self, location_query: str) -> TurnResult:
+        if self.player.travel_state.is_traveling:
+            return TurnResult(self._events("system", [self._travel_command_block_message()]))
         destination = self._resolve_location(location_query)
         if destination is None:
             return TurnResult(self._events("system", [f'Unknown location "{location_query}".']))
         current = self.world.locations[self.player.location_id]
         if destination.location_id not in current.neighbors:
             return TurnResult(self._events("system", [f"You cannot go directly to {destination.name} from here."]))
-        self.player.location_id = destination.location_id
-        entries = self._events("system", [f"You move to {destination.name}.", self.describe_location()])
+        blocked_reason = self._travel_block_reason(current.location_id, destination.location_id, self.player)
+        if blocked_reason:
+            return TurnResult(self._events("system", [blocked_reason]))
+        total_ticks = self._begin_travel(self.player, destination.location_id)
+        self.player.focused_npc_id = None
+        entries = self._events(
+            "system",
+            [f"You set out for {destination.name}. ETA {self._travel_eta_turns(total_ticks)} turns ({total_ticks} ticks)."],
+        )
         entries.extend(self.advance_turn(1).entries)
         return TurnResult(entries)
 
-    def talk_to_npc(self, npc_query: str) -> TurnResult:
+    def set_player_focus(self, npc_query: str | None) -> TurnResult:
+        if npc_query is None:
+            focused_npc = self._focused_npc_here()
+            if focused_npc is None:
+                return TurnResult(self._events("system", ["No interaction target is selected."]))
+            return TurnResult(self._events("system", [f"Current target: {focused_npc.name}."]))
+        lowered = npc_query.strip().lower()
+        if lowered in {"clear", "none"}:
+            self.player.focused_npc_id = None
+            return TurnResult(self._events("system", ["Interaction target cleared."]))
         npc = self._resolve_npc_here(npc_query)
         if npc is None:
             return TurnResult(self._events("system", [f'No NPC named "{npc_query}" is here.']))
+        self.player.focused_npc_id = npc.npc_id
+        return TurnResult(self._events("system", [f"Interaction target set to {npc.name}.", self.npc_detail_text(npc.npc_id)]))
+
+    def inspect_npc(self, npc_query: str | None = None) -> TurnResult:
+        npc, error = self._resolve_interaction_npc(npc_query, action="inspect")
+        if npc is None:
+            return TurnResult(self._events("system", [error]))
+        return TurnResult(self._events("system", [self.npc_detail_text(npc.npc_id)]))
+
+    def talk_to_npc(self, npc_query: str | None = None) -> TurnResult:
+        npc, error = self._resolve_interaction_npc(npc_query, action="talk to")
+        if npc is None:
+            return TurnResult(self._events("system", [error]))
 
         player_prompt = "What is going on around here?"
         entries = [self._npc_dialogue_event(npc, self._generate_dialogue(npc, interaction_mode="talk", player_prompt=player_prompt))]
@@ -253,9 +420,9 @@ class Simulation:
         return TurnResult(entries)
 
     def say_to_npc(self, npc_query: str, player_message: str) -> TurnResult:
-        npc = self._resolve_npc_here(npc_query)
+        npc, error = self._resolve_interaction_npc(npc_query, action="talk to")
         if npc is None:
-            return TurnResult(self._events("system", [f'No NPC named "{npc_query}" is here.']))
+            return TurnResult(self._events("system", [error]))
 
         player_prompt = " ".join(player_message.split())
         if not player_prompt:
@@ -277,10 +444,10 @@ class Simulation:
         entries.extend(self.advance_turn(1).entries)
         return TurnResult(entries)
 
-    def ask_npc(self, npc_query: str, topic: str) -> TurnResult:
-        npc = self._resolve_npc_here(npc_query)
+    def ask_npc(self, npc_query: str | None, topic: str) -> TurnResult:
+        npc, error = self._resolve_interaction_npc(npc_query, action="ask")
         if npc is None:
-            return TurnResult(self._events("system", [f'No NPC named "{npc_query}" is here.']))
+            return TurnResult(self._events("system", [error]))
         if topic.lower() != "rumor":
             return TurnResult(
                 [self._npc_dialogue_event(npc, 'tilts their head. "Ask about rumors if you want local news."')]
@@ -333,7 +500,41 @@ class Simulation:
         entries.extend(self.advance_turn(1).entries)
         return TurnResult(entries)
 
+    def player_meal(self) -> TurnResult:
+        best_item = self._best_food_in_inventory(self.player.inventory)
+        if best_item is None:
+            return TurnResult(self._events("system", ["You have no food to eat."]))
+        return self.player_eat(best_item)
+
+    def player_rest(self, turns: int = 1, *, sleep: bool = False) -> TurnResult:
+        if self.player.travel_state.is_traveling:
+            return TurnResult(self._events("system", [self._travel_command_block_message()]))
+        turns = max(1, turns)
+        shelter = self._shelter_rating(self.player.location_id)
+        quality = self._shelter_label(shelter)
+        intro = (
+            f"You settle in for sleep at {self.world.locations[self.player.location_id].name}. Shelter is {quality} ({shelter:.2f})."
+            if sleep
+            else f"You stop to rest at {self.world.locations[self.player.location_id].name}. Shelter is {quality} ({shelter:.2f})."
+        )
+        entries = self._events("system", [intro])
+        for _ in range(turns):
+            entries.extend(self.advance_turn(1).entries)
+            self._apply_recovery(self.player, location_id=self.player.location_id, sleep=sleep)
+        action_name = "sleep" if sleep else "rest"
+        entries.extend(
+            self._events(
+                "system",
+                [f"After {action_name}, hunger is {self.player.hunger:.1f} and fatigue is {self.player.fatigue:.1f}."],
+            )
+        )
+        return TurnResult(entries)
+
     def player_work(self) -> TurnResult:
+        if self.player.travel_state.is_traveling:
+            return TurnResult(self._events("system", [self._travel_command_block_message()]))
+        if self.player.fatigue >= 85:
+            return TurnResult(self._events("system", ["You are too exhausted to work. Rest or sleep first."]))
         location = self.world.locations[self.player.location_id]
         lines: list[str] = []
         if location.location_id == "farm":
@@ -366,23 +567,26 @@ class Simulation:
             summary=f"Worked at {location.name}.",
             importance=0.4,
         )
+        self.player.fatigue = min(100.0, self.player.fatigue + 8.0)
         entries = self._events("system", lines)
         entries.extend(self.advance_turn(1).entries)
         return TurnResult(entries)
 
-    def trade_with_npc(self, npc_query: str, mode: str, item_query: str, qty: int) -> TurnResult:
-        npc = self._resolve_npc_here(npc_query)
-        if npc is None:
-            return TurnResult(self._events("system", [f'No NPC named "{npc_query}" is here.']))
-        if qty <= 0:
-            return TurnResult(self._events("system", ["Quantity must be greater than zero."]))
+    def trade_with_npc(self, npc_query: str | None, mode: str, item_query: str, qty: int) -> TurnResult:
         item = self._resolve_item(item_query)
         if item is None:
             return TurnResult(self._events("system", [f'Unknown item "{item_query}".']))
+        if qty <= 0:
+            return TurnResult(self._events("system", ["Quantity must be greater than zero."]))
 
         mode = mode.lower()
         if mode not in {"buy", "sell"}:
             return TurnResult(self._events("system", ['Trade mode must be "buy" or "sell".']))
+        candidates = self._trade_candidates(mode, item, qty)
+        action = f"{mode} {item}"
+        npc, error = self._resolve_interaction_npc(npc_query, action=action, candidates=candidates)
+        if npc is None:
+            return TurnResult(self._events("system", [error]))
 
         lines: list[str] = []
         if mode == "buy":
@@ -444,10 +648,20 @@ class Simulation:
         if not parts:
             return TurnResult([])
         command = parts[0].lower()
+        if self.player.travel_state.is_traveling and command in {"go", "focus", "target", "inspect", "talk", "say", "tell", "ask", "trade", "work"}:
+            return TurnResult(self._events("system", [self._travel_command_block_message()]))
         if command == "help":
             return TurnResult(self._events("system", [self.help_text()]))
-        if command in {"look", "where"}:
+        if command == "where":
             return TurnResult(self._events("system", [self.describe_location()]))
+        if command == "look":
+            if len(parts) == 1:
+                return TurnResult(self._events("system", [self.describe_location()]))
+            if parts[1].lower() == "at" and len(parts) >= 3:
+                return self.inspect_npc(" ".join(parts[2:]))
+            return self.inspect_npc(" ".join(parts[1:]))
+        if command == "inspect":
+            return self.inspect_npc(" ".join(parts[1:]) if len(parts) >= 2 else None)
         if command == "map":
             return TurnResult(self._events("system", [self.list_map()]))
         if command == "inventory":
@@ -460,24 +674,46 @@ class Simulation:
             return TurnResult(self._events("system", [self.known_rumors_text()]))
         if command == "npcs":
             return TurnResult(self._events("system", [self.npcs_here_text()]))
+        if command in {"focus", "target"}:
+            return self.set_player_focus(" ".join(parts[1:]) if len(parts) >= 2 else None)
         if command in {"work", "gather", "forage"}:
             return self.player_work()
-        if command == "eat" and len(parts) >= 2:
-            return self.player_eat(" ".join(parts[1:]))
+        if command == "eat":
+            if len(parts) >= 2:
+                return self.player_eat(" ".join(parts[1:]))
+            return self.player_meal()
+        if command == "meal":
+            return self.player_meal()
+        if command == "rest":
+            turns = 1
+            if len(parts) >= 2:
+                try:
+                    turns = int(parts[1])
+                except ValueError:
+                    return TurnResult(self._events("system", ["Rest amount must be an integer."]))
+            return self.player_rest(turns, sleep=False)
+        if command == "sleep":
+            turns = 3
+            if len(parts) >= 2:
+                try:
+                    turns = int(parts[1])
+                except ValueError:
+                    return TurnResult(self._events("system", ["Sleep amount must be an integer."]))
+            return self.player_rest(turns, sleep=True)
         if command == "go" and len(parts) >= 2:
             return self.move_player(" ".join(parts[1:]))
-        if command == "talk" and len(parts) >= 2:
-            return self.talk_to_npc(" ".join(parts[1:]))
+        if command == "talk":
+            return self.talk_to_npc(" ".join(parts[1:]) if len(parts) >= 2 else None)
         if command in {"say", "tell"} and len(parts) >= 3:
             return self.say_to_npc(parts[1], " ".join(parts[2:]))
-        if command == "ask" and len(parts) >= 3:
-            return self.ask_npc(parts[1], " ".join(parts[2:]))
-        if command == "trade" and len(parts) == 5:
+        if command == "ask" and len(parts) >= 2:
+            return self.ask_npc(" ".join(parts[1:-1]) if len(parts) >= 3 else None, parts[-1])
+        if command == "trade" and len(parts) >= 4:
             try:
-                qty = int(parts[4])
+                qty = int(parts[-1])
             except ValueError:
                 return TurnResult(self._events("system", ["Trade quantity must be an integer."]))
-            return self.trade_with_npc(parts[1], parts[2], parts[3], qty)
+            return self.trade_with_npc(" ".join(parts[1:-3]) if len(parts) > 4 else None, parts[-3], parts[-2], qty)
         if command == "wait":
             turns = 1
             if len(parts) >= 2:
@@ -495,15 +731,25 @@ class Simulation:
         lines: list[str] = []
 
         self.player.hunger = min(100.0, self.player.hunger + 1.2)
+        self.player.fatigue = min(100.0, self.player.fatigue + 0.45)
+        lines.extend(self._advance_player_travel())
         self._advance_weather()
         self._refresh_dynamic_rumors()
+        self._decay_rumors()
         for npc in self.npcs.values():
             npc.hunger = min(100.0, npc.hunger + 1.6)
+            npc.fatigue = min(100.0, npc.fatigue + 0.55)
             self._refresh_beliefs_for_npc(npc)
 
         self._refresh_market_snapshot()
         for npc_id in sorted(self.npcs):
             npc = self.npcs[npc_id]
+            if npc.travel_state.is_traveling:
+                event = self._advance_npc_travel(npc)
+                if event:
+                    lines.append(event)
+                    self.tick_log.append(event)
+                continue
             context = self._build_planner_context(npc)
             npc.current_intent = self.planner.plan(context).intent
             event = self._execute_npc_intent(npc)
@@ -536,6 +782,16 @@ class Simulation:
                     elif fallback_location is not None:
                         top_goals.append(f"move:{fallback_location}")
 
+        if npc.fatigue >= 78:
+            if npc.home_location_id and npc.location_id != npc.home_location_id:
+                top_goals.append(f"move:{npc.home_location_id}")
+            elif self._shelter_rating(npc.location_id) >= 0.65:
+                top_goals.append("sleep")
+            else:
+                top_goals.append("rest")
+        elif npc.fatigue >= 58:
+            top_goals.append("rest")
+
         rumor_target = self._rumor_share_target(npc)
         if rumor_target is not None:
             top_goals.append(f"share_rumor:{rumor_target.npc_id}")
@@ -566,8 +822,11 @@ class Simulation:
         if intent.intent_type is IntentType.MOVE and intent.target_location:
             next_hop = self._next_hop(npc.location_id, intent.target_location)
             if next_hop and next_hop != npc.location_id:
-                npc.location_id = next_hop
-                return f"{npc.name} moves to {self.world.locations[next_hop].name}."
+                blocked_reason = self._travel_block_reason(npc.location_id, next_hop, npc)
+                if blocked_reason:
+                    return f"{npc.name} delays travel because the route is unsafe."
+                travel_ticks = self._begin_travel(npc, next_hop)
+                return f"{npc.name} sets out toward {self.world.locations[next_hop].name} ({self._travel_eta_turns(travel_ticks)} turns)."
             return None
         if intent.intent_type is IntentType.EAT and intent.target_id:
             if npc.inventory.get(intent.target_id, 0) > 0:
@@ -584,17 +843,22 @@ class Simulation:
             if target is not None:
                 return self._share_rumor(npc, target)
             return None
+        if intent.intent_type is IntentType.REST:
+            return self._recover_npc(npc)
         if intent.intent_type is IntentType.WORK:
             return self._perform_work(npc)
         return None
 
     def _perform_work(self, npc: NPCState) -> str | None:
+        if npc.fatigue >= 88:
+            return f"{npc.name} is too worn down to work and slows to a stop."
         if npc.profession in WORK_OUTPUT:
             item, amount = self._work_output_for(npc.profession)
             self._adjust_item(npc.inventory, item, amount)
             income = self._work_income(npc)
             if income > 0:
                 npc.money += income
+            npc.fatigue = min(100.0, npc.fatigue + 7.0)
             self._record_memory(
                 npc_id=npc.npc_id,
                 event_type="work",
@@ -621,11 +885,12 @@ class Simulation:
                     return f"{npc.name} gathers emergency wheat stores."
                 destination = self._next_hop(npc.location_id, farmer.location_id)
                 if destination and destination != npc.location_id:
-                    npc.location_id = destination
-                    return f"{npc.name} heads toward the farm for wheat."
+                    travel_ticks = self._begin_travel(npc, destination)
+                    return f"{npc.name} heads toward the farm for wheat ({self._travel_eta_turns(travel_ticks)} turns)."
                 return None
             self._adjust_item(npc.inventory, "wheat", -1)
             self._adjust_item(npc.inventory, "bread", 2)
+            npc.fatigue = min(100.0, npc.fatigue + 7.0)
             return f"{npc.name} bakes fresh bread."
         if npc.profession == "cook":
             if npc.inventory.get("fish", 0) <= 0:
@@ -638,15 +903,17 @@ class Simulation:
                     return f"{npc.name} secures a small backup fish stock."
                 destination = self._next_hop(npc.location_id, fisher.location_id)
                 if destination and destination != npc.location_id:
-                    npc.location_id = destination
-                    return f"{npc.name} heads toward the riverside for fish."
+                    travel_ticks = self._begin_travel(npc, destination)
+                    return f"{npc.name} heads toward the riverside for fish ({self._travel_eta_turns(travel_ticks)} turns)."
                 return None
             self._adjust_item(npc.inventory, "fish", -1)
             self._adjust_item(npc.inventory, "stew", 1)
+            npc.fatigue = min(100.0, npc.fatigue + 7.0)
             return f"{npc.name} cooks a pot of stew."
         income = self._work_income(npc)
         if income > 0:
             npc.money += income
+            npc.fatigue = min(100.0, npc.fatigue + 6.0)
             self._record_memory(
                 npc_id=npc.npc_id,
                 event_type="work",
@@ -657,6 +924,7 @@ class Simulation:
         fallback_item = self._wild_food_item_at_location(npc.location_id)
         if fallback_item is not None and npc.hunger >= 60:
             self._adjust_item(npc.inventory, fallback_item, 1)
+            npc.fatigue = min(100.0, npc.fatigue + 5.0)
             return f"{npc.name} forages {fallback_item} to stay fed."
         return None
 
@@ -692,7 +960,7 @@ class Simulation:
         rumor = self._preferred_rumor_to_share(speaker, listener)
         if rumor is None:
             return None
-        if rumor.rumor_id not in listener.known_rumor_ids:
+        if not self._knows_rumor(listener.known_rumor_ids, rumor):
             listener.known_rumor_ids.append(rumor.rumor_id)
         rumor.hop_count += 1
         rumor.last_shared_tick = self.world.tick
@@ -711,8 +979,11 @@ class Simulation:
         rumor = self._preferred_rumor_to_share_to_player(npc)
         if rumor is None:
             return None
-        if rumor.rumor_id not in self.player.known_rumor_ids:
+        if not self._knows_rumor(self.player.known_rumor_ids, rumor):
             self.player.known_rumor_ids.append(rumor.rumor_id)
+        rumor.hop_count += 1
+        rumor.last_shared_tick = self.world.tick
+        rumor.confidence = max(0.15, rumor.confidence - 0.02)
         prefix = "leans closer" if asked else "adds quietly"
         return f'{npc.name} {prefix}: "{rumor.content}"'
 
@@ -739,7 +1010,7 @@ class Simulation:
             location_id=npc.location_id,
             limit=4,
         )
-        visible_rumors = [self.rumors[rumor_id] for rumor_id in npc.known_rumor_ids if rumor_id in self.rumors]
+        visible_rumors = self._sorted_known_rumors(npc.known_rumor_ids, dedupe_by_signature=True)
         return DialogueContext(
             npc=npc,
             persona=self.personas[npc.persona_id],
@@ -952,7 +1223,20 @@ class Simulation:
         value: float,
         holders: list[str],
     ) -> None:
-        if rumor_id in self.rumors:
+        existing = self.rumors.get(rumor_id) or self._find_matching_rumor(
+            origin_npc_id=origin_npc_id,
+            subject_id=subject_id,
+            content=content,
+            category=category,
+        )
+        if existing is not None:
+            existing.confidence = max(existing.confidence, confidence)
+            existing.value = max(existing.value, value)
+            existing.last_shared_tick = self.world.tick
+            for holder_id in holders:
+                holder = self.npcs.get(holder_id)
+                if holder is not None and not self._knows_rumor(holder.known_rumor_ids, existing):
+                    holder.known_rumor_ids.append(existing.rumor_id)
             return
         rumor = Rumor(
             rumor_id=rumor_id,
@@ -973,8 +1257,10 @@ class Simulation:
             if holder is not None and rumor_id not in holder.known_rumor_ids:
                 holder.known_rumor_ids.append(rumor_id)
 
-    def _sorted_known_rumors(self, rumor_ids: Iterable[str]) -> list[Rumor]:
+    def _sorted_known_rumors(self, rumor_ids: Iterable[str], *, dedupe_by_signature: bool = False) -> list[Rumor]:
         available = [self.rumors[rumor_id] for rumor_id in rumor_ids if rumor_id in self.rumors]
+        if dedupe_by_signature:
+            available = list(self._dedupe_rumors(available).values())
         return sorted(available, key=self._rumor_sort_key, reverse=True)
 
     def _rumor_sort_key(self, rumor: Rumor) -> tuple[float, int, float, int]:
@@ -1068,16 +1354,18 @@ class Simulation:
         return None
 
     def _preferred_rumor_to_share(self, speaker: NPCState, listener: NPCState) -> Rumor | None:
+        known_signatures = self._known_rumor_signatures(listener.known_rumor_ids)
         unknown = [
             rumor
-            for rumor in self._sorted_known_rumors(speaker.known_rumor_ids)
-            if rumor.rumor_id not in listener.known_rumor_ids
+            for rumor in self._sorted_known_rumors(speaker.known_rumor_ids, dedupe_by_signature=True)
+            if self._rumor_signature(rumor) not in known_signatures
         ]
         return unknown[0] if unknown else None
 
     def _preferred_rumor_to_share_to_player(self, speaker: NPCState) -> Rumor | None:
-        ranked = self._sorted_known_rumors(speaker.known_rumor_ids)
-        unknown = [rumor for rumor in ranked if rumor.rumor_id not in self.player.known_rumor_ids]
+        ranked = self._sorted_known_rumors(speaker.known_rumor_ids, dedupe_by_signature=True)
+        known_signatures = self._known_rumor_signatures(self.player.known_rumor_ids)
+        unknown = [rumor for rumor in ranked if self._rumor_signature(rumor) not in known_signatures]
         if unknown:
             return unknown[0]
         return ranked[0] if ranked else None
@@ -1085,7 +1373,7 @@ class Simulation:
     def _nearest_food_vendor(self, npc: NPCState, *, affordable_only: bool = False) -> NPCState | None:
         candidates: list[tuple[int, int, float, NPCState]] = []
         for other in self.npcs.values():
-            if other.npc_id == npc.npc_id or not other.is_vendor:
+            if other.npc_id == npc.npc_id or not other.is_vendor or other.travel_state.is_traveling:
                 continue
             food = self._best_food_to_buy(npc, other, affordable_only=affordable_only)
             if food is None:
@@ -1218,6 +1506,290 @@ class Simulation:
             return compact
         return compact[: limit - 3].rstrip() + "..."
 
+    def _normalize_rumor_state(self) -> None:
+        canonical_by_signature: dict[tuple[str | None, str, str], Rumor] = {}
+        replacements: dict[str, str] = {}
+        for rumor in self.rumors.values():
+            signature = self._rumor_signature(rumor)
+            current = canonical_by_signature.get(signature)
+            if current is None:
+                canonical_by_signature[signature] = rumor
+                continue
+            replacement = self._merge_rumors(current, rumor)
+            canonical_by_signature[signature] = replacement
+            if replacement is current:
+                replacements[rumor.rumor_id] = current.rumor_id
+            else:
+                replacements[current.rumor_id] = rumor.rumor_id
+        for rumor_id in replacements:
+            self.rumors.pop(rumor_id, None)
+        for npc in self.npcs.values():
+            npc.known_rumor_ids = self._normalize_rumor_ids(npc.known_rumor_ids, replacements=replacements)
+        self.player.known_rumor_ids = self._normalize_rumor_ids(self.player.known_rumor_ids, replacements=replacements)
+
+    def _normalize_rumor_ids(self, rumor_ids: Iterable[str], *, replacements: dict[str, str] | None = None) -> list[str]:
+        normalized: list[str] = []
+        seen_signatures: set[tuple[str | None, str, str]] = set()
+        for rumor_id in rumor_ids:
+            canonical_rumor_id = replacements.get(rumor_id, rumor_id) if replacements is not None else rumor_id
+            rumor = self.rumors.get(canonical_rumor_id)
+            if rumor is None:
+                continue
+            signature = self._rumor_signature(rumor)
+            if signature in seen_signatures:
+                continue
+            normalized.append(canonical_rumor_id)
+            seen_signatures.add(signature)
+        return normalized
+
+    def _merge_rumors(self, left: Rumor, right: Rumor) -> Rumor:
+        if self._rumor_sort_key(right) > self._rumor_sort_key(left):
+            winner = right
+            loser = left
+        else:
+            winner = left
+            loser = right
+        winner.confidence = max(winner.confidence, loser.confidence)
+        winner.value = max(winner.value, loser.value)
+        winner.hop_count = min(winner.hop_count, loser.hop_count)
+        winner.created_tick = min(winner.created_tick, loser.created_tick)
+        winner.last_shared_tick = max(winner.last_shared_tick, loser.last_shared_tick)
+        return winner
+
+    def _rumor_signature(self, rumor: Rumor) -> tuple[str | None, str, str]:
+        content_key = " ".join(rumor.content.lower().split())
+        return (rumor.subject_id, rumor.category.value, content_key)
+
+    def _find_matching_rumor(
+        self,
+        *,
+        origin_npc_id: str,
+        subject_id: str | None,
+        content: str,
+        category: RumorCategory,
+    ) -> Rumor | None:
+        target_signature = (subject_id, category.value, " ".join(content.lower().split()))
+        for rumor in self.rumors.values():
+            if rumor.origin_npc_id != origin_npc_id:
+                continue
+            if self._rumor_signature(rumor) == target_signature:
+                return rumor
+        return None
+
+    def _dedupe_rumors(self, rumors: Iterable[Rumor]) -> dict[tuple[str | None, str, str], Rumor]:
+        deduped: dict[tuple[str | None, str, str], Rumor] = {}
+        for rumor in rumors:
+            signature = self._rumor_signature(rumor)
+            existing = deduped.get(signature)
+            if existing is None or self._rumor_sort_key(rumor) > self._rumor_sort_key(existing):
+                deduped[signature] = rumor
+        return deduped
+
+    def _known_rumor_signatures(self, rumor_ids: Iterable[str]) -> set[tuple[str | None, str, str]]:
+        return {self._rumor_signature(rumor) for rumor_id in rumor_ids if (rumor := self.rumors.get(rumor_id)) is not None}
+
+    def _knows_rumor(self, rumor_ids: Iterable[str], rumor: Rumor) -> bool:
+        signature = self._rumor_signature(rumor)
+        for known_rumor_id in rumor_ids:
+            known_rumor = self.rumors.get(known_rumor_id)
+            if known_rumor is not None and self._rumor_signature(known_rumor) == signature:
+                return True
+        return False
+
+    def _decay_rumors(self) -> None:
+        expired_rumor_ids: list[str] = []
+        for rumor in self.rumors.values():
+            rumor.confidence = max(0.15, rumor.confidence - RUMOR_DECAY_PER_TURN)
+            rumor.value = max(0.1, rumor.value - RUMOR_VALUE_DECAY_PER_TURN)
+            if not rumor.rumor_id.startswith("rumor.dynamic."):
+                continue
+            if self.world.tick - rumor.last_shared_tick >= RUMOR_DYNAMIC_STALE_TICKS:
+                expired_rumor_ids.append(rumor.rumor_id)
+        for rumor_id in expired_rumor_ids:
+            self._forget_rumor(rumor_id)
+        if expired_rumor_ids:
+            self._normalize_rumor_state()
+
+    def _forget_rumor(self, rumor_id: str) -> None:
+        self.rumors.pop(rumor_id, None)
+        for npc in self.npcs.values():
+            if rumor_id in npc.known_rumor_ids:
+                npc.known_rumor_ids = [known_rumor_id for known_rumor_id in npc.known_rumor_ids if known_rumor_id != rumor_id]
+        if rumor_id in self.player.known_rumor_ids:
+            self.player.known_rumor_ids = [
+                known_rumor_id for known_rumor_id in self.player.known_rumor_ids if known_rumor_id != rumor_id
+            ]
+
+    def _travel_command_block_message(self) -> str:
+        state = self.player.travel_state
+        destination_id = state.destination_location_id or self.player.location_id
+        destination_name = self.world.locations[destination_id].name
+        return (
+            f"You are already on the road to {destination_name}. "
+            "Wait, look, check status, eat, rest later, or sleep after you arrive."
+        )
+
+    def _player_travel_text(self) -> str:
+        state = self.player.travel_state
+        origin_id = state.origin_location_id or self.player.location_id
+        destination_id = state.destination_location_id or self.player.location_id
+        origin_name = self.world.locations[origin_id].name
+        destination_name = self.world.locations[destination_id].name
+        return "\n".join(
+            [
+                f"You are traveling from {origin_name} to {destination_name}.",
+                f"ETA: {self._travel_eta_turns(state.ticks_remaining)} turns ({state.ticks_remaining} ticks remaining).",
+                "You cannot talk, trade, or work until you arrive.",
+            ]
+        )
+
+    def _route_base_ticks(self, start: str, destination: str) -> int:
+        return TRAVEL_EDGE_BASE_TICKS.get(frozenset((start, destination)), self.turn_ticks * 2)
+
+    def _travel_eta_turns(self, ticks_remaining: int) -> int:
+        return max(1, (max(0, ticks_remaining) + self.turn_ticks - 1) // self.turn_ticks)
+
+    def _actor_load_ratio(self, actor: NPCState | PlayerState) -> float:
+        if actor.carry_capacity <= 0:
+            return 0.0
+        return actor.carried_weight / actor.carry_capacity
+
+    def _travel_block_reason(self, start: str, destination: str, actor: NPCState | PlayerState) -> str:
+        edge = frozenset((start, destination))
+        if self.world.weather == "storm_front" and edge in STORM_BLOCKED_EDGES:
+            return f"The route to {self.world.locations[destination].name} is unsafe while the storm front is rolling through."
+        if self._actor_load_ratio(actor) > 1.02:
+            return "You are carrying too much to travel safely. Drop weight or trade first."
+        return ""
+
+    def _begin_travel(self, actor: NPCState | PlayerState, destination_id: str) -> int:
+        self._refresh_actor_loads()
+        start = actor.location_id
+        load_ratio = max(0.0, self._actor_load_ratio(actor))
+        weather_multiplier = WEATHER_TRAVEL_MULTIPLIERS.get(self.world.weather, 1.0)
+        load_multiplier = 1.0 + (load_ratio * 0.45)
+        fatigue_multiplier = 1.0 + (actor.fatigue / 180.0)
+        total_ticks = max(
+            self.turn_ticks,
+            int(round(self._route_base_ticks(start, destination_id) * weather_multiplier * load_multiplier * fatigue_multiplier)),
+        )
+        actor.travel_state = TravelState(
+            is_traveling=True,
+            route_id=f"{start}->{destination_id}",
+            origin_location_id=start,
+            destination_location_id=destination_id,
+            ticks_remaining=total_ticks,
+            risk_budget=min(1.0, 0.1 + (weather_multiplier - 1.0) * 0.6 + load_ratio * 0.2),
+        )
+        return total_ticks
+
+    def _advance_player_travel(self) -> list[str]:
+        state = self.player.travel_state
+        if not state.is_traveling:
+            return []
+        destination_id = state.destination_location_id or self.player.location_id
+        destination_name = self.world.locations[destination_id].name
+        load_ratio = max(0.0, self._actor_load_ratio(self.player))
+        self.player.hunger = min(100.0, self.player.hunger + 0.8 + load_ratio * 0.6)
+        self.player.fatigue = min(100.0, self.player.fatigue + 5.0 + load_ratio * 4.0)
+        state.ticks_remaining = max(0, state.ticks_remaining - self.turn_ticks)
+        if state.ticks_remaining > 0:
+            return [f"You keep moving toward {destination_name}. {state.ticks_remaining} ticks remain."]
+        self.player.location_id = destination_id
+        self.player.travel_state = TravelState()
+        return [f"You arrive at {destination_name}.", self.describe_location()]
+
+    def _advance_npc_travel(self, npc: NPCState) -> str | None:
+        state = npc.travel_state
+        if not state.is_traveling:
+            return None
+        destination_id = state.destination_location_id or npc.location_id
+        load_ratio = max(0.0, self._actor_load_ratio(npc))
+        npc.hunger = min(100.0, npc.hunger + 0.6 + load_ratio * 0.4)
+        npc.fatigue = min(100.0, npc.fatigue + 4.5 + load_ratio * 3.0)
+        state.ticks_remaining = max(0, state.ticks_remaining - self.turn_ticks)
+        if state.ticks_remaining > 0:
+            return None
+        npc.location_id = destination_id
+        npc.travel_state = TravelState()
+        return f"{npc.name} arrives at {self.world.locations[destination_id].name}."
+
+    def _shelter_rating(self, location_id: str) -> float:
+        location = self.world.locations[location_id]
+        return SHELTER_RATINGS.get(location.kind, 0.5)
+
+    def _shelter_label(self, shelter: float) -> str:
+        if shelter >= 0.85:
+            return "excellent"
+        if shelter >= 0.65:
+            return "solid"
+        if shelter >= 0.45:
+            return "thin"
+        return "poor"
+
+    def _apply_recovery(self, actor: NPCState | PlayerState, *, location_id: str, sleep: bool) -> None:
+        shelter = self._shelter_rating(location_id)
+        base_recovery = (12.0 if sleep else 5.0) * shelter
+        if sleep:
+            base_recovery += 2.0
+        actor.fatigue = max(0.0, actor.fatigue - base_recovery)
+
+    def _recover_npc(self, npc: NPCState) -> str | None:
+        sleep = npc.fatigue >= 72 and self._shelter_rating(npc.location_id) >= 0.65
+        before = npc.fatigue
+        self._apply_recovery(npc, location_id=npc.location_id, sleep=sleep)
+        if npc.fatigue >= before:
+            return None
+        if sleep:
+            return f"{npc.name} gets some proper sleep."
+        return f"{npc.name} pauses to recover."
+
+    def _focused_npc_here(self) -> NPCState | None:
+        if self.player.travel_state.is_traveling:
+            self.player.focused_npc_id = None
+            return None
+        if self.player.focused_npc_id is None:
+            return None
+        npc = self.npcs.get(self.player.focused_npc_id)
+        if npc is None or npc.location_id != self.player.location_id:
+            self.player.focused_npc_id = None
+            return None
+        return npc
+
+    def _resolve_interaction_npc(
+        self,
+        npc_query: str | None,
+        *,
+        action: str,
+        candidates: list[NPCState] | None = None,
+    ) -> tuple[NPCState | None, str]:
+        if npc_query:
+            npc = self._resolve_npc_here(npc_query)
+            if npc is None:
+                return None, f'No NPC named "{npc_query}" is here.'
+            self.player.focused_npc_id = npc.npc_id
+            return npc, ""
+
+        focused_npc = self._focused_npc_here()
+        if focused_npc is not None:
+            return focused_npc, ""
+
+        pool = list(candidates) if candidates is not None else self._npcs_at(self.player.location_id)
+        if len(pool) == 1:
+            npc = pool[0]
+            self.player.focused_npc_id = npc.npc_id
+            return npc, ""
+        if not pool:
+            return None, "No one here matches that interaction."
+        names = ", ".join(npc.name for npc in pool)
+        return None, f"Choose who to {action}: {names}. Use `focus <npc>` or include a name."
+
+    def _trade_candidates(self, mode: str, item: str, qty: int) -> list[NPCState]:
+        npcs_here = self._npcs_at(self.player.location_id)
+        if mode == "buy":
+            return [npc for npc in npcs_here if npc.inventory.get(item, 0) >= qty]
+        return [npc for npc in npcs_here if npc.is_vendor]
+
     def _resolve_npc_here(self, query: str) -> NPCState | None:
         lowered = query.lower()
         for npc in self._npcs_at(self.player.location_id):
@@ -1240,7 +1812,7 @@ class Simulation:
         return None
 
     def _npcs_at(self, location_id: str) -> list[NPCState]:
-        return [npc for npc in self.npcs.values() if npc.location_id == location_id]
+        return [npc for npc in self.npcs.values() if npc.location_id == location_id and not npc.travel_state.is_traveling]
 
     def _next_hop(self, start: str, goal: str) -> str | None:
         if start == goal:
@@ -1276,6 +1848,8 @@ class Simulation:
         return 999
 
     def _npc_mood(self, npc: NPCState) -> str:
+        if npc.travel_state.is_traveling:
+            return "travel"
         if npc.hunger >= 65:
             return "hungry"
         if npc.current_intent is not None:
@@ -1291,6 +1865,14 @@ class Simulation:
     def _format_inventory(self, inventory: dict[str, int]) -> str:
         goods = [f"{item} x{qty}" for item, qty in inventory.items() if qty > 0]
         return ", ".join(goods) if goods else "empty"
+
+    def _inventory_weight(self, inventory: dict[str, int]) -> float:
+        return round(sum(ITEM_WEIGHTS.get(item, 1.0) * qty for item, qty in inventory.items()), 2)
+
+    def _refresh_actor_loads(self) -> None:
+        self.player.carried_weight = self._inventory_weight(self.player.inventory)
+        for npc in self.npcs.values():
+            npc.carried_weight = self._inventory_weight(npc.inventory)
 
     def _adjust_item(self, inventory: dict[str, int], item: str, delta: int) -> None:
         inventory[item] = inventory.get(item, 0) + delta

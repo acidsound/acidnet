@@ -17,6 +17,8 @@ The current playable build now has:
   - active editable prompt in `runtime_settings`
 - NPC/world/player log separation in the event log
 - seeded rumor diversity plus dynamic rumor spawning during runtime
+- signature-based rumor deduplication so repeated dynamic content refreshes one rumor instead of stacking clones
+- dynamic-rumor decay and expiry so stale runtime chatter leaves the world instead of accumulating forever
 
 ## Why The Rumor Fix Was Needed
 
@@ -46,6 +48,9 @@ Implemented changes:
   - bakery and riverside supply pressure
 - rumor selection for sharing is now ranked by value, recency, confidence, and hop count instead of raw insertion order
 - the player rumor panel now shows rumors using the same ranked ordering
+- repeated dynamic rumors with the same content now refresh an existing rumor instead of creating a new duplicate entry
+- rumor sharing to NPCs and the player now treats already-known rumor content as known even if a later rumor ID differs
+- stale dynamic rumors now decay and expire instead of living in the world forever
 
 ## Current Expected Behavior
 
@@ -53,13 +58,13 @@ When you ask different NPCs for rumors, you should now see different content ins
 
 - `The south field yield is down after the dry wind. Grain will be tight this week.`
 
-For example, the player can now learn distinct rumors from `Neri`, `Hobb`, `Mara`, `Toma`, and `Serin`, and more rumor entries appear as the world advances.
+For example, the player can now learn distinct rumors from `Neri`, `Hobb`, `Mara`, `Toma`, and `Serin`, more rumor entries appear as the world advances, and repeated weather/supply beats should no longer flood the player rumor list with the same sentence under different IDs.
 
 ## Verified State
 
 Code checks at the time of this handoff:
 
-- `python -m pytest -q` -> `51 passed`
+- `python -m pytest -q` -> `58 passed`
 - `python -m compileall src/acidnet/engine/simulation.py src/acidnet/world/demo.py tests/test_simulation.py` passed
 
 The rumor-specific tests now cover:
@@ -67,6 +72,9 @@ The rumor-specific tests now cover:
 - multiple seeded rumors at startup
 - multiple distinct rumors collected by the player
 - dynamic rumor spawning after world advancement
+- repeated dynamic rumor content reusing an existing rumor
+- player rumor knowledge deduped by rumor content
+- stale dynamic rumor expiry
 
 ## What To Read First In A New Chat
 

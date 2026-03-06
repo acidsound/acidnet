@@ -9,6 +9,26 @@ class HeuristicPlanner(Planner):
 
     def plan(self, context: PlannerContext) -> PlannerResult:
         for goal in context.top_goals:
+            if goal == "sleep":
+                return PlannerResult(
+                    intent=Intent(
+                        intent_type=IntentType.REST,
+                        reason="Fatigue is too high for routine work; proper sleep comes first.",
+                        priority=0.94,
+                    ),
+                    planner_name="heuristic",
+                    used_persona_tokens=context.persona.values,
+                )
+            if goal == "rest":
+                return PlannerResult(
+                    intent=Intent(
+                        intent_type=IntentType.REST,
+                        reason="A short recovery break is better than pushing into exhaustion.",
+                        priority=0.72,
+                    ),
+                    planner_name="heuristic",
+                    used_persona_tokens=context.persona.values,
+                )
             if goal.startswith("eat:"):
                 return PlannerResult(
                     intent=Intent(

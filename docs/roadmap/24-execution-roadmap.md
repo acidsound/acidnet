@@ -1,0 +1,96 @@
+# Current Execution Roadmap
+
+## Purpose
+
+Turn the current design convergence into an implementation sequence that can be executed without drifting back into ad hoc UI work.
+
+This roadmap assumes `docs/roadmap/00-execution-checklist.md` remains the top-level priority document.
+
+## Baseline
+
+The current project baseline is:
+
+- simulation-first
+- web client as the main frontend feedback surface
+- terminal/raw-command flow as the debugging control surface
+- Tk treated as legacy and removable
+- graph travel, fatigue, load, recovery, and unified exchange as the next core simulation work
+- bounded monkey evaluation as a future world-observation tool, not random noise
+
+## Active Roadmap
+
+### Phase 1: Contract Lock
+
+- write and maintain the full web client API spec
+- remove ambiguity between system prompt, shared output contract, and persona context
+- make all dialogue backends honor the shared output contract, including language rules
+
+### Phase 2: Travel and Recovery
+
+- convert `go <location>` into multi-turn travel
+- add fatigue growth from time, work, and travel
+- add `rest` and `sleep`
+- make shelter quality affect sleep quality
+- expose route progress in terminal and web
+
+### Phase 3: Exchange Unification
+
+- replace vendor-only trade assumptions with one exchange path
+- support gift, barter, debt, and cash without fragmenting the rules
+- use reserve floors and urgency checks to keep altruism stable
+
+### Phase 4: Goal Monkeys
+
+- replace random monkeying with role-driven proxy-PC runs
+- add explicit goals, allowed commands, and rule-based scoring
+- make monkeys a standard observation harness for travel, exchange, and shock behavior
+
+### Phase 5: External Shocks and Recovery Loops
+
+- add one controllable state-dependent shock chain
+- make shocks visible in rumors, logs, and world state
+- make every destructive chain include a plausible recovery path
+
+### Phase 6: Multi-Settlement Scaling
+
+- add summarized regional nodes
+- keep local simulation high-resolution only near the player or tracked actors
+- make travel cost and information flow matter across settlements
+
+## Immediate Next Work
+
+The current immediate queue is:
+
+1. `23`: lock the API contract
+2. backend parity audit: heuristic vs openai-compatible vs local-peft
+3. `20B`: travel, rest, sleep, fatigue, and route progress
+4. `20C`: unified exchange
+5. `20E`: goal monkeys
+
+## Removal Work
+
+The following paths should not keep accumulating hidden maintenance cost:
+
+- Tk-specific parity work
+- backend-specific prompt behavior that silently diverges from the contract
+- frontend-only action logic that should come from simulation state
+
+## Review Discipline
+
+For every logic change, explicitly check:
+
+- API contract impact
+- backend parity impact
+- test coverage impact
+- dead-path or legacy-client impact
+- documentation impact
+
+## Done Definition For A Roadmap Slice
+
+A slice is not complete until:
+
+- code is implemented
+- tests pass
+- docs are updated
+- the browser path is verified if the change affects player-visible state
+- hidden legacy drift was checked, not ignored

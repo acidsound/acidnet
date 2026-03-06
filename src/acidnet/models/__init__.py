@@ -15,6 +15,7 @@ from acidnet.models.core import (
     RelationshipState,
     Rumor,
     RumorCategory,
+    TravelState,
     WorldEvent,
     WorldState,
 )
@@ -34,6 +35,7 @@ __all__ = [
     "RelationshipState",
     "Rumor",
     "RumorCategory",
+    "TravelState",
     "WorldEvent",
     "WorldState",
 ]

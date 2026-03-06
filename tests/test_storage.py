@@ -19,6 +19,8 @@ def test_sqlite_store_persists_world_snapshot() -> None:
 
     assert latest is not None
     assert latest["player"]["location_id"] == "square"
+    assert "fatigue" in latest["player"]
+    assert "travel_state" in latest["player"]
     assert latest["world"]["weather"] == "dry_wind"
 
     connection = sqlite3.connect(db_path)
