@@ -57,6 +57,9 @@
 - 첫 4B baseline run 정의
 - 9B challenger run 정의
 - GPT-5.3 teacher prompt pack 을 JSONL 과 Parquet 로 대량 생성
+- teacher completion 생성을 위한 OpenAI batch request artifact 준비
+- OpenAI batch output 을 `teacher_outputs.jsonl` 로 정규화
+- 4B baseline 용 첫 Unsloth training script 준비
 - 긴 fine-tuning run 전에 prompt-only base-model 동작 검증
 - 긴 fine-tuning run 전에 selection criteria 를 고정
 
@@ -87,6 +90,9 @@
 - world snapshot persistence
 - planner/dialogue 용 synthetic teacher prompt generation
 - prompt-only baseline evaluation harness
+- teacher run 용 OpenAI batch request 준비
+- teacher-output JSONL 로의 OpenAI batch output 정규화
+- Unsloth 4B baseline run-spec 과 training-script export
 
 ## 다음 단계의 종료 조건
 

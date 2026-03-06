@@ -1,13 +1,19 @@
 from pathlib import Path
 
 from acidnet.training import (
+    RunPaths,
     build_finetune_manifest,
+    build_openai_batch_requests,
+    build_unsloth_run_spec,
     export_prompt_pack_jsonl,
     export_finetune_manifest_json,
     export_sft_jsonl,
+    export_teacher_output_jsonl,
+    export_unsloth_training_script,
     generate_demo_prompt_pack,
     generate_synthetic_prompt_pack,
     merge_prompt_pack_with_teacher_outputs,
+    normalize_openai_batch_output,
     recommended_experiment_order,
 )
 
@@ -76,3 +82,70 @@ def test_teacher_outputs_can_be_merged_into_sft_examples() -> None:
     assert len(examples) == 1
     assert examples[0].assistant_json["npc_id"] == "npc.neri"
     assert output_path.exists()
+
+
+def test_openai_batch_requests_are_built_from_prompt_rows() -> None:
+    prompt_rows = [
+        {
+            "custom_id": "dialogue.demo.0.npc.neri",
+            "system_prompt": "system",
+            "user_prompt": "user",
+        }
+    ]
+
+    requests = build_openai_batch_requests(prompt_rows, model="gpt-5.3", max_output_tokens=256)
+
+    assert len(requests) == 1
+    assert requests[0].url == "/v1/responses"
+    assert requests[0].body["model"] == "gpt-5.3"
+
+
+def test_openai_batch_output_can_be_normalized() -> None:
+    batch_rows = [
+        {
+            "custom_id": "dialogue.demo.0.npc.neri",
+            "response": {
+                "status_code": 200,
+                "body": {
+                    "output": [
+                        {
+                            "type": "message",
+                            "content": [
+                                {
+                                    "type": "output_text",
+                                    "text": '{"task":"dialogue","npc_id":"npc.neri","response":"The wind is making everyone tense."}',
+                                }
+                            ],
+                        }
+                    ]
+                },
+            },
+        }
+    ]
+
+    rows = normalize_openai_batch_output(batch_rows)
+    artifact_dir = Path("data") / "test_artifacts"
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    output_path = export_teacher_output_jsonl(artifact_dir / "teacher_outputs_test.jsonl", rows)
+
+    assert len(rows) == 1
+    assert rows[0].assistant_json["npc_id"] == "npc.neri"
+    assert output_path.exists()
+
+
+def test_qwen4b_baseline_run_spec_can_render_unsloth_script() -> None:
+    baseline = build_finetune_manifest(vram_gb=24)[0]
+    run_spec = build_unsloth_run_spec(
+        baseline,
+        RunPaths(
+            train_dataset_path="data/sft/train_teacher_sft_dataset.jsonl",
+            eval_dataset_path="data/sft/eval_teacher_sft_dataset.jsonl",
+            output_dir="data/training/qwen3_5_4b_baseline",
+        ),
+    )
+    artifact_dir = Path("data") / "test_artifacts"
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    script_path = export_unsloth_training_script(artifact_dir / "train_qwen3_5_4b_baseline_test.py", run_spec)
+
+    assert run_spec.model_name == "Qwen/Qwen3.5-4B-Base"
+    assert script_path.exists()

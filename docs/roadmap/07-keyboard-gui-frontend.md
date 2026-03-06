@@ -6,6 +6,7 @@ Implemented:
 
 - Tk-based map view
 - keyboard movement
+- click-to-move for directly adjacent map nodes
 - NPC selection list
 - talk, rumor, buy, eat, and wait actions
 - event log panel
@@ -72,6 +73,7 @@ python run_monkey_world.py --steps 240 --dialogue-backend heuristic
 ## Controls
 
 - arrow keys or `WASD`: move
+- click an adjacent map node: move directly to that location
 - `T`: talk to selected NPC
 - `R`: ask selected NPC for rumors
 - `B`: buy bread from the selected NPC

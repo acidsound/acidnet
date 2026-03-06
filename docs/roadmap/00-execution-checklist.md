@@ -57,6 +57,9 @@ Current implementation focus is Step 13:
 - define the first 4B baseline run
 - define the 9B challenger run
 - generate large GPT-5.3 teacher prompt packs in JSONL and Parquet
+- prepare OpenAI batch request artifacts for teacher completion generation
+- normalize OpenAI batch outputs into `teacher_outputs.jsonl`
+- prepare the first Unsloth training script for the 4B baseline
 - validate prompt-only base-model behavior before any long fine-tuning run starts
 - prepare selection criteria before any long fine-tuning run starts
 
@@ -87,6 +90,9 @@ Implemented systems:
 - world snapshot persistence
 - synthetic teacher prompt generation for planner and dialogue tasks
 - prompt-only baseline evaluation harness
+- OpenAI batch request preparation for teacher runs
+- OpenAI batch output normalization into teacher-output JSONL
+- Unsloth 4B baseline run-spec and training-script export
 
 ## Exit Criteria For The Next Step
 

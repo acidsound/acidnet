@@ -83,7 +83,8 @@ class AcidNetApp(tk.Tk):
         self._append_log(
             [
                 "acidnet GUI loaded.",
-                "Use arrow keys or WASD to move, T to talk, R for rumor, B to buy bread, E to eat, Space to wait.",
+                "Use arrow keys or WASD to move. Click an adjacent location on the map to travel there.",
+                "T to talk, R for rumor, B to buy bread, E to eat, Space to wait.",
                 f"Dialogue backend: {dialogue_backend}",
             ],
             kind="system",
@@ -338,7 +339,7 @@ class AcidNetApp(tk.Tk):
                 width=130,
             )
             for item in (rect, label, occupants):
-                self.canvas.tag_bind(item, "<Button-1>", lambda _event, loc=location_id: self._select_location(loc))
+                self.canvas.tag_bind(item, "<Button-1>", lambda _event, loc=location_id: self._click_location(loc))
             self._location_items[location_id] = (rect, label)
 
         player_node = MAP_LAYOUT[self.simulation.player.location_id]
@@ -362,7 +363,7 @@ class AcidNetApp(tk.Tk):
         self.selected_location_id = self.simulation.player.location_id
         self.status_var.set(self.simulation.player_status())
         self.footer_var.set(
-            "Controls: arrows/WASD move | T talk | R rumor | B buy bread | E eat | Space wait | L look"
+            "Controls: arrows/WASD move | click adjacent node to move | T talk | R rumor | B buy bread | E eat | Space wait | L look"
         )
         self._set_text(self.location_text, self.simulation.describe_location())
         self._set_text(self.rumor_text, self.simulation.known_rumors_text())
@@ -401,6 +402,23 @@ class AcidNetApp(tk.Tk):
                 )
         self.log_text.see(tk.END)
         self.log_text.configure(state="disabled")
+
+    def _click_location(self, location_id: str) -> None:
+        current_id = self.simulation.player.location_id
+        if location_id == current_id:
+            self._select_location(location_id)
+            return
+        if location_id in self.simulation.world.locations[current_id].neighbors:
+            self.selected_location_id = location_id
+            self._render_world()
+            self._run_command(f"go {location_id}")
+            return
+        self._select_location(location_id)
+        location = self.simulation.world.locations[location_id]
+        self._append_log(
+            [f"{location.name} is not directly connected. Move through a neighboring node first."],
+            kind="ui",
+        )
 
     def _select_location(self, location_id: str) -> None:
         self.selected_location_id = location_id

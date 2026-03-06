@@ -8,11 +8,20 @@ Implemented:
 - fixed dataset path contract
 - fixed training row and eval row targets
 - export script for reproducible experiment JSON
+- OpenAI teacher batch request export for `/v1/responses`
+- OpenAI batch output normalization into `teacher_outputs.jsonl`
+- Unsloth 4B baseline run-spec export
+- Unsloth 4B baseline training-script export
 
 Code entrypoints:
 
 - `src/acidnet/training/finetune_manifest.py`
 - `run_finetune_manifest_export.py`
+- `src/acidnet/training/openai_batch.py`
+- `src/acidnet/training/unsloth_runner.py`
+- `run_openai_teacher_batch_prepare.py`
+- `run_openai_teacher_batch_normalize.py`
+- `run_qwen4b_baseline_prep.py`
 
 ## Manifest Purpose
 
@@ -51,12 +60,39 @@ python run_finetune_manifest_export.py --vram 24 --train-rows 50000 --eval-rows 
 
 ```text
 data/training/finetune_manifest.json
+data/prompt_packs/openai_batch_requests.jsonl
+data/prompt_packs/teacher_outputs.jsonl
+data/training/qwen3_5_4b_baseline_run_spec.json
+data/training/train_qwen3_5_4b_baseline.py
+```
+
+## Example Commands
+
+Prepare OpenAI batch requests from the teacher prompt pack:
+
+```bash
+python run_openai_teacher_batch_prepare.py --model gpt-5.3
+```
+
+Normalize downloaded OpenAI batch output into teacher-output JSONL:
+
+```bash
+python run_openai_teacher_batch_normalize.py ^
+  --batch-output data/prompt_packs/openai_batch_output.jsonl ^
+  --output data/prompt_packs/teacher_outputs.jsonl
+```
+
+Prepare the first 4B baseline Unsloth runner:
+
+```bash
+python run_qwen4b_baseline_prep.py
 ```
 
 ## What This Does Not Do Yet
 
+- submit or poll OpenAI batch jobs directly
 - run Unsloth training directly
 - launch distributed jobs
 - evaluate checkpoints automatically
 
-Those belong to the next concrete implementation step.
+Those belong to the next concrete implementation step after artifacts are validated.

@@ -5,21 +5,27 @@
 구현 완료:
 
 - teacher prompt-pack JSONL 생성
+- teacher completion run 용 OpenAI batch request export
+- teacher-output JSONL 로의 OpenAI batch output 정규화
 - teacher output JSONL 을 SFT-ready JSONL 로 병합하는 경로
 - merged SFT dataset 에 대한 optional Parquet export
 
 진입점:
 
 - `run_teacher_prompt_export.py`
+- `run_openai_teacher_batch_prepare.py`
+- `run_openai_teacher_batch_normalize.py`
 - `run_teacher_sft_merge.py`
 - `src/acidnet/training/sft_dataset.py`
 
 ## 기대 흐름
 
 1. teacher request prompt 를 JSONL 로 export 한다.
-2. 외부에서 teacher model 을 돌리고 `custom_id` 기준의 JSONL output 을 수집한다.
-3. prompt row 와 teacher output 을 병합해 SFT example 을 만든다.
-4. merged SFT dataset 을 첫 4B baseline run 에 넣는다.
+2. prompt pack 을 OpenAI batch request 로 변환한다.
+3. 외부에서 teacher model 을 돌리고 `custom_id` 기준의 batch output JSONL 을 수집한다.
+4. batch output 을 `teacher_outputs.jsonl` 로 정규화한다.
+5. prompt row 와 teacher output 을 병합해 SFT example 을 만든다.
+6. merged SFT dataset 을 첫 4B baseline run 에 넣는다.
 
 ## 지원하는 teacher output 형태
 
@@ -42,6 +48,20 @@ Prompt pack export:
 python run_teacher_prompt_export.py --mode synthetic --scenarios 704 --turns 4 --format jsonl
 ```
 
+OpenAI batch request 준비:
+
+```bash
+python run_openai_teacher_batch_prepare.py --model gpt-5.3
+```
+
+OpenAI batch output 정규화:
+
+```bash
+python run_openai_teacher_batch_normalize.py ^
+  --batch-output data/prompt_packs/openai_batch_output.jsonl ^
+  --output data/prompt_packs/teacher_outputs.jsonl
+```
+
 teacher output 을 SFT JSONL 로 병합:
 
 ```bash
@@ -62,6 +82,6 @@ python run_teacher_sft_merge.py ^
 
 ## 다음 작업
 
-- 실제 teacher output 파일 생성
+- 첫 실제 teacher batch output 파일 생성
 - 첫 SFT dataset split 정의
 - merged dataset 을 4B baseline training runner 와 연결

@@ -8,11 +8,20 @@
 - 고정된 dataset path 계약
 - 고정된 train row / eval row target
 - 재현 가능한 experiment JSON export 스크립트
+- `/v1/responses` 용 OpenAI teacher batch request export
+- `teacher_outputs.jsonl` 로의 OpenAI batch output 정규화
+- Unsloth 4B baseline run-spec export
+- Unsloth 4B baseline training-script export
 
 진입점:
 
 - `src/acidnet/training/finetune_manifest.py`
 - `run_finetune_manifest_export.py`
+- `src/acidnet/training/openai_batch.py`
+- `src/acidnet/training/unsloth_runner.py`
+- `run_openai_teacher_batch_prepare.py`
+- `run_openai_teacher_batch_normalize.py`
+- `run_qwen4b_baseline_prep.py`
 
 ## Manifest 의 목적
 
@@ -51,12 +60,39 @@ python run_finetune_manifest_export.py --vram 24 --train-rows 50000 --eval-rows 
 
 ```text
 data/training/finetune_manifest.json
+data/prompt_packs/openai_batch_requests.jsonl
+data/prompt_packs/teacher_outputs.jsonl
+data/training/qwen3_5_4b_baseline_run_spec.json
+data/training/train_qwen3_5_4b_baseline.py
+```
+
+## 실행 예시
+
+teacher prompt pack 에서 OpenAI batch request 준비:
+
+```bash
+python run_openai_teacher_batch_prepare.py --model gpt-5.3
+```
+
+다운로드한 OpenAI batch output 을 teacher-output JSONL 로 정규화:
+
+```bash
+python run_openai_teacher_batch_normalize.py ^
+  --batch-output data/prompt_packs/openai_batch_output.jsonl ^
+  --output data/prompt_packs/teacher_outputs.jsonl
+```
+
+첫 4B baseline Unsloth runner 준비:
+
+```bash
+python run_qwen4b_baseline_prep.py
 ```
 
 ## 아직 하지 않는 것
 
+- OpenAI batch job 제출이나 polling 자동화
 - Unsloth training 을 직접 실행하지는 않는다
 - distributed job 을 띄우지 않는다
 - checkpoint 를 자동 평가하지 않는다
 
-이 부분이 다음 구현 단계다.
+artifact 가 검증된 뒤 이 부분이 다음 구현 단계다.

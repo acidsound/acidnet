@@ -6,6 +6,7 @@
 
 - Tk 기반 map view
 - 키보드 이동
+- 직접 연결된 map node 클릭 이동
 - NPC selection list
 - talk, rumor, buy, eat, wait 액션
 - event log panel
@@ -72,6 +73,7 @@ python run_monkey_world.py --steps 240 --dialogue-backend heuristic
 ## 조작
 
 - 방향키 또는 `WASD`: 이동
+- 인접한 map node 클릭: 해당 location 으로 바로 이동
 - `T`: 선택된 NPC 와 대화
 - `R`: 선택된 NPC 에게 rumor 질문
 - `B`: 선택된 NPC 에게 bread 구매
