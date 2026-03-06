@@ -1,8 +1,15 @@
 # AcidNet Handoff
 
 ## Read First
-- Start with `docs/roadmap/00-execution-checklist.md`.
+- Start with `docs/context/current-state.md`.
+- Then read `docs/context/project-map.md`.
+- Then read `docs/roadmap/00-execution-checklist.md`.
 - Then read `docs/roadmap/20-spatial-time-exchange-model.md`, `docs/roadmap/23-web-client-api-spec.md`, and `docs/roadmap/24-execution-roadmap.md`.
+
+## Context Layout
+- `docs/context/*.md` is the fast re-entry layer for new conversations. Keep it short, current, and tied to the live code path.
+- `docs/roadmap/*.md` is the durable design and execution record. Keep `docs_kr/roadmap/*.md` mirrored when those roadmap docs change.
+- Prefer updating these existing context docs over adding generic `handoff.md` files or extra subtree `AGENTS.md` files.
 
 ## Non-Negotiables
 - Keep the project `simulation-first`. Frontends render simulation state and send intents; they do not invent world logic.
