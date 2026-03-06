@@ -116,7 +116,7 @@ def main() -> None:
                     simulation,
                     kind="command",
                     message=raw,
-                    payload={"result_lines": result.lines},
+                    payload={"result_lines": result.lines, "result_entries": result.payload()},
                 )
             if event_log is not None:
                 event_log.write(
@@ -124,7 +124,7 @@ def main() -> None:
                     message=raw,
                     day=simulation.world.day,
                     tick=simulation.world.tick,
-                    payload={"result_lines": result.lines},
+                    payload={"result_lines": result.lines, "result_entries": result.payload()},
                 )
             if result.lines:
                 print("\n".join(line for line in result.lines if line))

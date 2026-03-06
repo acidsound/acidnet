@@ -13,3 +13,4 @@ def test_monkey_runner_executes_deterministic_steps_without_breaking_invariants(
     assert 0.0 <= report.final_player_hunger <= 100.0
     assert report.steps
     assert all(step.command for step in report.steps)
+    assert all(step.entries for step in report.steps)

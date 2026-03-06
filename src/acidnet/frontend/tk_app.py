@@ -7,6 +7,7 @@ from pathlib import Path
 
 from acidnet.engine import Simulation
 from acidnet.eval import SimulationMonkeyRunner
+from acidnet.engine.simulation import TurnEvent
 from acidnet.storage import EventLogFile, SQLiteWorldStore
 
 FONT_BODY = ("Consolas", 11)
@@ -19,6 +20,13 @@ FG_MUTED = "#98A7B3"
 ACCENT = "#D9A441"
 ACCENT_ALT = "#4AA3A2"
 PLAYER_COLOR = "#C96E4A"
+LOG_COLORS = {
+    "input": "#C96E4A",
+    "npc": "#6ED3B8",
+    "world": "#E6D7A6",
+    "system": "#90C0FF",
+    "ui": "#D9A441",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,7 +131,8 @@ class AcidNetApp(tk.Tk):
 
         map_frame = tk.Frame(self, bg=BG_ROOT, padx=14, pady=14)
         map_frame.grid(row=0, column=0, sticky="nsew")
-        map_frame.rowconfigure(1, weight=1)
+        map_frame.rowconfigure(1, weight=3)
+        map_frame.rowconfigure(5, weight=2)
         map_frame.columnconfigure(0, weight=1)
 
         tk.Label(
@@ -143,10 +152,33 @@ class AcidNetApp(tk.Tk):
         )
         self.canvas.grid(row=1, column=0, sticky="nsew")
 
+        tk.Label(
+            map_frame,
+            text="Rumors",
+            font=FONT_TITLE,
+            fg=FG_TEXT,
+            bg=BG_ROOT,
+            anchor="w",
+        ).grid(row=2, column=0, sticky="ew", pady=(12, 0))
+        self.rumor_text = self._make_text(map_frame, height=5)
+        self.rumor_text.grid(row=3, column=0, sticky="ew", pady=(4, 10))
+
+        tk.Label(
+            map_frame,
+            text="Event Log",
+            font=FONT_TITLE,
+            fg=FG_TEXT,
+            bg=BG_ROOT,
+            anchor="w",
+        ).grid(row=4, column=0, sticky="ew")
+        self.log_text = self._make_text(map_frame, height=16)
+        self.log_text.grid(row=5, column=0, sticky="nsew", pady=(4, 0))
+        for kind, color in LOG_COLORS.items():
+            self.log_text.tag_configure(kind, foreground=color)
+
         sidebar = tk.Frame(self, bg=BG_PANEL, padx=14, pady=14)
         sidebar.grid(row=0, column=1, sticky="nsew")
         sidebar.columnconfigure(0, weight=1)
-        sidebar.rowconfigure(9, weight=1)
 
         tk.Label(sidebar, text="Status", font=FONT_TITLE, fg=FG_TEXT, bg=BG_PANEL, anchor="w").grid(
             row=0, column=0, sticky="ew"
@@ -237,23 +269,11 @@ class AcidNetApp(tk.Tk):
         self.say_entry.bind("<Return>", self._submit_say_selected)
         self._make_button(speak_frame, "Say", self._submit_say_selected).grid(row=0, column=1, sticky="ew")
 
-        tk.Label(sidebar, text="Rumors", font=FONT_TITLE, fg=FG_TEXT, bg=BG_PANEL, anchor="w").grid(
+        tk.Label(sidebar, text="Raw Command", font=FONT_TITLE, fg=FG_TEXT, bg=BG_PANEL, anchor="w").grid(
             row=6, column=0, sticky="ew"
         )
-        self.rumor_text = self._make_text(sidebar, height=7)
-        self.rumor_text.grid(row=7, column=0, sticky="ew", pady=(4, 10))
-
-        tk.Label(sidebar, text="Event Log", font=FONT_TITLE, fg=FG_TEXT, bg=BG_PANEL, anchor="w").grid(
-            row=8, column=0, sticky="ew"
-        )
-        self.log_text = self._make_text(sidebar, height=12)
-        self.log_text.grid(row=9, column=0, sticky="nsew", pady=(4, 10))
-
-        tk.Label(sidebar, text="Raw Command", font=FONT_TITLE, fg=FG_TEXT, bg=BG_PANEL, anchor="w").grid(
-            row=10, column=0, sticky="ew"
-        )
         command_frame = tk.Frame(sidebar, bg=BG_PANEL)
-        command_frame.grid(row=11, column=0, sticky="ew", pady=(4, 0))
+        command_frame.grid(row=7, column=0, sticky="ew", pady=(4, 0))
         command_frame.columnconfigure(0, weight=1)
         self.command_entry = tk.Entry(
             command_frame,
@@ -276,7 +296,7 @@ class AcidNetApp(tk.Tk):
             bg=BG_PANEL,
             font=("Consolas", 10),
         )
-        footer.grid(row=12, column=0, sticky="ew", pady=(12, 0))
+        footer.grid(row=8, column=0, sticky="ew", pady=(12, 0))
 
     def _make_text(self, parent: tk.Widget, *, height: int) -> tk.Text:
         widget = tk.Text(
@@ -441,7 +461,7 @@ class AcidNetApp(tk.Tk):
         prefix = f"[day {self.simulation.world.day:02d} tick {self.simulation.world.tick:04d} | {kind}] "
         self.log_text.configure(state="normal")
         for line in lines:
-            self.log_text.insert(tk.END, prefix + line + "\n")
+            self.log_text.insert(tk.END, prefix + line + "\n", (kind,))
             if self.event_log is not None:
                 self.event_log.write(
                     kind=kind,
@@ -451,6 +471,13 @@ class AcidNetApp(tk.Tk):
                 )
         self.log_text.see(tk.END)
         self.log_text.configure(state="disabled")
+
+    def _append_entries(self, entries: list[TurnEvent]) -> None:
+        if not entries:
+            self._append_log(["No visible effect."], kind="system")
+            return
+        for entry in entries:
+            self._append_log([entry.text], kind=entry.kind)
 
     def _click_location(self, location_id: str) -> None:
         current_id = self.simulation.player.location_id
@@ -498,11 +525,11 @@ class AcidNetApp(tk.Tk):
     def _run_command(self, command: str, *, kind: str = "gui_command") -> None:
         self._append_log([f"> {command}"], kind="input")
         result = self.simulation.handle_command(command)
-        self._append_log(result.lines or ["No visible effect."], kind="world")
+        self._append_entries(result.entries)
         self._refresh_panels()
         self.command_entry.delete(0, tk.END)
         self.focus_set()
-        self._save_snapshot(kind, command, {"result_lines": result.lines})
+        self._save_snapshot(kind, command, {"result_lines": result.lines, "result_entries": result.payload()})
 
     def _save_snapshot(self, kind: str, message: str, payload: dict) -> None:
         if self.store is None:
@@ -628,9 +655,17 @@ class AcidNetApp(tk.Tk):
             return
         step = self.monkey_runner.run_one_step()
         self._append_log([f"[monkey] > {step.command}"], kind="input")
-        self._append_log(step.lines or ["No visible effect."], kind="world")
+        self._append_entries(step.entries)
         self._refresh_panels()
-        self._save_snapshot("monkey_command", step.command, {"result_lines": step.lines, "step_index": step.index})
+        self._save_snapshot(
+            "monkey_command",
+            step.command,
+            {
+                "result_lines": step.lines,
+                "result_entries": [{"kind": entry.kind, "text": entry.text} for entry in step.entries],
+                "step_index": step.index,
+            },
+        )
         self.monkey_steps_remaining -= 1
         if self.monkey_steps_remaining > 0:
             self.after(self.monkey_delay_ms, self._run_monkey_step)

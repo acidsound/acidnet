@@ -36,9 +36,31 @@ WORK_WAGES = {
 }
 
 
+@dataclass(slots=True, frozen=True)
+class TurnEvent:
+    kind: str
+    text: str
+
+
 @dataclass(slots=True)
 class TurnResult:
-    lines: list[str]
+    entries: list[TurnEvent | str]
+
+    def __post_init__(self) -> None:
+        normalized: list[TurnEvent] = []
+        for entry in self.entries:
+            if isinstance(entry, TurnEvent):
+                normalized.append(entry)
+            else:
+                normalized.append(TurnEvent(kind="world", text=entry))
+        self.entries = normalized
+
+    @property
+    def lines(self) -> list[str]:
+        return [entry.text for entry in self.entries]
+
+    def payload(self) -> list[dict[str, str]]:
+        return [{"kind": entry.kind, "text": entry.text} for entry in self.entries]
 
 
 class Simulation:
@@ -185,68 +207,85 @@ class Simulation:
             return "There are no NPCs here."
         return "\n".join(f"- {npc.name} ({npc.profession})" for npc in npcs)
 
+    def _events(self, kind: str, lines: Iterable[str]) -> list[TurnEvent]:
+        return [TurnEvent(kind=kind, text=line) for line in lines if line]
+
+    def _npc_dialogue_event(self, npc: NPCState, text: str) -> TurnEvent:
+        cleaned = " ".join(text.split()) or "..."
+        return TurnEvent(kind="npc", text=f"{npc.name}: {cleaned}")
+
     def move_player(self, location_query: str) -> TurnResult:
         destination = self._resolve_location(location_query)
         if destination is None:
-            return TurnResult([f'Unknown location "{location_query}".'])
+            return TurnResult(self._events("system", [f'Unknown location "{location_query}".']))
         current = self.world.locations[self.player.location_id]
         if destination.location_id not in current.neighbors:
-            return TurnResult([f"You cannot go directly to {destination.name} from here."])
+            return TurnResult(self._events("system", [f"You cannot go directly to {destination.name} from here."]))
         self.player.location_id = destination.location_id
-        lines = [f"You move to {destination.name}.", self.describe_location()]
-        lines.extend(self.advance_turn(1).lines)
-        return TurnResult(lines)
+        entries = self._events("system", [f"You move to {destination.name}.", self.describe_location()])
+        entries.extend(self.advance_turn(1).entries)
+        return TurnResult(entries)
 
     def talk_to_npc(self, npc_query: str) -> TurnResult:
         npc = self._resolve_npc_here(npc_query)
         if npc is None:
-            return TurnResult([f'No NPC named "{npc_query}" is here.'])
+            return TurnResult(self._events("system", [f'No NPC named "{npc_query}" is here.']))
 
         player_prompt = "What is going on around here?"
-        lines = [self._generate_dialogue(npc, interaction_mode="talk", player_prompt=player_prompt)]
+        entries = [self._npc_dialogue_event(npc, self._generate_dialogue(npc, interaction_mode="talk", player_prompt=player_prompt))]
         self._record_dialogue_exchange(npc, player_prompt=player_prompt)
         self._change_relationship(npc, self.player.player_id, trust_delta=0.02, closeness_delta=0.04)
         rumor_line = self._offer_rumor_to_player(npc, asked=False)
         if rumor_line:
-            lines.append(rumor_line)
-        lines.extend(self.advance_turn(1).lines)
-        return TurnResult(lines)
+            entries.extend(self._events("npc", [rumor_line]))
+        entries.extend(self.advance_turn(1).entries)
+        return TurnResult(entries)
 
     def say_to_npc(self, npc_query: str, player_message: str) -> TurnResult:
         npc = self._resolve_npc_here(npc_query)
         if npc is None:
-            return TurnResult([f'No NPC named "{npc_query}" is here.'])
+            return TurnResult(self._events("system", [f'No NPC named "{npc_query}" is here.']))
 
         player_prompt = " ".join(player_message.split())
         if not player_prompt:
-            return TurnResult(["Say what?"])
+            return TurnResult(self._events("system", ["Say what?"]))
 
         interaction_mode = infer_interaction_mode(player_prompt)
-        lines = [self._generate_dialogue(npc, interaction_mode=interaction_mode, player_prompt=player_prompt)]
+        entries = [
+            self._npc_dialogue_event(
+                npc,
+                self._generate_dialogue(npc, interaction_mode=interaction_mode, player_prompt=player_prompt),
+            )
+        ]
         self._record_dialogue_exchange(npc, player_prompt=player_prompt)
         self._change_relationship(npc, self.player.player_id, trust_delta=0.02, closeness_delta=0.05)
         if interaction_mode == "rumor_request":
             rumor_line = self._offer_rumor_to_player(npc, asked=True)
             if rumor_line:
-                lines.append(rumor_line)
-        lines.extend(self.advance_turn(1).lines)
-        return TurnResult(lines)
+                entries.extend(self._events("npc", [rumor_line]))
+        entries.extend(self.advance_turn(1).entries)
+        return TurnResult(entries)
 
     def ask_npc(self, npc_query: str, topic: str) -> TurnResult:
         npc = self._resolve_npc_here(npc_query)
         if npc is None:
-            return TurnResult([f'No NPC named "{npc_query}" is here.'])
+            return TurnResult(self._events("system", [f'No NPC named "{npc_query}" is here.']))
         if topic.lower() != "rumor":
-            return TurnResult([f'{npc.name} tilts their head. "Ask about rumors if you want local news."'])
+            return TurnResult(
+                [self._npc_dialogue_event(npc, 'tilts their head. "Ask about rumors if you want local news."')]
+            )
         player_prompt = "Have you heard any useful rumors?"
-        result = [self._generate_dialogue(npc, interaction_mode="rumor_request", player_prompt=player_prompt)]
+        result = [
+            self._npc_dialogue_event(
+                npc,
+                self._generate_dialogue(npc, interaction_mode="rumor_request", player_prompt=player_prompt),
+            )
+        ]
         self._record_dialogue_exchange(npc, player_prompt=player_prompt)
         rumor_line = self._offer_rumor_to_player(npc, asked=True)
         if rumor_line is not None:
-            result.append(rumor_line)
-        elif not result[0]:
-            result = [f"{npc.name} has nothing useful to add right now."]
-        result.extend(self.advance_turn(1).lines)
+            result.extend(self._events("npc", [rumor_line]))
+        result.extend(self.advance_turn(1).entries)
         return TurnResult(result)
 
     def probe_npc_dialogue(self, npc_id: str, *, interaction_mode: str, player_prompt: str) -> str:
@@ -269,9 +308,9 @@ class Simulation:
     def player_eat(self, item_query: str) -> TurnResult:
         item = self._resolve_item(item_query)
         if item is None or item not in FOOD_ITEMS:
-            return TurnResult([f'"{item_query}" is not edible here.'])
+            return TurnResult(self._events("system", [f'"{item_query}" is not edible here.']))
         if self.player.inventory.get(item, 0) <= 0:
-            return TurnResult([f"You do not have any {item}."])
+            return TurnResult(self._events("system", [f"You do not have any {item}."]))
         self._consume_food(self.player.inventory, item, self.player)
         self._record_memory(
             npc_id=self.player.player_id,
@@ -279,9 +318,9 @@ class Simulation:
             summary=f"Ate {item}.",
             importance=0.35,
         )
-        lines = [f"You eat {item}. Hunger drops to {self.player.hunger:.1f}."]
-        lines.extend(self.advance_turn(1).lines)
-        return TurnResult(lines)
+        entries = self._events("system", [f"You eat {item}. Hunger drops to {self.player.hunger:.1f}."])
+        entries.extend(self.advance_turn(1).entries)
+        return TurnResult(entries)
 
     def player_work(self) -> TurnResult:
         location = self.world.locations[self.player.location_id]
@@ -308,7 +347,7 @@ class Simulation:
             self.player.money += 3
             lines.append("You help maintain the shrine and receive 3 gold in offerings.")
         else:
-            return TurnResult(["There is no useful work available here right now."])
+            return TurnResult(self._events("system", ["There is no useful work available here right now."]))
 
         self._record_memory(
             npc_id=self.player.player_id,
@@ -316,31 +355,32 @@ class Simulation:
             summary=f"Worked at {location.name}.",
             importance=0.4,
         )
-        lines.extend(self.advance_turn(1).lines)
-        return TurnResult(lines)
+        entries = self._events("system", lines)
+        entries.extend(self.advance_turn(1).entries)
+        return TurnResult(entries)
 
     def trade_with_npc(self, npc_query: str, mode: str, item_query: str, qty: int) -> TurnResult:
         npc = self._resolve_npc_here(npc_query)
         if npc is None:
-            return TurnResult([f'No NPC named "{npc_query}" is here.'])
+            return TurnResult(self._events("system", [f'No NPC named "{npc_query}" is here.']))
         if qty <= 0:
-            return TurnResult(["Quantity must be greater than zero."])
+            return TurnResult(self._events("system", ["Quantity must be greater than zero."]))
         item = self._resolve_item(item_query)
         if item is None:
-            return TurnResult([f'Unknown item "{item_query}".'])
+            return TurnResult(self._events("system", [f'Unknown item "{item_query}".']))
 
         mode = mode.lower()
         if mode not in {"buy", "sell"}:
-            return TurnResult(['Trade mode must be "buy" or "sell".'])
+            return TurnResult(self._events("system", ['Trade mode must be "buy" or "sell".']))
 
         lines: list[str] = []
         if mode == "buy":
             price = self._price_for(npc, item, buy_from_vendor=True)
             if npc.inventory.get(item, 0) < qty:
-                return TurnResult([f"{npc.name} does not have enough {item}."])
+                return TurnResult(self._events("system", [f"{npc.name} does not have enough {item}."]))
             total = price * qty
             if self.player.money < total:
-                return TurnResult([f"You need {total} gold, but you only have {self.player.money}."])
+                return TurnResult(self._events("system", [f"You need {total} gold, but you only have {self.player.money}."]))
             self.player.money -= total
             npc.money += total
             self._adjust_item(self.player.inventory, item, qty)
@@ -348,13 +388,13 @@ class Simulation:
             lines.append(f"You buy {qty} {item} from {npc.name} for {total} gold.")
         else:
             if self.player.inventory.get(item, 0) < qty:
-                return TurnResult([f"You do not have enough {item}."])
+                return TurnResult(self._events("system", [f"You do not have enough {item}."]))
             if not npc.is_vendor:
-                return TurnResult([f"{npc.name} is not interested in trading right now."])
+                return TurnResult(self._events("system", [f"{npc.name} is not interested in trading right now."]))
             price = self._price_for(npc, item, buy_from_vendor=False)
             total = price * qty
             if npc.money < total:
-                return TurnResult([f"{npc.name} cannot afford that deal."])
+                return TurnResult(self._events("system", [f"{npc.name} cannot afford that deal."]))
             self.player.money += total
             npc.money -= total
             self._adjust_item(self.player.inventory, item, -qty)
@@ -377,8 +417,9 @@ class Simulation:
         )
         self._change_relationship(npc, self.player.player_id, trust_delta=0.03, closeness_delta=0.02)
         self._refresh_market_snapshot()
-        lines.extend(self.advance_turn(1).lines)
-        return TurnResult(lines)
+        entries = self._events("system", lines)
+        entries.extend(self.advance_turn(1).entries)
+        return TurnResult(entries)
 
     def advance_turn(self, turns: int) -> TurnResult:
         turns = max(1, turns)
@@ -393,19 +434,21 @@ class Simulation:
             return TurnResult([])
         command = parts[0].lower()
         if command == "help":
-            return TurnResult([self.help_text()])
+            return TurnResult(self._events("system", [self.help_text()]))
         if command in {"look", "where"}:
-            return TurnResult([self.describe_location()])
+            return TurnResult(self._events("system", [self.describe_location()]))
         if command == "map":
-            return TurnResult([self.list_map()])
+            return TurnResult(self._events("system", [self.list_map()]))
         if command == "inventory":
-            return TurnResult([f"Inventory: {self._format_inventory(self.player.inventory)} | Gold: {self.player.money}"])
+            return TurnResult(
+                self._events("system", [f"Inventory: {self._format_inventory(self.player.inventory)} | Gold: {self.player.money}"])
+            )
         if command == "status":
-            return TurnResult([self.player_status()])
+            return TurnResult(self._events("system", [self.player_status()]))
         if command == "rumors":
-            return TurnResult([self.known_rumors_text()])
+            return TurnResult(self._events("system", [self.known_rumors_text()]))
         if command == "npcs":
-            return TurnResult([self.npcs_here_text()])
+            return TurnResult(self._events("system", [self.npcs_here_text()]))
         if command in {"work", "gather", "forage"}:
             return self.player_work()
         if command == "eat" and len(parts) >= 2:
@@ -422,7 +465,7 @@ class Simulation:
             try:
                 qty = int(parts[4])
             except ValueError:
-                return TurnResult(["Trade quantity must be an integer."])
+                return TurnResult(self._events("system", ["Trade quantity must be an integer."]))
             return self.trade_with_npc(parts[1], parts[2], parts[3], qty)
         if command == "wait":
             turns = 1
@@ -430,9 +473,9 @@ class Simulation:
                 try:
                     turns = int(parts[1])
                 except ValueError:
-                    return TurnResult(["Wait amount must be an integer."])
+                    return TurnResult(self._events("system", ["Wait amount must be an integer."]))
             return self.advance_turn(turns)
-        return TurnResult(['Unknown command. Type "help" to see valid commands.'])
+        return TurnResult(self._events("system", ['Unknown command. Type "help" to see valid commands.']))
 
     def _step_turn(self) -> list[str]:
         self.turn_counter += 1

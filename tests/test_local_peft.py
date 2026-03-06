@@ -1,17 +1,25 @@
 import json
 import sys
 import types
+from pathlib import Path
 
 from transformers import AutoModelForCausalLM
 
 from acidnet.llm.local_peft import _load_adapter_config, _resolve_model_loader
 
 
-def test_load_adapter_config_returns_empty_dict_for_missing_file(tmp_path) -> None:
-    assert _load_adapter_config(str(tmp_path)) == {}
+def _artifact_dir(name: str) -> Path:
+    path = Path("data") / "test_artifacts" / "local_peft" / name
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
-def test_resolve_model_loader_uses_adapter_auto_mapping(tmp_path, monkeypatch) -> None:
+def test_load_adapter_config_returns_empty_dict_for_missing_file() -> None:
+    missing_dir = _artifact_dir("missing")
+    assert _load_adapter_config(str(missing_dir)) == {}
+
+
+def test_resolve_model_loader_uses_adapter_auto_mapping(monkeypatch) -> None:
     module_name = "acidnet_test_fake_loader"
     fake_module = types.ModuleType(module_name)
 
@@ -23,8 +31,7 @@ def test_resolve_model_loader_uses_adapter_auto_mapping(tmp_path, monkeypatch) -
     fake_module.FakeLoader = FakeLoader
     monkeypatch.setitem(sys.modules, module_name, fake_module)
 
-    adapter_dir = tmp_path / "adapter"
-    adapter_dir.mkdir()
+    adapter_dir = _artifact_dir("auto_mapping")
     (adapter_dir / "adapter_config.json").write_text(
         json.dumps(
             {
@@ -40,9 +47,8 @@ def test_resolve_model_loader_uses_adapter_auto_mapping(tmp_path, monkeypatch) -
     assert _resolve_model_loader(str(adapter_dir)) is FakeLoader
 
 
-def test_resolve_model_loader_falls_back_when_auto_mapping_is_invalid(tmp_path) -> None:
-    adapter_dir = tmp_path / "adapter"
-    adapter_dir.mkdir()
+def test_resolve_model_loader_falls_back_when_auto_mapping_is_invalid() -> None:
+    adapter_dir = _artifact_dir("invalid_auto_mapping")
     (adapter_dir / "adapter_config.json").write_text(
         json.dumps(
             {

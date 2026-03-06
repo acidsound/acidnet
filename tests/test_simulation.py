@@ -27,6 +27,21 @@ def test_player_can_say_freeform_message_to_npc() -> None:
 
     assert any("dry wind" in line.lower() for line in result.lines)
     assert simulation.player.known_rumor_ids
+    assert result.entries[0].kind == "npc"
+    assert result.entries[0].text.startswith("Neri:")
+    assert any(entry.kind == "world" for entry in result.entries[1:])
+
+
+def test_info_and_action_results_are_not_labeled_as_world_by_default() -> None:
+    simulation = Simulation.create_demo()
+
+    look_result = simulation.handle_command("look")
+    move_result = simulation.handle_command("go tavern")
+
+    assert look_result.entries
+    assert all(entry.kind == "system" for entry in look_result.entries)
+    assert move_result.entries[0].kind == "system"
+    assert any(entry.kind == "world" for entry in move_result.entries[1:])
 
 
 def test_player_can_buy_from_vendor() -> None:

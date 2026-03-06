@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from acidnet.engine import Simulation
+from acidnet.engine.simulation import TurnEvent
 
 FOOD_ITEMS = ("stew", "bread", "fish", "wheat")
 
@@ -14,6 +15,7 @@ FOOD_ITEMS = ("stew", "bread", "fish", "wheat")
 class MonkeyStep:
     index: int
     command: str
+    entries: list[TurnEvent]
     lines: list[str]
     day: int
     tick: int
@@ -46,6 +48,7 @@ class SimulationMonkeyRunner:
         step = MonkeyStep(
             index=self.step_index,
             command=command,
+            entries=result.entries,
             lines=result.lines,
             day=self.simulation.world.day,
             tick=self.simulation.world.tick,
