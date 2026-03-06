@@ -1,0 +1,355 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from acidnet.models import (
+    Location,
+    MarketItemState,
+    MarketState,
+    NPCState,
+    PersonaProfile,
+    PlayerState,
+    RelationshipState,
+    Rumor,
+    RumorCategory,
+    WorldState,
+)
+
+
+@dataclass(slots=True)
+class DemoSetup:
+    world: WorldState
+    player: PlayerState
+    npcs: dict[str, NPCState]
+    personas: dict[str, PersonaProfile]
+    rumors: dict[str, Rumor]
+
+
+def build_demo_setup() -> DemoSetup:
+    locations = {
+        "square": Location(
+            location_id="square",
+            name="Market Square",
+            kind="market",
+            neighbors=["tavern", "bakery", "smithy", "farm", "shrine"],
+        ),
+        "tavern": Location(
+            location_id="tavern",
+            name="Copper Cup Tavern",
+            kind="social",
+            neighbors=["square", "riverside"],
+        ),
+        "bakery": Location(
+            location_id="bakery",
+            name="Warm Crust Bakery",
+            kind="workshop",
+            neighbors=["square"],
+        ),
+        "smithy": Location(
+            location_id="smithy",
+            name="Red Anvil Smithy",
+            kind="workshop",
+            neighbors=["square"],
+        ),
+        "farm": Location(
+            location_id="farm",
+            name="South Field Farm",
+            kind="resource",
+            neighbors=["square", "riverside"],
+        ),
+        "riverside": Location(
+            location_id="riverside",
+            name="Mossy Riverside",
+            kind="resource",
+            neighbors=["farm", "tavern"],
+        ),
+        "shrine": Location(
+            location_id="shrine",
+            name="Dawn Shrine",
+            kind="rest",
+            neighbors=["square"],
+        ),
+    }
+
+    world = WorldState(
+        tick=0,
+        day=1,
+        weather="dry_wind",
+        locations=locations,
+        market=MarketState(
+            items={
+                "wheat": MarketItemState(item_id="wheat", stock=18, base_price=2, current_price=2),
+                "bread": MarketItemState(item_id="bread", stock=10, base_price=5, current_price=5),
+                "fish": MarketItemState(item_id="fish", stock=8, base_price=4, current_price=4),
+                "stew": MarketItemState(item_id="stew", stock=6, base_price=7, current_price=7),
+                "tool": MarketItemState(item_id="tool", stock=2, base_price=15, current_price=15),
+            }
+        ),
+    )
+
+    personas = {
+        "persona.merchant.greedy": PersonaProfile(
+            persona_id="persona.merchant.greedy",
+            archetype="merchant",
+            profession="merchant",
+            traits=["greedy", "alert", "opportunistic"],
+            speech_style=["quick", "pragmatic"],
+            values=["profit", "reputation"],
+            rumor_bias=0.4,
+            trade_bias=0.8,
+            conflict_bias=-0.1,
+        ),
+        "persona.farmer.steady": PersonaProfile(
+            persona_id="persona.farmer.steady",
+            archetype="farmer",
+            profession="farmer",
+            traits=["steady", "protective"],
+            speech_style=["plain", "grounded"],
+            values=["food", "routine"],
+            rumor_bias=0.1,
+            trade_bias=-0.2,
+            conflict_bias=-0.3,
+        ),
+        "persona.baker.warm": PersonaProfile(
+            persona_id="persona.baker.warm",
+            archetype="baker",
+            profession="baker",
+            traits=["warm", "gossipy"],
+            speech_style=["friendly", "descriptive"],
+            values=["craft", "community"],
+            rumor_bias=0.5,
+            trade_bias=0.1,
+            conflict_bias=-0.5,
+        ),
+        "persona.cook.blunt": PersonaProfile(
+            persona_id="persona.cook.blunt",
+            archetype="cook",
+            profession="cook",
+            traits=["blunt", "practical"],
+            speech_style=["short", "dry"],
+            values=["order", "fed_people"],
+            rumor_bias=0.2,
+            trade_bias=0.0,
+            conflict_bias=-0.2,
+        ),
+        "persona.blacksmith.gruff": PersonaProfile(
+            persona_id="persona.blacksmith.gruff",
+            archetype="blacksmith",
+            profession="blacksmith",
+            traits=["gruff", "proud"],
+            speech_style=["clipped", "hard"],
+            values=["work", "durability"],
+            rumor_bias=-0.2,
+            trade_bias=0.2,
+            conflict_bias=0.3,
+        ),
+        "persona.guard.loyal": PersonaProfile(
+            persona_id="persona.guard.loyal",
+            archetype="guard",
+            profession="guard",
+            traits=["loyal", "watchful"],
+            speech_style=["formal", "measured"],
+            values=["safety", "order"],
+            rumor_bias=-0.1,
+            trade_bias=-0.2,
+            conflict_bias=0.2,
+        ),
+        "persona.fisher.easy": PersonaProfile(
+            persona_id="persona.fisher.easy",
+            archetype="fisher",
+            profession="fisher",
+            traits=["easygoing", "curious"],
+            speech_style=["loose", "playful"],
+            values=["luck", "weather"],
+            rumor_bias=0.3,
+            trade_bias=0.0,
+            conflict_bias=-0.4,
+        ),
+        "persona.priest.calm": PersonaProfile(
+            persona_id="persona.priest.calm",
+            archetype="priest",
+            profession="priest",
+            traits=["calm", "observant"],
+            speech_style=["gentle", "patient"],
+            values=["peace", "care"],
+            rumor_bias=-0.2,
+            trade_bias=-0.4,
+            conflict_bias=-0.7,
+        ),
+        "persona.tailor.chatty": PersonaProfile(
+            persona_id="persona.tailor.chatty",
+            archetype="tailor",
+            profession="tailor",
+            traits=["chatty", "nosy"],
+            speech_style=["lively", "curved"],
+            values=["status", "stories"],
+            rumor_bias=0.7,
+            trade_bias=0.1,
+            conflict_bias=-0.1,
+        ),
+    }
+
+    def rel(other_npc_id: str, trust: float, closeness: float) -> RelationshipState:
+        return RelationshipState(other_npc_id=other_npc_id, trust=trust, closeness=closeness)
+
+    npcs = {
+        "npc.mara": NPCState(
+            npc_id="npc.mara",
+            name="Mara",
+            persona_id="persona.merchant.greedy",
+            profession="merchant",
+            goals=["sell_food", "collect_rumors"],
+            location_id="square",
+            home_location_id="square",
+            workplace_id="square",
+            inventory={"bread": 6, "stew": 3, "fish": 2},
+            money=90,
+            hunger=18.0,
+            is_vendor=True,
+            relationships={"npc.neri": rel("npc.neri", 0.7, 0.8), "npc.anik": rel("npc.anik", 0.4, 0.3)},
+        ),
+        "npc.anik": NPCState(
+            npc_id="npc.anik",
+            name="Anik",
+            persona_id="persona.farmer.steady",
+            profession="farmer",
+            goals=["grow_food", "protect_harvest"],
+            location_id="farm",
+            home_location_id="farm",
+            workplace_id="farm",
+            inventory={"wheat": 7},
+            money=22,
+            hunger=25.0,
+            relationships={"npc.mara": rel("npc.mara", 0.3, 0.2), "npc.hobb": rel("npc.hobb", 0.6, 0.4)},
+        ),
+        "npc.hobb": NPCState(
+            npc_id="npc.hobb",
+            name="Hobb",
+            persona_id="persona.baker.warm",
+            profession="baker",
+            goals=["bake_bread", "stay_informed"],
+            location_id="bakery",
+            home_location_id="bakery",
+            workplace_id="bakery",
+            inventory={"bread": 5, "wheat": 2},
+            money=28,
+            hunger=30.0,
+            is_vendor=True,
+            relationships={"npc.anik": rel("npc.anik", 0.7, 0.5), "npc.neri": rel("npc.neri", 0.5, 0.6)},
+        ),
+        "npc.bina": NPCState(
+            npc_id="npc.bina",
+            name="Bina",
+            persona_id="persona.cook.blunt",
+            profession="cook",
+            goals=["feed_village", "keep_tavern_stocked"],
+            location_id="tavern",
+            home_location_id="tavern",
+            workplace_id="tavern",
+            inventory={"stew": 4, "bread": 1},
+            money=30,
+            hunger=15.0,
+            is_vendor=True,
+            relationships={"npc.toma": rel("npc.toma", 0.5, 0.4), "npc.mara": rel("npc.mara", 0.4, 0.3)},
+        ),
+        "npc.doran": NPCState(
+            npc_id="npc.doran",
+            name="Doran",
+            persona_id="persona.blacksmith.gruff",
+            profession="blacksmith",
+            goals=["forge_tools", "avoid_fools"],
+            location_id="smithy",
+            home_location_id="smithy",
+            workplace_id="smithy",
+            inventory={"tool": 2},
+            money=45,
+            hunger=26.0,
+            is_vendor=True,
+            relationships={"npc.iva": rel("npc.iva", 0.4, 0.3)},
+        ),
+        "npc.iva": NPCState(
+            npc_id="npc.iva",
+            name="Iva",
+            persona_id="persona.guard.loyal",
+            profession="guard",
+            goals=["watch_square", "prevent_trouble"],
+            location_id="square",
+            home_location_id="square",
+            workplace_id="square",
+            inventory={"bread": 1},
+            money=16,
+            hunger=34.0,
+            relationships={"npc.mara": rel("npc.mara", 0.5, 0.4), "npc.serin": rel("npc.serin", 0.5, 0.3)},
+        ),
+        "npc.toma": NPCState(
+            npc_id="npc.toma",
+            name="Toma",
+            persona_id="persona.fisher.easy",
+            profession="fisher",
+            goals=["catch_fish", "hear_news"],
+            location_id="riverside",
+            home_location_id="riverside",
+            workplace_id="riverside",
+            inventory={"fish": 3},
+            money=19,
+            hunger=24.0,
+            relationships={"npc.bina": rel("npc.bina", 0.6, 0.4), "npc.neri": rel("npc.neri", 0.2, 0.3)},
+        ),
+        "npc.serin": NPCState(
+            npc_id="npc.serin",
+            name="Serin",
+            persona_id="persona.priest.calm",
+            profession="priest",
+            goals=["comfort_people", "notice_tension"],
+            location_id="shrine",
+            home_location_id="shrine",
+            workplace_id="shrine",
+            inventory={"bread": 1},
+            money=12,
+            hunger=21.0,
+            relationships={"npc.iva": rel("npc.iva", 0.5, 0.4), "npc.anik": rel("npc.anik", 0.6, 0.3)},
+        ),
+        "npc.neri": NPCState(
+            npc_id="npc.neri",
+            name="Neri",
+            persona_id="persona.tailor.chatty",
+            profession="tailor",
+            goals=["collect_stories", "improve_status"],
+            location_id="square",
+            home_location_id="square",
+            workplace_id="square",
+            inventory={"bread": 1},
+            money=24,
+            hunger=29.0,
+            relationships={"npc.mara": rel("npc.mara", 0.8, 0.8), "npc.hobb": rel("npc.hobb", 0.4, 0.6)},
+        ),
+    }
+
+    rumor = Rumor(
+        rumor_id="rumor.shortage.wheat",
+        origin_npc_id="npc.anik",
+        subject_id="farm",
+        content="The south field yield is down after the dry wind. Grain will be tight this week.",
+        category=RumorCategory.SHORTAGE,
+        confidence=0.82,
+        value=0.9,
+        distortion=0.0,
+        hop_count=0,
+        created_tick=0,
+        last_shared_tick=0,
+    )
+
+    npcs["npc.anik"].known_rumor_ids.append(rumor.rumor_id)
+    npcs["npc.neri"].known_rumor_ids.append(rumor.rumor_id)
+
+    player = PlayerState(
+        name="Jaeho",
+        location_id="square",
+        inventory={"bread": 1},
+        money=35,
+        hunger=12.0,
+    )
+
+    world.npc_ids = list(npcs)
+    return DemoSetup(world=world, player=player, npcs=npcs, personas=personas, rumors={rumor.rumor_id: rumor})
+
