@@ -239,6 +239,7 @@ def _inject_scenario_rumors(simulation: Simulation, *, scenario_id: str, rng: ra
 
 def _build_world_sample(simulation: Simulation, npc_id: str, *, rng: random.Random) -> dict[str, Any]:
     npc = simulation.npcs[npc_id]
+    persona = simulation.personas[npc.persona_id]
     location = simulation.world.locations[npc.location_id]
     rumors = [simulation.rumors[rumor_id].content for rumor_id in npc.known_rumor_ids if rumor_id in simulation.rumors]
     nearby_npcs = [
@@ -305,6 +306,7 @@ def _build_world_sample(simulation: Simulation, npc_id: str, *, rng: random.Rand
             "current_intent": npc.current_intent.model_dump(mode="json") if npc.current_intent is not None else None,
             "is_vendor": npc.is_vendor,
         },
+        "persona": persona.model_dump(mode="json"),
         "nearby_npcs": nearby_npcs,
         "known_player_rumors": [
             simulation.rumors[rumor_id].content

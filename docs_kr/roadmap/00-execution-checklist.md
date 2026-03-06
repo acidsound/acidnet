@@ -56,6 +56,7 @@
 현재 구현 초점은 승격 품질이다.
 
 - bootstrap teacher dataset을 더 다듬어서 첫 실전 4B run이 model gate를 통과하게 만든다
+- 작은 모델 대사가 장황해지지 않도록 runtime과 training 모두에서 thinking을 끈다
 - `Qwen/Qwen3.5-4B`를 기본 학습 checkpoint로 유지한다
 - `Qwen/Qwen3.5-9B`는 4B가 안정화된 뒤 challenger로만 본다
 - Windows 기본 학습 backend는 HF/PEFT LoRA 경로로 유지한다
@@ -66,6 +67,7 @@
 
 - 작은 모델 기반 NPC 루프가 모델 크기 확장보다 더 중요하다
 - 외부 API 의존보다 bootstrap teacher data가 더 중요하다
+- 플레이어가 직접 보는 NPC 대사에서는 teacher JSON 보존보다 runtime 정렬 dialogue SFT가 더 중요하다
 - 월드 순환성과 entropy 안정성이 UI 확장보다 더 중요하다
 - player 생존과 earning loop는 계속 같은 rule-based economy 안에 있어야 한다
 

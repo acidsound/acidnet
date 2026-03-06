@@ -187,6 +187,7 @@ def _build_prompt(tokenizer: Any, messages: list[dict[str, Any]]) -> str:
                 normalized_messages,
                 tokenize=False,
                 add_generation_prompt=True,
+                enable_thinking=False,
             )
         except Exception:
             pass
@@ -237,10 +238,23 @@ def _generate_text(
     with torch.inference_mode():
         output = model.generate(**encoded, **generation_kwargs)
     generated_tokens = output[0][encoded["input_ids"].shape[1] :]
-    text = tokenizer.decode(generated_tokens, skip_special_tokens=True).strip()
+    text = _sanitize_generated_text(tokenizer.decode(generated_tokens, skip_special_tokens=True))
     if not text:
         raise RuntimeError("The adapter server generated an empty response.")
     return text
+
+
+def _sanitize_generated_text(text: str) -> str:
+    cleaned = text.strip()
+    if "<think>" in cleaned and "</think>" in cleaned:
+        _, cleaned = cleaned.split("</think>", 1)
+        cleaned = cleaned.strip()
+    if cleaned.lower().startswith("thinking process:"):
+        parts = cleaned.split("\n\n")
+        cleaned = parts[-1].strip() if parts else ""
+    if cleaned.startswith("1.") and "\n\n" in cleaned:
+        cleaned = cleaned.split("\n\n")[-1].strip()
+    return cleaned
 
 
 if __name__ == "__main__":

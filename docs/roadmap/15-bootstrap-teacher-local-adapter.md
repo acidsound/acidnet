@@ -32,7 +32,8 @@ python run_bootstrap_qwen4b_pipeline.py ^
   --format both ^
   --train-rows 50000 ^
   --eval-rows 4000 ^
-  --trainer-backend hf_peft
+  --trainer-backend hf_peft ^
+  --sft-variant runtime_dialogue
 ```
 
 This currently produces:
@@ -59,6 +60,7 @@ Latest generated bootstrap dataset:
 - eval rows: `4000`
 - task focus: `dialogue`
 - trainer backend: `hf_peft`
+- sft variant: `runtime_dialogue`
 
 See:
 
@@ -113,6 +115,8 @@ powershell -ExecutionPolicy Bypass -File run_local_adapter_dev_loop.ps1 `
 - the end-to-end technical path is working
 - the tiny smoke adapter is not good enough for promotion
 - prompt quality is still below the model gate threshold
+- `thinking` must stay disabled in both training and runtime for the small-model path
+- runtime dialogue SFT is now the default promotion path for NPC speech
 - world circulation remains stable because the rule-based simulation still owns world mutation
 
 ## Immediate Next Work

@@ -26,6 +26,7 @@ from acidnet.training import (
     generate_demo_prompt_pack,
     generate_synthetic_prompt_pack,
     merge_prompt_pack_with_teacher_outputs,
+    merge_prompt_pack_with_teacher_outputs_runtime_dialogue,
     normalize_openai_batch_output,
     prepare_qwen4b_baseline_artifacts,
     recommended_experiment_order,
@@ -97,6 +98,48 @@ def test_teacher_outputs_can_be_merged_into_sft_examples() -> None:
     assert len(examples) == 1
     assert examples[0].assistant_json["npc_id"] == "npc.neri"
     assert output_path.exists()
+
+
+def test_dialogue_teacher_outputs_can_be_merged_into_runtime_aligned_sft_examples() -> None:
+    prompt_rows = [
+        {
+            "custom_id": "dialogue.demo.0.npc.hobb",
+            "task": "dialogue",
+            "system_prompt": "teacher system",
+            "user_prompt": """NPC dialogue task.
+
+World sample:
+{'world': {'day': 1, 'tick': 0, 'weather': 'dry_wind', 'scarcity_index': 0.9, 'market_prices': {'bread': 4}},
+ 'location': {'name': 'Warm Crust Bakery'},
+ 'player': {'hunger': 18.0},
+ 'npc': {'npc_id': 'npc.hobb', 'name': 'Hobb', 'profession': 'baker', 'traits': ['warm', 'gossipy'], 'hunger': 28.0, 'inventory': {'bread': 3}, 'known_rumors': ['Bread will run short by dusk.']},
+ 'persona': {'speech_style': ['friendly', 'descriptive'], 'values': ['craft', 'community']},
+ 'interaction_context': {'player_prompt': 'I need food. What can you sell me right now?', 'player_goal': 'trade_food'},
+ 'beliefs': ['market:price_rising:0.80'],
+ 'recent_memories': ['Sold two loaves at dawn.'],
+ 'visible_rumors': ['Bread will run short by dusk.'],
+ 'relationship_score': 0.25}
+""",
+            "metadata": {"npc_id": "npc.hobb", "scenario_id": "scenario_0000"},
+        }
+    ]
+    teacher_rows = [
+        {
+            "custom_id": "dialogue.demo.0.npc.hobb",
+            "assistant_json": {
+                "task": "dialogue",
+                "npc_id": "npc.hobb",
+                "response": "Fresh bread is what I have, and the dry wind is already nudging prices upward.",
+            },
+        }
+    ]
+
+    examples = merge_prompt_pack_with_teacher_outputs_runtime_dialogue(prompt_rows, teacher_rows)
+
+    assert len(examples) == 1
+    assert examples[0].task == "dialogue_runtime"
+    assert examples[0].messages[-1]["content"].startswith("Fresh bread")
+    assert "Output one short in-character reply only." in examples[0].user_prompt
 
 
 def test_openai_batch_requests_are_built_from_prompt_rows() -> None:
@@ -344,3 +387,57 @@ def test_qwen4b_baseline_pipeline_prepares_split_and_run_artifacts() -> None:
     assert Path(artifacts.training_script_path).exists()
     assert artifact_map["experiment_key"] == "qwen3_5_4b_baseline"
     assert artifact_map["trainer_backend"] == "hf_peft"
+
+
+def test_qwen4b_baseline_pipeline_supports_runtime_dialogue_variant() -> None:
+    artifact_dir = Path("data") / "test_artifacts"
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    prompt_pack_path = artifact_dir / "runtime_pipeline_teacher_requests.jsonl"
+    teacher_output_path = artifact_dir / "runtime_pipeline_teacher_outputs.jsonl"
+
+    prompt_pack_path.write_text(
+        "\n".join(
+            [
+                """{"custom_id":"dialogue.demo.0.npc.hobb","task":"dialogue","system_prompt":"teacher system","user_prompt":"NPC dialogue task.\\n\\nWorld sample:\\n{'world': {'day': 1, 'tick': 0, 'weather': 'dry_wind', 'scarcity_index': 0.9, 'market_prices': {'bread': 4}}, 'location': {'name': 'Warm Crust Bakery'}, 'player': {'hunger': 18.0}, 'npc': {'npc_id': 'npc.hobb', 'name': 'Hobb', 'profession': 'baker', 'traits': ['warm', 'gossipy'], 'hunger': 28.0, 'inventory': {'bread': 3}, 'known_rumors': ['Bread will run short by dusk.']}, 'persona': {'speech_style': ['friendly', 'descriptive'], 'values': ['craft', 'community']}, 'interaction_context': {'player_prompt': 'I need food. What can you sell me right now?', 'player_goal': 'trade_food'}, 'beliefs': ['market:price_rising:0.80'], 'recent_memories': ['Sold two loaves at dawn.'], 'visible_rumors': ['Bread will run short by dusk.'], 'relationship_score': 0.25}","metadata":{"npc_id":"npc.hobb","scenario_id":"scenario_0000"}}""",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    teacher_output_path.write_text(
+        "\n".join(
+            [
+                '{"custom_id":"dialogue.demo.0.npc.hobb","assistant_json":{"task":"dialogue","npc_id":"npc.hobb","response":"Fresh bread is what I have, and the dry wind is already nudging prices upward."}}',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    artifacts = prepare_qwen4b_baseline_artifacts(
+        prompt_pack_path=str(prompt_pack_path),
+        teacher_output_path=str(teacher_output_path),
+        merged_jsonl_path=str(artifact_dir / "runtime_pipeline_teacher_sft_dataset.jsonl"),
+        merged_parquet_path=str(artifact_dir / "runtime_pipeline_teacher_sft_dataset.parquet"),
+        train_jsonl_path=str(artifact_dir / "runtime_pipeline_train_teacher_sft_dataset.jsonl"),
+        train_parquet_path=str(artifact_dir / "runtime_pipeline_train_teacher_sft_dataset.parquet"),
+        eval_jsonl_path=str(artifact_dir / "runtime_pipeline_eval_teacher_sft_dataset.jsonl"),
+        eval_parquet_path=str(artifact_dir / "runtime_pipeline_eval_teacher_sft_dataset.parquet"),
+        training_output_dir=str(artifact_dir / "runtime_pipeline_qwen3_5_4b_baseline"),
+        run_spec_path=str(artifact_dir / "runtime_pipeline_qwen3_5_4b_baseline_run_spec.json"),
+        training_script_path=str(artifact_dir / "runtime_pipeline_train_qwen3_5_4b_baseline.py"),
+        export_format="jsonl",
+        trainer_backend="hf_peft",
+        sft_variant="runtime_dialogue",
+        train_rows_target=1,
+        eval_rows_target=0,
+        seed=7,
+    )
+
+    merged_rows = [row for row in (artifact_dir / "runtime_pipeline_teacher_sft_dataset.jsonl").read_text(encoding="utf-8").splitlines() if row]
+
+    assert artifacts.sft_variant == "runtime_dialogue"
+    assert artifacts.train_rows == 1
+    assert artifacts.eval_rows == 0
+    assert len(merged_rows) == 1
+    assert '"task": "dialogue_runtime"' in merged_rows[0]

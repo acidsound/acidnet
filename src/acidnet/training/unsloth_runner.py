@@ -99,7 +99,12 @@ def format_record(record, tokenizer):
     messages = json.loads(record["messages"]) if isinstance(record["messages"], str) else record["messages"]
     if hasattr(tokenizer, "apply_chat_template"):
         try:
-            text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
+            text = tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=False,
+                enable_thinking=False,
+            )
             return {{"text": text}}
         except Exception:
             pass

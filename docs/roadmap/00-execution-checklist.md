@@ -56,6 +56,7 @@ Build a simulation-first village RPG where the player can move through the world
 Current implementation focus is promotion quality:
 
 - improve the bootstrap-teacher dataset so the first real 4B run clears the model gate
+- keep thinking disabled across runtime and training so small-model dialogue stays terse and game-usable
 - keep `Qwen/Qwen3.5-4B` as the primary training checkpoint
 - keep `Qwen/Qwen3.5-9B` as a challenger only after the 4B run is stable
 - run bf16 LoRA through the HF/PEFT Windows-safe path by default
@@ -66,6 +67,7 @@ In practical terms, this means:
 
 - the small-model NPC loop matters more than model-size escalation
 - bootstrap teacher data matters more than external API dependence
+- runtime-aligned dialogue SFT matters more than teacher JSON fidelity for player-facing NPC speech
 - world circulation and entropy stability matter more than UI scale-up
 - player survival and earning loops must stay inside the same rule-based economy
 

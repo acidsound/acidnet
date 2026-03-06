@@ -15,6 +15,7 @@ from acidnet.training.sft_dataset import (
     export_sft_parquet,
     load_jsonl,
     merge_prompt_pack_with_teacher_outputs,
+    merge_prompt_pack_with_teacher_outputs_runtime_dialogue,
     split_sft_examples,
 )
 from acidnet.training.unsloth_runner import (
@@ -39,6 +40,7 @@ class BaselinePipelineArtifacts:
     eval_rows: int
     experiment_key: str
     trainer_backend: str
+    sft_variant: str
 
 
 def prepare_qwen4b_baseline_artifacts(
@@ -56,6 +58,7 @@ def prepare_qwen4b_baseline_artifacts(
     training_script_path: str,
     export_format: Literal["jsonl", "parquet", "both"] = "both",
     trainer_backend: Literal["unsloth", "hf_peft"] = "unsloth",
+    sft_variant: Literal["teacher_json", "runtime_dialogue"] = "teacher_json",
     seed: int = 7,
     train_rows_target: int = 50_000,
     eval_rows_target: int = 4_000,
@@ -63,7 +66,10 @@ def prepare_qwen4b_baseline_artifacts(
 ) -> BaselinePipelineArtifacts:
     prompt_rows = load_jsonl(prompt_pack_path)
     teacher_rows = load_jsonl(teacher_output_path)
-    merged_examples = merge_prompt_pack_with_teacher_outputs(prompt_rows, teacher_rows)
+    if sft_variant == "runtime_dialogue":
+        merged_examples = merge_prompt_pack_with_teacher_outputs_runtime_dialogue(prompt_rows, teacher_rows)
+    else:
+        merged_examples = merge_prompt_pack_with_teacher_outputs(prompt_rows, teacher_rows)
     train_examples, eval_examples = split_sft_examples(
         merged_examples,
         train_rows_target=train_rows_target,
@@ -115,6 +121,7 @@ def prepare_qwen4b_baseline_artifacts(
         eval_rows=len(eval_examples),
         experiment_key=baseline.key,
         trainer_backend=trainer_backend,
+        sft_variant=sft_variant,
     )
 
 

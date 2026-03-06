@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
+
+from acidnet.llm.prompt_builder import build_system_prompt, build_user_prompt_from_sample
 
 
 @dataclass(slots=True)
@@ -59,6 +62,44 @@ def merge_prompt_pack_with_teacher_outputs(
                     {"role": "system", "content": prompt_row["system_prompt"]},
                     {"role": "user", "content": prompt_row["user_prompt"]},
                     {"role": "assistant", "content": assistant_text},
+                ],
+            )
+        )
+    return examples
+
+
+def merge_prompt_pack_with_teacher_outputs_runtime_dialogue(
+    prompt_rows: list[dict[str, Any]],
+    teacher_rows: list[dict[str, Any]],
+) -> list[SFTExample]:
+    teacher_by_id = {row["custom_id"]: _normalize_teacher_row(row) for row in teacher_rows}
+    examples: list[SFTExample] = []
+    for prompt_row in prompt_rows:
+        if prompt_row.get("task") != "dialogue":
+            continue
+        custom_id = prompt_row["custom_id"]
+        teacher_payload = teacher_by_id.get(custom_id)
+        if teacher_payload is None:
+            continue
+        response = teacher_payload.get("response")
+        if not isinstance(response, str) or not response.strip():
+            continue
+        sample = _extract_world_sample(prompt_row["user_prompt"])
+        runtime_user_prompt = build_user_prompt_from_sample(sample)
+        metadata = prompt_row.get("metadata", {})
+        examples.append(
+            SFTExample(
+                custom_id=custom_id,
+                task="dialogue_runtime",
+                npc_id=str(metadata.get("npc_id", "")),
+                scenario_id=metadata.get("scenario_id"),
+                system_prompt=build_system_prompt(),
+                user_prompt=runtime_user_prompt,
+                assistant_json=teacher_payload,
+                messages=[
+                    {"role": "system", "content": build_system_prompt()},
+                    {"role": "user", "content": runtime_user_prompt},
+                    {"role": "assistant", "content": response.strip()},
                 ],
             )
         )
@@ -154,3 +195,9 @@ def _normalize_teacher_row(row: dict[str, Any]) -> dict[str, Any]:
 
 def _stable_example_key(custom_id: str, seed: int) -> str:
     return hashlib.sha256(f"{seed}:{custom_id}".encode("utf-8")).hexdigest()
+
+
+def _extract_world_sample(user_prompt: str) -> dict[str, Any]:
+    marker = "World sample:"
+    _, sample_text = user_prompt.split(marker, 1)
+    return ast.literal_eval(sample_text.strip())

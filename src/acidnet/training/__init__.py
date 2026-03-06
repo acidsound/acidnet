@@ -57,6 +57,7 @@ from acidnet.training.sft_dataset import (
     export_sft_parquet,
     load_jsonl,
     merge_prompt_pack_with_teacher_outputs,
+    merge_prompt_pack_with_teacher_outputs_runtime_dialogue,
     split_sft_examples,
 )
 from acidnet.training.preference_dataset import (
@@ -128,6 +129,7 @@ __all__ = [
     "load_jsonl",
     "merge_lora_adapter",
     "merge_prompt_pack_with_teacher_outputs",
+    "merge_prompt_pack_with_teacher_outputs_runtime_dialogue",
     "normalize_openai_batch_output",
     "prepare_qwen4b_baseline_artifacts",
     "recommended_experiment_order",

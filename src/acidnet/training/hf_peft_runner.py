@@ -103,7 +103,12 @@ def build_text(record, tokenizer):
     messages = json.loads(record["messages"]) if isinstance(record["messages"], str) else record["messages"]
     if hasattr(tokenizer, "apply_chat_template"):
         try:
-            return tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
+            return tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=False,
+                enable_thinking=False,
+            )
         except Exception:
             pass
     return "\\n".join(f"{{item['role']}}: {{item['content']}}" for item in messages)

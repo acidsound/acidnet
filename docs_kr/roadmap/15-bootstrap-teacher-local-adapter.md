@@ -32,7 +32,8 @@ python run_bootstrap_qwen4b_pipeline.py ^
   --format both ^
   --train-rows 50000 ^
   --eval-rows 4000 ^
-  --trainer-backend hf_peft
+  --trainer-backend hf_peft ^
+  --sft-variant runtime_dialogue
 ```
 
 현재 생성되는 주요 artifact:
@@ -59,6 +60,7 @@ python run_bootstrap_qwen4b_pipeline.py ^
 - eval rows: `4000`
 - task focus: `dialogue`
 - trainer backend: `hf_peft`
+- sft variant: `runtime_dialogue`
 
 상세:
 
@@ -113,6 +115,8 @@ powershell -ExecutionPolicy Bypass -File run_local_adapter_dev_loop.ps1 `
 - end-to-end 기술 경로는 동작한다
 - tiny smoke adapter는 승격할 수준이 아니다
 - prompt 품질은 아직 model gate 기준 이하이다
+- 작은 모델 경로에서는 training과 runtime 모두에서 thinking을 끈 상태를 유지해야 한다
+- NPC 대사 승격 경로의 기본은 runtime dialogue SFT다
 - 하지만 world mutation은 계속 rule-based simulation이 맡고 있어서 world circulation 자체는 안정적이다
 
 ## 바로 다음 작업

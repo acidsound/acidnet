@@ -74,6 +74,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Training backend used if `--launch-train` is supplied.",
     )
     parser.add_argument(
+        "--sft-variant",
+        choices=("auto", "teacher_json", "runtime_dialogue"),
+        default="auto",
+        help="SFT dataset variant. `auto` uses runtime-aligned dialogue training for dialogue-only tasks.",
+    )
+    parser.add_argument(
         "--python-bin",
         default=sys.executable,
         help="Python interpreter used to launch the baseline trainer.",
@@ -95,6 +101,7 @@ def main() -> None:
     args = build_parser().parse_args()
     trainer_backend = _resolve_trainer_backend(args.trainer_backend)
     selected_tasks = ("dialogue", "planner") if args.tasks == "both" else (args.tasks,)
+    sft_variant = _resolve_sft_variant(args.sft_variant, selected_tasks)
     if args.mode == "demo":
         rows = generate_demo_prompt_pack(num_turns=args.turns)
     else:
@@ -133,6 +140,7 @@ def main() -> None:
         training_script_path=str(Path("data") / "training" / "train_qwen3_5_4b_bootstrap_baseline.py"),
         export_format=args.format,
         trainer_backend=trainer_backend,
+        sft_variant=sft_variant,
         seed=args.seed,
         train_rows_target=args.train_rows,
         eval_rows_target=args.eval_rows,
@@ -157,6 +165,7 @@ def main() -> None:
     print(f"Train rows: {baseline_artifacts.train_rows}")
     print(f"Eval rows: {baseline_artifacts.eval_rows}")
     print(f"Trainer backend: {trainer_backend}")
+    print(f"SFT variant: {sft_variant}")
     print(f"Pipeline manifest: {manifest_path}")
 
     if args.launch_train:
@@ -189,6 +198,14 @@ def _resolve_trainer_backend(requested_backend: str) -> str:
         return "unsloth"
     except ImportError:
         return "hf_peft"
+
+
+def _resolve_sft_variant(requested_variant: str, selected_tasks: tuple[str, ...]) -> str:
+    if requested_variant != "auto":
+        return requested_variant
+    if selected_tasks == ("dialogue",):
+        return "runtime_dialogue"
+    return "teacher_json"
 
 
 if __name__ == "__main__":
