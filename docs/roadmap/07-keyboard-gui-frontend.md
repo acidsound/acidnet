@@ -7,8 +7,10 @@ Implemented:
 - Tk-based map view
 - keyboard movement
 - click-to-move for directly adjacent map nodes
+- player work action for earning gold or gathering food
 - NPC selection list
 - talk, rumor, buy, eat, and wait actions
+- in-GUI monkey toggle for observation runs
 - event log panel
 - command entry for raw world commands
 - shared SQLite persistence with the terminal runtime
@@ -76,20 +78,23 @@ python run_monkey_world.py --steps 240 --dialogue-backend heuristic
 - click an adjacent map node: move directly to that location
 - `T`: talk to selected NPC
 - `R`: ask selected NPC for rumors
+- `X`: do local work at the current location
 - `B`: buy bread from the selected NPC
 - `E`: eat the best food in inventory
+- `M`: toggle monkey mode on or off
 - `Space`: wait one turn
 - `L`: refresh the current scene
 - `Enter` in the command box: run any raw command
+- `Run (Enter)` button: submit the raw command entry
 
 ## UI Structure
 
 - left: world map with locations, links, and player marker
 - right: status, location text, NPC list, rumors, event log
-- bottom-right: raw command entry
+- bottom-right: raw command entry and `Run (Enter)` button
 
 ## Next Work
 
 - attach the future local persona/dialogue model to talk and rumor responses
-- add a proper tile renderer if the current node map stops being enough
 - add save/load slot handling on top of the SQLite snapshot log
+- add a proper tile renderer if the current node map stops being enough

@@ -42,6 +42,23 @@ def test_player_can_eat_food() -> None:
     assert simulation.player.hunger < starting_hunger
 
 
+def test_player_can_work_for_gold_and_resources() -> None:
+    simulation = Simulation.create_demo()
+
+    square_money = simulation.player.money
+    square_result = simulation.handle_command("work")
+
+    assert any("earn 4 gold" in line for line in square_result.lines)
+    assert simulation.player.money == square_money + 4
+
+    simulation.player.location_id = "farm"
+    farm_wheat = simulation.player.inventory.get("wheat", 0)
+    farm_result = simulation.handle_command("work")
+
+    assert any("gather 2 wheat" in line for line in farm_result.lines)
+    assert simulation.player.inventory.get("wheat", 0) == farm_wheat + 2
+
+
 def test_snapshot_contains_serializable_runtime_state() -> None:
     simulation = Simulation.create_demo()
 
@@ -65,3 +82,38 @@ def test_vendor_with_food_eats_instead_of_trying_to_trade_with_self() -> None:
     assert hobb.current_intent is not None
     assert hobb.current_intent.intent_type.value == "eat"
     assert hobb.inventory.get("bread", 0) == 3
+
+
+def test_hungry_npc_buys_affordable_food_instead_of_failing_on_unaffordable_best_item() -> None:
+    simulation = Simulation.create_demo()
+    iva = simulation.npcs["npc.iva"]
+    iva.inventory.clear()
+    iva.hunger = 70.0
+    iva.money = 6
+
+    simulation.advance_turn(1)
+
+    assert iva.current_intent is not None
+    assert iva.current_intent.intent_type.value == "trade"
+    assert iva.inventory.get("bread", 0) == 1
+    assert iva.money == 0
+
+
+def test_broke_service_npc_can_work_back_into_food_loop() -> None:
+    simulation = Simulation.create_demo()
+    serin = simulation.npcs["npc.serin"]
+    serin.inventory.clear()
+    serin.hunger = 70.0
+    serin.money = 0
+
+    simulation.advance_turn(1)
+    assert serin.current_intent is not None
+    assert serin.current_intent.intent_type.value == "work"
+    assert serin.money >= 6
+
+    simulation.advance_turn(1)
+    assert serin.current_intent is not None
+    assert serin.current_intent.intent_type.value in {"move", "trade"}
+
+    simulation.advance_turn(1)
+    assert serin.inventory.get("bread", 0) == 1

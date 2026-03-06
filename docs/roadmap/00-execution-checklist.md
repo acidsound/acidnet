@@ -67,6 +67,7 @@ In practical terms, this means:
 
 - the small-model NPC loop matters more than model-size escalation
 - world circulation and entropy stability matter more than UI scale-up
+- player survival and earning loops must stay inside the same rule-based economy
 
 ## Prototype Status
 
@@ -82,6 +83,7 @@ Implemented systems:
 
 - village map and movement
 - NPC dialogue and rumor sharing
+- player work loop for earning gold or gathering food
 - vendor trading and food consumption
 - deterministic tick progression
 - heuristic NPC planner
@@ -90,6 +92,7 @@ Implemented systems:
 - world snapshot persistence
 - synthetic teacher prompt generation for planner and dialogue tasks
 - prompt-only baseline evaluation harness
+- world circulation evaluation harness
 - OpenAI batch request preparation for teacher runs
 - OpenAI batch output normalization into teacher-output JSONL
 - Unsloth 4B baseline run-spec and training-script export

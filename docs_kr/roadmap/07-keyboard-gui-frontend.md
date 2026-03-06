@@ -7,8 +7,10 @@
 - Tk 기반 map view
 - 키보드 이동
 - 직접 연결된 map node 클릭 이동
+- player 가 gold 를 벌거나 food 를 모을 수 있는 work 액션
 - NPC selection list
 - talk, rumor, buy, eat, wait 액션
+- 관찰용 monkey mode 를 GUI 안에서 켜고 끌 수 있는 toggle
 - event log panel
 - raw command 입력창
 - 터미널 런타임과 공유되는 SQLite persistence
@@ -76,20 +78,23 @@ python run_monkey_world.py --steps 240 --dialogue-backend heuristic
 - 인접한 map node 클릭: 해당 location 으로 바로 이동
 - `T`: 선택된 NPC 와 대화
 - `R`: 선택된 NPC 에게 rumor 질문
+- `X`: 현재 location 에서 local work 수행
 - `B`: 선택된 NPC 에게 bread 구매
 - `E`: 인벤토리에서 가장 좋은 음식 먹기
+- `M`: monkey mode 켜기/끄기
 - `Space`: 한 턴 대기
 - `L`: 현재 장면 다시 보기
 - 명령창에서 `Enter`: raw command 실행
+- `Run (Enter)` 버튼: raw command 입력 실행
 
 ## UI 구조
 
 - 왼쪽: location, 연결선, player marker 가 있는 world map
 - 오른쪽: status, location text, NPC list, rumors, event log
-- 오른쪽 아래: raw command 입력창
+- 오른쪽 아래: raw command 입력창과 `Run (Enter)` 버튼
 
 ## 다음 작업
 
 - 미래의 local persona/dialogue model 을 talk, rumor 응답에 연결
-- 현재 node map 으로 부족해지면 tile renderer 추가
 - SQLite snapshot log 위에 save/load slot 처리 추가
+- 현재 node map 으로 부족해지면 tile renderer 추가

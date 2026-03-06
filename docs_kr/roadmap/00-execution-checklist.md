@@ -67,6 +67,7 @@
 
 - 모델 크기 확장보다 소형 모델 기반 NPC 루프가 더 중요하다
 - UI 확장보다 월드 순환성과 entropy 안정성이 더 중요하다
+- player 의 생존과 earning loop 도 같은 rule-based economy 안에서 닫혀야 한다
 
 ## 프로토타입 상태
 
@@ -82,6 +83,7 @@
 
 - village map 과 movement
 - NPC dialogue 와 rumor sharing
+- player 가 gold 를 벌거나 food 를 모을 수 있는 work loop
 - vendor trading 과 food consumption
 - deterministic tick progression
 - heuristic NPC planner
@@ -90,6 +92,7 @@
 - world snapshot persistence
 - planner/dialogue 용 synthetic teacher prompt generation
 - prompt-only baseline evaluation harness
+- world circulation evaluation harness
 - teacher run 용 OpenAI batch request 준비
 - teacher-output JSONL 로의 OpenAI batch output 정규화
 - Unsloth 4B baseline run-spec 과 training-script export

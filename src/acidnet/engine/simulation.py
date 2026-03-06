@@ -27,6 +27,12 @@ WORK_OUTPUT = {
     "fisher": ("fish", 2),
     "blacksmith": ("tool", 1),
 }
+WORK_WAGES = {
+    "blacksmith": 6,
+    "guard": 6,
+    "priest": 6,
+    "tailor": 6,
+}
 
 
 @dataclass(slots=True)
@@ -107,6 +113,7 @@ class Simulation:
                 "  go <location>            Move to a neighboring location.",
                 "  talk <npc>               Talk to an NPC at your location.",
                 "  ask <npc> rumor          Ask an NPC for their latest rumor.",
+                "  work                     Do local work or gather resources here.",
                 "  eat <item>               Consume food from your inventory.",
                 "  trade <npc> buy <item> <qty>",
                 "  trade <npc> sell <item> <qty>",
@@ -249,6 +256,42 @@ class Simulation:
         lines.extend(self.advance_turn(1).lines)
         return TurnResult(lines)
 
+    def player_work(self) -> TurnResult:
+        location = self.world.locations[self.player.location_id]
+        lines: list[str] = []
+        if location.location_id == "farm":
+            self._adjust_item(self.player.inventory, "wheat", 2)
+            lines.append("You help in the south field and gather 2 wheat.")
+        elif location.location_id == "riverside":
+            self._adjust_item(self.player.inventory, "fish", 1)
+            lines.append("You spend a shift on the riverside and catch 1 fish.")
+        elif location.location_id == "square":
+            self.player.money += 4
+            lines.append("You run market errands and earn 4 gold.")
+        elif location.location_id == "bakery":
+            self.player.money += 5
+            lines.append("You help with bakery deliveries and earn 5 gold.")
+        elif location.location_id == "tavern":
+            self.player.money += 5
+            lines.append("You serve at the tavern for a while and earn 5 gold.")
+        elif location.location_id == "smithy":
+            self.player.money += 5
+            lines.append("You haul ore and coal at the smithy and earn 5 gold.")
+        elif location.location_id == "shrine":
+            self.player.money += 3
+            lines.append("You help maintain the shrine and receive 3 gold in offerings.")
+        else:
+            return TurnResult(["There is no useful work available here right now."])
+
+        self._record_memory(
+            npc_id=self.player.player_id,
+            event_type="work",
+            summary=f"Worked at {location.name}.",
+            importance=0.4,
+        )
+        lines.extend(self.advance_turn(1).lines)
+        return TurnResult(lines)
+
     def trade_with_npc(self, npc_query: str, mode: str, item_query: str, qty: int) -> TurnResult:
         npc = self._resolve_npc_here(npc_query)
         if npc is None:
@@ -336,6 +379,8 @@ class Simulation:
             return TurnResult([self.known_rumors_text()])
         if command == "npcs":
             return TurnResult([self.npcs_here_text()])
+        if command in {"work", "gather", "forage"}:
+            return self.player_work()
         if command == "eat" and len(parts) >= 2:
             return self.player_eat(" ".join(parts[1:]))
         if command == "go" and len(parts) >= 2:
@@ -390,18 +435,22 @@ class Simulation:
         if npc.hunger >= 45 and food_item is not None:
             top_goals.append(f"eat:{food_item}")
         elif npc.hunger >= 45:
-            vendor = self._nearest_food_vendor(npc)
+            vendor = self._nearest_food_vendor(npc, affordable_only=True)
             if vendor is not None:
                 if npc.location_id == vendor.location_id:
                     top_goals.append(f"trade_food:{vendor.npc_id}")
                 else:
                     top_goals.append(f"move:{vendor.location_id}")
             else:
-                fallback_location = self._wild_food_fallback_location(npc)
-                if fallback_location == npc.location_id:
-                    top_goals.append(f"work:{fallback_location}")
-                elif fallback_location is not None:
-                    top_goals.append(f"move:{fallback_location}")
+                work_goal = self._food_emergency_work_goal(npc)
+                if work_goal is not None:
+                    top_goals.append(work_goal)
+                else:
+                    fallback_location = self._wild_food_fallback_location(npc)
+                    if fallback_location == npc.location_id:
+                        top_goals.append(f"work:{fallback_location}")
+                    elif fallback_location is not None:
+                        top_goals.append(f"move:{fallback_location}")
 
         rumor_target = self._rumor_share_target(npc)
         if rumor_target is not None:
@@ -459,12 +508,21 @@ class Simulation:
         if npc.profession in WORK_OUTPUT:
             item, amount = self._work_output_for(npc.profession)
             self._adjust_item(npc.inventory, item, amount)
+            income = self._work_income(npc)
+            if income > 0:
+                npc.money += income
             self._record_memory(
                 npc_id=npc.npc_id,
                 event_type="work",
-                summary=f"Produced {amount} {item}.",
+                summary=(
+                    f"Produced {amount} {item} and earned {income} gold."
+                    if income > 0
+                    else f"Produced {amount} {item}."
+                ),
                 importance=0.4,
             )
+            if income > 0:
+                return f"{npc.name} works and produces {amount} {item}, earning {income} gold."
             return f"{npc.name} works and produces {amount} {item}."
         if npc.profession == "merchant":
             return self._merchant_restock(npc)
@@ -502,6 +560,16 @@ class Simulation:
             self._adjust_item(npc.inventory, "fish", -1)
             self._adjust_item(npc.inventory, "stew", 1)
             return f"{npc.name} cooks a pot of stew."
+        income = self._work_income(npc)
+        if income > 0:
+            npc.money += income
+            self._record_memory(
+                npc_id=npc.npc_id,
+                event_type="work",
+                summary=f"Completed {npc.profession} duties and earned {income} gold.",
+                importance=0.35,
+            )
+            return f"{npc.name} completes {npc.profession} duties and earns {income} gold."
         fallback_item = self._wild_food_item_at_location(npc.location_id)
         if fallback_item is not None and npc.hunger >= 60:
             self._adjust_item(npc.inventory, fallback_item, 1)
@@ -511,7 +579,7 @@ class Simulation:
     def _npc_buy_food(self, npc: NPCState, vendor: NPCState) -> str | None:
         if npc.npc_id == vendor.npc_id:
             return None
-        food = self._best_food_in_inventory(vendor.inventory)
+        food = self._best_food_to_buy(npc, vendor, affordable_only=True)
         if food is None or npc.money <= 0:
             return None
         return self._npc_buy_specific_item(npc, vendor, food, 1)
@@ -719,6 +787,13 @@ class Simulation:
         suppliers = [self.npcs["npc.hobb"], self.npcs["npc.bina"], self.npcs["npc.toma"]]
         return [supplier for supplier in suppliers if self._best_food_in_inventory(supplier.inventory) is not None]
 
+    def _food_emergency_work_goal(self, npc: NPCState) -> str | None:
+        if npc.workplace_id is None:
+            return None
+        if npc.location_id != npc.workplace_id:
+            return f"move:{npc.workplace_id}"
+        return f"work:{npc.workplace_id}"
+
     def _wild_food_fallback_location(self, npc: NPCState) -> str | None:
         for location_id in (npc.location_id, "farm", "riverside"):
             if self._wild_food_item_at_location(location_id) is not None:
@@ -761,16 +836,41 @@ class Simulation:
             return self.rumors.get(speaker.known_rumor_ids[0])
         return None
 
-    def _nearest_food_vendor(self, npc: NPCState) -> NPCState | None:
-        candidates = [
-            other
-            for other in self.npcs.values()
-            if other.npc_id != npc.npc_id and other.is_vendor and self._best_food_in_inventory(other.inventory)
-        ]
+    def _nearest_food_vendor(self, npc: NPCState, *, affordable_only: bool = False) -> NPCState | None:
+        candidates: list[tuple[int, int, float, NPCState]] = []
+        for other in self.npcs.values():
+            if other.npc_id == npc.npc_id or not other.is_vendor:
+                continue
+            food = self._best_food_to_buy(npc, other, affordable_only=affordable_only)
+            if food is None:
+                if affordable_only:
+                    continue
+                food = self._best_food_in_inventory(other.inventory)
+                if food is None:
+                    continue
+            price = self._price_for(other, food, buy_from_vendor=True)
+            candidates.append(
+                (self._path_length(npc.location_id, other.location_id), price, -CONSUMPTION_VALUE[food], other)
+            )
         if not candidates:
             return None
-        candidates.sort(key=lambda other: self._path_length(npc.location_id, other.location_id))
-        return candidates[0]
+        candidates.sort(key=lambda item: (item[0], item[1], item[2], item[3].npc_id))
+        return candidates[0][3]
+
+    def _best_food_to_buy(self, buyer: NPCState, vendor: NPCState, *, affordable_only: bool) -> str | None:
+        best_item: str | None = None
+        best_score: tuple[float, int] | None = None
+        for item in FOOD_ITEMS:
+            if vendor.inventory.get(item, 0) <= 0:
+                continue
+            price = self._price_for(vendor, item, buy_from_vendor=True)
+            if affordable_only and buyer.money < price:
+                continue
+            score = (CONSUMPTION_VALUE[item], -price)
+            if best_score is None or score > best_score:
+                best_item = item
+                best_score = score
+        return best_item
 
     def _best_food_in_inventory(self, inventory: dict[str, int]) -> str | None:
         best = None
@@ -780,6 +880,9 @@ class Simulation:
                 best = item
                 best_value = CONSUMPTION_VALUE[item]
         return best
+
+    def _work_income(self, npc: NPCState) -> int:
+        return WORK_WAGES.get(npc.profession, 0)
 
     def _consume_food(self, inventory: dict[str, int], item: str, actor: NPCState | PlayerState) -> None:
         self._adjust_item(inventory, item, -1)

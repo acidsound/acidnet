@@ -69,14 +69,18 @@ class AcidNetApp(tk.Tk):
         self.selected_location_id = self.simulation.player.location_id
         self.status_var = tk.StringVar()
         self.footer_var = tk.StringVar()
+        self.monkey_button_var = tk.StringVar()
         self._location_items: dict[str, tuple[int, int]] = {}
         self._npc_name_by_index: list[str] = []
         self.monkey_enabled = monkey
+        self.monkey_default_steps = monkey_steps
         self.monkey_steps_remaining = monkey_steps
         self.monkey_delay_ms = monkey_delay_ms
-        self.monkey_runner = SimulationMonkeyRunner(self.simulation, seed=monkey_seed) if monkey else None
+        self.monkey_seed = monkey_seed
+        self.monkey_runner = SimulationMonkeyRunner(self.simulation, seed=monkey_seed)
 
         self._build_ui()
+        self._refresh_monkey_button()
         self._bind_shortcuts()
         self._render_world()
         self._refresh_panels()
@@ -84,7 +88,7 @@ class AcidNetApp(tk.Tk):
             [
                 "acidnet GUI loaded.",
                 "Use arrow keys or WASD to move. Click an adjacent location on the map to travel there.",
-                "T to talk, R for rumor, B to buy bread, E to eat, Space to wait.",
+                "T to talk, R for rumor, X to work, B to buy bread, E to eat, Space to wait.",
                 f"Dialogue backend: {dialogue_backend}",
             ],
             kind="system",
@@ -195,9 +199,23 @@ class AcidNetApp(tk.Tk):
         self._make_button(action_frame, "Buy Bread (B)", self._buy_bread_selected).grid(
             row=0, column=2, sticky="ew", padx=(6, 0)
         )
-        self._make_button(action_frame, "Eat (E)", self._eat_best_food).grid(row=1, column=0, sticky="ew", padx=(0, 6), pady=(6, 0))
-        self._make_button(action_frame, "Wait (Space)", self._wait_one_turn).grid(row=1, column=1, sticky="ew", padx=3, pady=(6, 0))
-        self._make_button(action_frame, "Look (L)", self._look).grid(row=1, column=2, sticky="ew", padx=(6, 0), pady=(6, 0))
+        self._make_button(action_frame, "Work (X)", self._player_work).grid(row=1, column=0, sticky="ew", padx=(0, 6), pady=(6, 0))
+        self._make_button(action_frame, "Eat (E)", self._eat_best_food).grid(row=1, column=1, sticky="ew", padx=3, pady=(6, 0))
+        self._make_button(action_frame, "Wait (Space)", self._wait_one_turn).grid(row=1, column=2, sticky="ew", padx=(6, 0), pady=(6, 0))
+        self._make_button(action_frame, "Look (L)", self._look).grid(row=2, column=0, sticky="ew", padx=(0, 6), pady=(6, 0))
+        tk.Button(
+            action_frame,
+            textvariable=self.monkey_button_var,
+            command=self._toggle_monkey,
+            bg=ACCENT_ALT,
+            fg="#081615",
+            activebackground="#6AC7C4",
+            activeforeground="#081615",
+            relief="flat",
+            font=FONT_BODY,
+            padx=10,
+            pady=6,
+        ).grid(row=2, column=1, columnspan=2, sticky="ew", padx=(3, 0), pady=(6, 0))
 
         tk.Label(sidebar, text="Rumors", font=FONT_TITLE, fg=FG_TEXT, bg=BG_PANEL, anchor="w").grid(
             row=4, column=0, sticky="ew"
@@ -224,7 +242,7 @@ class AcidNetApp(tk.Tk):
         )
         self.command_entry.grid(row=0, column=0, sticky="ew", padx=(0, 8))
         self.command_entry.bind("<Return>", self._submit_entry_command)
-        self._make_button(command_frame, "Run", self._submit_entry_command).grid(row=0, column=1, sticky="ew")
+        self._make_button(command_frame, "Run (Enter)", self._submit_entry_command).grid(row=0, column=1, sticky="ew")
 
         footer = tk.Label(
             sidebar,
@@ -281,8 +299,10 @@ class AcidNetApp(tk.Tk):
         self.bind("t", lambda _event: self._talk_selected())
         self.bind("r", lambda _event: self._ask_rumor_selected())
         self.bind("b", lambda _event: self._buy_bread_selected())
+        self.bind("x", lambda _event: self._player_work())
         self.bind("e", lambda _event: self._eat_best_food())
         self.bind("l", lambda _event: self._look())
+        self.bind("m", lambda _event: self._toggle_monkey())
         self.bind("<space>", lambda _event: self._wait_one_turn())
 
     def _render_world(self) -> None:
@@ -363,7 +383,7 @@ class AcidNetApp(tk.Tk):
         self.selected_location_id = self.simulation.player.location_id
         self.status_var.set(self.simulation.player_status())
         self.footer_var.set(
-            "Controls: arrows/WASD move | click adjacent node to move | T talk | R rumor | B buy bread | E eat | Space wait | L look"
+            "Controls: arrows/WASD move | click adjacent node | T talk | R rumor | X work | B buy bread | E eat | M monkey | Space wait | L look"
         )
         self._set_text(self.location_text, self.simulation.describe_location())
         self._set_text(self.rumor_text, self.simulation.known_rumors_text())
@@ -472,6 +492,9 @@ class AcidNetApp(tk.Tk):
             return
         self._run_command(f"trade {npc_name} buy bread 1")
 
+    def _player_work(self) -> None:
+        self._run_command("work")
+
     def _eat_best_food(self) -> None:
         for item in ("stew", "bread", "fish", "wheat"):
             if self.simulation.player.inventory.get(item, 0) > 0:
@@ -484,6 +507,27 @@ class AcidNetApp(tk.Tk):
 
     def _look(self) -> None:
         self._run_command("look")
+
+    def _refresh_monkey_button(self) -> None:
+        state = "On" if self.monkey_enabled else "Off"
+        self.monkey_button_var.set(f"Monkey ({state})")
+
+    def _toggle_monkey(self) -> None:
+        if self.monkey_enabled:
+            self.monkey_enabled = False
+            self._refresh_monkey_button()
+            self._append_log(["Monkey mode disabled."], kind="system")
+            return
+        if self.monkey_steps_remaining <= 0:
+            self.monkey_steps_remaining = self.monkey_default_steps
+            self.monkey_runner = SimulationMonkeyRunner(self.simulation, seed=self.monkey_seed)
+        self.monkey_enabled = True
+        self._refresh_monkey_button()
+        self._append_log(
+            [f"Monkey mode enabled: {self.monkey_steps_remaining} steps, {self.monkey_delay_ms}ms delay."],
+            kind="system",
+        )
+        self.after(self.monkey_delay_ms, self._run_monkey_step)
 
     def _move_direction(self, x_dir: int, y_dir: int) -> None:
         if self.focus_get() is self.command_entry:
@@ -535,6 +579,8 @@ class AcidNetApp(tk.Tk):
         if self.monkey_steps_remaining > 0:
             self.after(self.monkey_delay_ms, self._run_monkey_step)
         else:
+            self.monkey_enabled = False
+            self._refresh_monkey_button()
             self._append_log(["Monkey run completed."], kind="system")
 
 
