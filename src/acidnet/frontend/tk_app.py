@@ -38,14 +38,26 @@ MAP_LAYOUT: dict[str, MapNode] = {
 
 
 class AcidNetApp(tk.Tk):
-    def __init__(self, *, db_path: str | Path = Path("data") / "acidnet.sqlite", persist: bool = True) -> None:
+    def __init__(
+        self,
+        *,
+        db_path: str | Path = Path("data") / "acidnet.sqlite",
+        persist: bool = True,
+        dialogue_backend: str = "heuristic",
+        dialogue_model: str | None = None,
+        dialogue_endpoint: str | None = None,
+    ) -> None:
         super().__init__()
         self.title("acidnet village")
         self.geometry("1180x760")
         self.minsize(1020, 700)
         self.configure(bg=BG_ROOT)
 
-        self.simulation = Simulation.create_demo()
+        self.simulation = Simulation.create_demo(
+            dialogue_backend=dialogue_backend,
+            dialogue_model=dialogue_model,
+            dialogue_endpoint=dialogue_endpoint,
+        )
         self.store = SQLiteWorldStore(db_path) if persist else None
         self.selected_location_id = self.simulation.player.location_id
         self.status_var = tk.StringVar()
@@ -61,6 +73,7 @@ class AcidNetApp(tk.Tk):
             [
                 "acidnet GUI loaded.",
                 "Use arrow keys or WASD to move, T to talk, R for rumor, B to buy bread, E to eat, Space to wait.",
+                f"Dialogue backend: {dialogue_backend}",
             ],
             kind="system",
         )
@@ -462,10 +475,32 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Disable SQLite snapshot persistence for this session.",
     )
+    parser.add_argument(
+        "--dialogue-backend",
+        choices=("heuristic", "openai_compat"),
+        default="heuristic",
+        help="Dialogue backend to use for NPC interactions.",
+    )
+    parser.add_argument(
+        "--dialogue-model",
+        default=None,
+        help="Model identifier for the dialogue backend.",
+    )
+    parser.add_argument(
+        "--dialogue-endpoint",
+        default=None,
+        help="OpenAI-compatible endpoint for runtime dialogue generation.",
+    )
     return parser
 
 
 def main() -> None:
     args = build_parser().parse_args()
-    app = AcidNetApp(db_path=args.db, persist=not args.no_persist)
+    app = AcidNetApp(
+        db_path=args.db,
+        persist=not args.no_persist,
+        dialogue_backend=args.dialogue_backend,
+        dialogue_model=args.dialogue_model,
+        dialogue_endpoint=args.dialogue_endpoint,
+    )
     app.mainloop()

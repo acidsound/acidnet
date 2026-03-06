@@ -38,7 +38,7 @@
 - [x] Step 04: hunger, food inventory, consumption 추가
 - [x] Step 05: market price feedback 및 trade execution 추가
 - [x] Step 06: rumor lifecycle 및 relationship update 추가
-- [ ] Step 07: 현재 lightweight hook 을 넘는 memory retrieval 및 belief reflection job 추가
+- [x] Step 07: 현재 lightweight hook 을 넘는 memory retrieval 및 belief reflection job 추가
 - [x] Step 08: heuristic planner 및 intent validation 추가
 - [x] Step 09: 플레이 가능한 터미널 MVP 추가
 - [x] Step 10: SQLite world snapshot persistence 추가
@@ -57,6 +57,7 @@
 - 첫 4B baseline run 정의
 - 9B challenger run 정의
 - GPT-5.3 teacher prompt pack 을 JSONL 과 Parquet 로 대량 생성
+- 긴 fine-tuning run 전에 prompt-only base-model 동작 검증
 - 긴 fine-tuning run 전에 selection criteria 를 고정
 
 실질적으로는 다음 뜻이다:
@@ -81,8 +82,11 @@
 - vendor trading 과 food consumption
 - deterministic tick progression
 - heuristic NPC planner
+- memory retrieval scoring 과 belief refresh
+- deterministic fallback 이 있는 openai-compatible dialogue adapter boundary
 - world snapshot persistence
 - planner/dialogue 용 synthetic teacher prompt generation
+- prompt-only baseline evaluation harness
 
 ## 다음 단계의 종료 조건
 

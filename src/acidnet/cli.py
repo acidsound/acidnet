@@ -25,12 +25,32 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Disable SQLite snapshot persistence for this session.",
     )
+    parser.add_argument(
+        "--dialogue-backend",
+        choices=("heuristic", "openai_compat"),
+        default="heuristic",
+        help="Dialogue backend to use for NPC talk interactions.",
+    )
+    parser.add_argument(
+        "--dialogue-model",
+        default=None,
+        help="Model identifier for the dialogue backend.",
+    )
+    parser.add_argument(
+        "--dialogue-endpoint",
+        default=None,
+        help="OpenAI-compatible endpoint for runtime dialogue generation.",
+    )
     return parser
 
 
 def main() -> None:
     args = build_parser().parse_args()
-    simulation = Simulation.create_demo()
+    simulation = Simulation.create_demo(
+        dialogue_backend=args.dialogue_backend,
+        dialogue_model=args.dialogue_model,
+        dialogue_endpoint=args.dialogue_endpoint,
+    )
     store = None if args.no_persist else SQLiteWorldStore(args.db)
 
     if store is not None:
@@ -44,6 +64,7 @@ def main() -> None:
     print(INTRO)
     if store is not None:
         print(f"Persistence: {Path(args.db)}")
+    print(f"Dialogue backend: {args.dialogue_backend}")
     print(simulation.help_text())
     print()
     print(simulation.describe_location())

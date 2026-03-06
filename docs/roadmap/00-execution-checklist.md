@@ -38,7 +38,7 @@ Build a simulation-first village RPG where the player can move through the world
 - [x] Step 04: Add hunger, food inventory, and consumption.
 - [x] Step 05: Add market price feedback and trade execution.
 - [x] Step 06: Add rumor lifecycle and relationship updates.
-- [ ] Step 07: Add memory retrieval and belief reflection jobs beyond the current lightweight hooks.
+- [x] Step 07: Add memory retrieval and belief reflection jobs beyond the current lightweight hooks.
 - [x] Step 08: Add heuristic planner and intent validation.
 - [x] Step 09: Add playable terminal MVP.
 - [x] Step 10: Add SQLite world snapshot persistence.
@@ -57,6 +57,7 @@ Current implementation focus is Step 13:
 - define the first 4B baseline run
 - define the 9B challenger run
 - generate large GPT-5.3 teacher prompt packs in JSONL and Parquet
+- validate prompt-only base-model behavior before any long fine-tuning run starts
 - prepare selection criteria before any long fine-tuning run starts
 
 In practical terms, this means:
@@ -81,8 +82,11 @@ Implemented systems:
 - vendor trading and food consumption
 - deterministic tick progression
 - heuristic NPC planner
+- memory retrieval scoring and belief refresh
+- openai-compatible dialogue adapter boundary with deterministic fallback
 - world snapshot persistence
 - synthetic teacher prompt generation for planner and dialogue tasks
+- prompt-only baseline evaluation harness
 
 ## Exit Criteria For The Next Step
 

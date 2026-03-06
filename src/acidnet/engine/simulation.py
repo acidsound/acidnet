@@ -4,6 +4,7 @@ from collections import defaultdict, deque
 from dataclasses import dataclass
 from typing import Any, Iterable
 
+from acidnet.llm import DialogueContext, DialogueModelAdapter, RuleBasedDialogueAdapter, build_dialogue_adapter
 from acidnet.models import (
     Belief,
     EpisodicMemory,
@@ -41,6 +42,7 @@ class Simulation:
         npcs: dict[str, NPCState],
         personas: dict[str, PersonaProfile],
         rumors: dict[str, Rumor],
+        dialogue_adapter: DialogueModelAdapter | None = None,
     ) -> None:
         self.world = world
         self.player = player
@@ -50,11 +52,18 @@ class Simulation:
         self.memories: dict[str, list[EpisodicMemory]] = defaultdict(list)
         self.tick_log: deque[str] = deque(maxlen=16)
         self.planner = HeuristicPlanner()
+        self.dialogue_adapter = dialogue_adapter or RuleBasedDialogueAdapter()
         self.turn_ticks = 12
         self.turn_counter = 0
 
     @classmethod
-    def create_demo(cls) -> "Simulation":
+    def create_demo(
+        cls,
+        *,
+        dialogue_backend: str = "heuristic",
+        dialogue_model: str | None = None,
+        dialogue_endpoint: str | None = None,
+    ) -> "Simulation":
         setup = build_demo_setup()
         return cls(
             world=setup.world,
@@ -62,6 +71,11 @@ class Simulation:
             npcs=setup.npcs,
             personas=setup.personas,
             rumors=setup.rumors,
+            dialogue_adapter=build_dialogue_adapter(
+                dialogue_backend,
+                model=dialogue_model,
+                endpoint=dialogue_endpoint,
+            ),
         )
 
     def snapshot(self) -> dict[str, Any]:
@@ -78,6 +92,7 @@ class Simulation:
                 actor_id: [memory.model_dump(mode="json") for memory in memories]
                 for actor_id, memories in sorted(self.memories.items())
             },
+            "dialogue_backend": type(self.dialogue_adapter).__name__,
             "tick_log": list(self.tick_log),
             "turn_counter": self.turn_counter,
         }
@@ -176,7 +191,7 @@ class Simulation:
         if npc is None:
             return TurnResult([f'No NPC named "{npc_query}" is here.'])
 
-        lines = [self._generate_dialogue(npc)]
+        lines = [self._generate_dialogue(npc, interaction_mode="talk", player_prompt="What is going on around here?")]
         self._record_memory(
             npc_id=npc.npc_id,
             event_type="player_talk",
@@ -191,6 +206,7 @@ class Simulation:
             entities=[npc.npc_id],
             importance=0.45,
         )
+        self._change_relationship(npc, self.player.player_id, trust_delta=0.02, closeness_delta=0.04)
         rumor_line = self._offer_rumor_to_player(npc, asked=False)
         if rumor_line:
             lines.append(rumor_line)
@@ -203,12 +219,18 @@ class Simulation:
             return TurnResult([f'No NPC named "{npc_query}" is here.'])
         if topic.lower() != "rumor":
             return TurnResult([f'{npc.name} tilts their head. "Ask about rumors if you want local news."'])
-        line = self._offer_rumor_to_player(npc, asked=True)
-        if line is None:
-            line = f"{npc.name} has nothing useful to add right now."
-        result = [line]
+        result = [self._generate_dialogue(npc, interaction_mode="rumor_request", player_prompt="Have you heard any useful rumors?")]
+        rumor_line = self._offer_rumor_to_player(npc, asked=True)
+        if rumor_line is not None:
+            result.append(rumor_line)
+        elif not result[0]:
+            result = [f"{npc.name} has nothing useful to add right now."]
         result.extend(self.advance_turn(1).lines)
         return TurnResult(result)
+
+    def probe_npc_dialogue(self, npc_id: str, *, interaction_mode: str, player_prompt: str) -> str:
+        npc = self.npcs[npc_id]
+        return self._generate_dialogue(npc, interaction_mode=interaction_mode, player_prompt=player_prompt)
 
     def player_eat(self, item_query: str) -> TurnResult:
         item = self._resolve_item(item_query)
@@ -283,6 +305,7 @@ class Simulation:
             entities=[npc.npc_id],
             importance=0.65,
         )
+        self._change_relationship(npc, self.player.player_id, trust_delta=0.03, closeness_delta=0.02)
         self._refresh_market_snapshot()
         lines.extend(self.advance_turn(1).lines)
         return TurnResult(lines)
@@ -344,8 +367,10 @@ class Simulation:
         lines: list[str] = []
 
         self.player.hunger = min(100.0, self.player.hunger + 1.2)
+        self._advance_weather()
         for npc in self.npcs.values():
             npc.hunger = min(100.0, npc.hunger + 1.6)
+            self._refresh_beliefs_for_npc(npc)
 
         self._refresh_market_snapshot()
         for npc_id in sorted(self.npcs):
@@ -371,6 +396,12 @@ class Simulation:
                     top_goals.append(f"trade_food:{vendor.npc_id}")
                 else:
                     top_goals.append(f"move:{vendor.location_id}")
+            else:
+                fallback_location = self._wild_food_fallback_location(npc)
+                if fallback_location == npc.location_id:
+                    top_goals.append(f"work:{fallback_location}")
+                elif fallback_location is not None:
+                    top_goals.append(f"move:{fallback_location}")
 
         rumor_target = self._rumor_share_target(npc)
         if rumor_target is not None:
@@ -423,7 +454,7 @@ class Simulation:
 
     def _perform_work(self, npc: NPCState) -> str | None:
         if npc.profession in WORK_OUTPUT:
-            item, amount = WORK_OUTPUT[npc.profession]
+            item, amount = self._work_output_for(npc.profession)
             self._adjust_item(npc.inventory, item, amount)
             self._record_memory(
                 npc_id=npc.npc_id,
@@ -432,6 +463,8 @@ class Simulation:
                 importance=0.4,
             )
             return f"{npc.name} works and produces {amount} {item}."
+        if npc.profession == "merchant":
+            return self._merchant_restock(npc)
         if npc.profession == "baker":
             if npc.inventory.get("wheat", 0) <= 0:
                 farmer = self.npcs["npc.anik"]
@@ -460,6 +493,10 @@ class Simulation:
             self._adjust_item(npc.inventory, "fish", -1)
             self._adjust_item(npc.inventory, "stew", 1)
             return f"{npc.name} cooks a pot of stew."
+        fallback_item = self._wild_food_item_at_location(npc.location_id)
+        if fallback_item is not None and npc.hunger >= 60:
+            self._adjust_item(npc.inventory, fallback_item, 1)
+            return f"{npc.name} forages {fallback_item} to stay fed."
         return None
 
     def _npc_buy_food(self, npc: NPCState, vendor: NPCState) -> str | None:
@@ -516,39 +553,167 @@ class Simulation:
         prefix = "leans closer" if asked else "adds quietly"
         return f'{npc.name} {prefix}: "{rumor.content}"'
 
-    def _generate_dialogue(self, npc: NPCState) -> str:
-        persona = self.personas[npc.persona_id]
-        opener = {
-            "merchant": f'{npc.name} sizes you up. "Need supplies, or just listening for prices?"',
-            "farmer": f'{npc.name} wipes dust from their hands. "Fields do not wait. Speak plain."',
-            "baker": f'{npc.name} smiles. "If you smell bread, you came to the right door."',
-            "cook": f'{npc.name} grunts. "Talk fast. Pots burn when people ramble."',
-            "blacksmith": f'{npc.name} glances over the anvil. "Say what you need."',
-            "guard": f'{npc.name} keeps one hand near their belt. "Keep it orderly and we get along."',
-            "fisher": f'{npc.name} grins. "River is moody. People too. Which one are you asking about?"',
-            "priest": f'{npc.name} nods softly. "Take a breath. Then tell me what matters."',
-            "tailor": f'{npc.name} lights up. "Oh good, a fresh face and probably fresh news."',
-        }.get(npc.profession, f"{npc.name} looks at you, waiting.")
-        if npc.hunger >= 60:
-            opener += " They look distracted by hunger."
-        elif "greedy" in persona.traits:
-            opener += " Their eyes keep flicking toward your purse."
-        elif "chatty" in persona.traits or "gossipy" in persona.traits:
-            opener += " They seem eager to keep the conversation going."
-        return opener
+    def _generate_dialogue(self, npc: NPCState, *, interaction_mode: str, player_prompt: str) -> str:
+        context = self._build_dialogue_context(npc, interaction_mode=interaction_mode, player_prompt=player_prompt)
+        result = self.dialogue_adapter.generate(context)
+        return result.text
 
     def _derive_beliefs(self, npc: NPCState) -> list[Belief]:
-        beliefs = list(npc.beliefs)
-        if "rumor.shortage.wheat" in npc.known_rumor_ids:
-            beliefs.append(
-                Belief(
-                    subject_id="farm",
-                    predicate="expects_grain_shortage",
-                    confidence=0.72,
-                    evidence_memory_ids=[],
-                )
+        self._refresh_beliefs_for_npc(npc)
+        return list(npc.beliefs)
+
+    def _build_dialogue_context(self, npc: NPCState, *, interaction_mode: str, player_prompt: str) -> DialogueContext:
+        related_entities = [self.player.player_id]
+        salient_memories = self._retrieve_salient_memories(
+            npc.npc_id,
+            related_entity_ids=related_entities,
+            location_id=npc.location_id,
+            limit=4,
+        )
+        visible_rumors = [self.rumors[rumor_id] for rumor_id in npc.known_rumor_ids if rumor_id in self.rumors]
+        return DialogueContext(
+            npc=npc,
+            persona=self.personas[npc.persona_id],
+            player=self.player,
+            world=self.world,
+            location=self.world.locations[npc.location_id],
+            interaction_mode=interaction_mode,
+            player_prompt=player_prompt,
+            relationship_score=self._relationship_score(npc, self.player.player_id),
+            salient_beliefs=self._derive_beliefs(npc),
+            salient_memories=salient_memories,
+            visible_rumors=visible_rumors,
+        )
+
+    def _retrieve_salient_memories(
+        self,
+        actor_id: str,
+        *,
+        related_entity_ids: list[str] | None = None,
+        location_id: str | None = None,
+        limit: int = 4,
+    ) -> list[EpisodicMemory]:
+        memories = self.memories.get(actor_id, [])
+        if not memories:
+            return []
+        related_entity_ids = related_entity_ids or []
+        scored: list[tuple[float, EpisodicMemory]] = []
+        for memory in memories:
+            age = max(0, self.world.tick - memory.timestamp_tick)
+            recency = 1.0 / (1.0 + (age / 96.0))
+            relevance = 0.0
+            if location_id is not None and memory.location_id == location_id:
+                relevance += 0.25
+            if any(entity_id in memory.entities for entity_id in related_entity_ids):
+                relevance += 0.45
+            if memory.event_type in {"trade", "heard_rumor", "npc_talk", "player_talk"}:
+                relevance += 0.15
+            score = recency + memory.importance + relevance
+            scored.append((score, memory))
+        scored.sort(key=lambda item: item[0], reverse=True)
+        return [memory for _, memory in scored[:limit]]
+
+    def _refresh_beliefs_for_npc(self, npc: NPCState) -> None:
+        belief_map: dict[tuple[str, str], Belief] = {}
+        for belief in npc.beliefs:
+            belief_map[(belief.subject_id, belief.predicate)] = belief
+
+        if npc.hunger >= 60:
+            belief_map[("self", "needs_food_soon")] = Belief(
+                subject_id="self",
+                predicate="needs_food_soon",
+                confidence=min(0.95, npc.hunger / 100.0),
+                evidence_memory_ids=[],
             )
-        return beliefs
+        if self.world.market.scarcity_index >= 1.0:
+            belief_map[("market", "food_is_tight")] = Belief(
+                subject_id="market",
+                predicate="food_is_tight",
+                confidence=min(0.9, 0.4 + self.world.market.scarcity_index / 3.0),
+                evidence_memory_ids=[],
+            )
+        if "rumor.shortage.wheat" in npc.known_rumor_ids:
+            belief_map[("farm", "expects_grain_shortage")] = Belief(
+                subject_id="farm",
+                predicate="expects_grain_shortage",
+                confidence=0.72,
+                evidence_memory_ids=[],
+            )
+
+        player_memories = self._retrieve_salient_memories(
+            npc.npc_id,
+            related_entity_ids=[self.player.player_id],
+            location_id=npc.location_id,
+            limit=3,
+        )
+        if len(player_memories) >= 2:
+            belief_map[("player", "is_familiar")] = Belief(
+                subject_id="player",
+                predicate="is_familiar",
+                confidence=min(0.85, 0.35 + len(player_memories) * 0.15),
+                evidence_memory_ids=[memory.memory_id for memory in player_memories[:2]],
+            )
+
+        npc.beliefs = sorted(belief_map.values(), key=lambda belief: (belief.subject_id, belief.predicate))
+
+    def _advance_weather(self) -> None:
+        if self.turn_counter % 8 != 0:
+            return
+        cycle = ("clear", "cool_rain", "dry_wind", "market_day", "storm_front", "clear", "dusty_heat")
+        if self.world.market.scarcity_index >= 1.4:
+            self.world.weather = "dry_wind"
+        else:
+            self.world.weather = cycle[(self.turn_counter // 8) % len(cycle)]
+
+    def _work_output_for(self, profession: str) -> tuple[str, int]:
+        item, amount = WORK_OUTPUT[profession]
+        if profession == "farmer":
+            if self.world.weather in {"cool_rain", "market_day"}:
+                amount += 1
+            elif self.world.weather in {"dry_wind", "dusty_heat"}:
+                amount = max(1, amount - 1)
+        if profession == "fisher" and self.world.weather == "storm_front":
+            amount = max(1, amount - 1)
+        return item, amount
+
+    def _merchant_restock(self, npc: NPCState) -> str | None:
+        stocked_food = sum(npc.inventory.get(item, 0) for item in ("bread", "stew", "fish"))
+        if stocked_food >= 5:
+            return None
+        suppliers = [self.npcs["npc.hobb"], self.npcs["npc.bina"], self.npcs["npc.toma"]]
+        suppliers = [supplier for supplier in suppliers if self._best_food_in_inventory(supplier.inventory) is not None]
+        if not suppliers:
+            return None
+        suppliers.sort(key=lambda supplier: (self._path_length(npc.location_id, supplier.location_id), -supplier.money))
+        supplier = suppliers[0]
+        item = self._best_food_in_inventory(supplier.inventory)
+        if item is None:
+            return None
+        if npc.location_id == supplier.location_id:
+            result = self._npc_buy_specific_item(npc, supplier, item, 1)
+            if result is not None:
+                return result
+        destination = self._next_hop(npc.location_id, supplier.location_id)
+        if destination and destination != npc.location_id:
+            npc.location_id = destination
+            return f"{npc.name} heads out to restock food supplies."
+        return None
+
+    def _wild_food_fallback_location(self, npc: NPCState) -> str | None:
+        for location_id in (npc.location_id, "farm", "riverside"):
+            if self._wild_food_item_at_location(location_id) is not None:
+                return location_id
+        return None
+
+    def _wild_food_item_at_location(self, location_id: str) -> str | None:
+        location = self.world.locations.get(location_id)
+        if location is None:
+            return None
+        if location.kind == "resource" and location.location_id == "farm":
+            return "wheat"
+        if location.kind == "resource" and location.location_id == "riverside":
+            return "fish"
+        return None
 
     def _rumor_share_target(self, npc: NPCState) -> NPCState | None:
         if not npc.known_rumor_ids:
