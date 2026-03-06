@@ -15,6 +15,8 @@
 진입점:
 
 - `run_acidnet_gui.py`
+- `run_dev_world.ps1`
+- `run_monkey_world.py`
 
 ## 실행 방법
 
@@ -27,6 +29,31 @@ python run_acidnet_gui.py
 ```bash
 python -m pip install -e .
 acidnet-gui
+```
+
+관찰 중심 개발용 launcher:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File run_dev_world.ps1 -Detached
+```
+
+이 dev launcher 는 이제 기본적으로 GUI monkey mode 를 켜서, 수동 입력이 없어도 월드가 계속 움직이게 한다.
+
+prompt-only local model 관찰:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File run_dev_world.ps1 `
+  -DialogueBackend openai_compat `
+  -DialogueModel qwen3.5-4b `
+  -DialogueEndpoint http://127.0.0.1:8000/v1/chat/completions `
+  -RunPromptOnlyEval `
+  -Detached
+```
+
+회귀 관찰용 headless monkey run:
+
+```bash
+python run_monkey_world.py --steps 240 --dialogue-backend heuristic
 ```
 
 ## 조작

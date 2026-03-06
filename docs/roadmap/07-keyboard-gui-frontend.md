@@ -15,6 +15,8 @@ Implemented:
 Entry point:
 
 - `run_acidnet_gui.py`
+- `run_dev_world.ps1`
+- `run_monkey_world.py`
 
 ## How To Run
 
@@ -27,6 +29,31 @@ Or after editable install:
 ```bash
 python -m pip install -e .
 acidnet-gui
+```
+
+Observation-first development launcher:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File run_dev_world.ps1 -Detached
+```
+
+The dev launcher now enables GUI monkey mode by default, so the world keeps moving even without manual input.
+
+Prompt-only local model observation:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File run_dev_world.ps1 `
+  -DialogueBackend openai_compat `
+  -DialogueModel qwen3.5-4b `
+  -DialogueEndpoint http://127.0.0.1:8000/v1/chat/completions `
+  -RunPromptOnlyEval `
+  -Detached
+```
+
+Headless monkey run for regression observation:
+
+```bash
+python run_monkey_world.py --steps 240 --dialogue-backend heuristic
 ```
 
 ## Controls

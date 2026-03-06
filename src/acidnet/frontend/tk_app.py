@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from acidnet.engine import Simulation
+from acidnet.eval import SimulationMonkeyRunner
 from acidnet.storage import SQLiteWorldStore
 
 FONT_BODY = ("Consolas", 11)
@@ -46,6 +47,10 @@ class AcidNetApp(tk.Tk):
         dialogue_backend: str = "heuristic",
         dialogue_model: str | None = None,
         dialogue_endpoint: str | None = None,
+        monkey: bool = False,
+        monkey_steps: int = 160,
+        monkey_delay_ms: int = 350,
+        monkey_seed: int = 7,
     ) -> None:
         super().__init__()
         self.title("acidnet village")
@@ -64,6 +69,10 @@ class AcidNetApp(tk.Tk):
         self.footer_var = tk.StringVar()
         self._location_items: dict[str, tuple[int, int]] = {}
         self._npc_name_by_index: list[str] = []
+        self.monkey_enabled = monkey
+        self.monkey_steps_remaining = monkey_steps
+        self.monkey_delay_ms = monkey_delay_ms
+        self.monkey_runner = SimulationMonkeyRunner(self.simulation, seed=monkey_seed) if monkey else None
 
         self._build_ui()
         self._bind_shortcuts()
@@ -77,11 +86,18 @@ class AcidNetApp(tk.Tk):
             ],
             kind="system",
         )
+        if self.monkey_enabled:
+            self._append_log(
+                [f"Monkey mode enabled: {self.monkey_steps_remaining} steps, {self.monkey_delay_ms}ms delay."],
+                kind="system",
+            )
 
         if self.store is not None:
             self._save_snapshot("session_start", "GUI session started.", {"entrypoint": "gui"})
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+        if self.monkey_enabled:
+            self.after(self.monkey_delay_ms, self._run_monkey_step)
 
     def _build_ui(self) -> None:
         self.columnconfigure(0, weight=3)
@@ -462,6 +478,20 @@ class AcidNetApp(tk.Tk):
             self.store = None
         self.destroy()
 
+    def _run_monkey_step(self) -> None:
+        if not self.monkey_enabled or self.monkey_runner is None or self.monkey_steps_remaining <= 0:
+            return
+        step = self.monkey_runner.run_one_step()
+        self._append_log([f"[monkey] > {step.command}"], kind="input")
+        self._append_log(step.lines or ["No visible effect."], kind="world")
+        self._refresh_panels()
+        self._save_snapshot("monkey_command", step.command, {"result_lines": step.lines, "step_index": step.index})
+        self.monkey_steps_remaining -= 1
+        if self.monkey_steps_remaining > 0:
+            self.after(self.monkey_delay_ms, self._run_monkey_step)
+        else:
+            self._append_log(["Monkey run completed."], kind="system")
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run the acidnet keyboard GUI.")
@@ -491,6 +521,29 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="OpenAI-compatible endpoint for runtime dialogue generation.",
     )
+    parser.add_argument(
+        "--monkey",
+        action="store_true",
+        help="Enable automated GUI monkey actions for observation.",
+    )
+    parser.add_argument(
+        "--monkey-steps",
+        type=int,
+        default=160,
+        help="Number of monkey steps to execute when monkey mode is enabled.",
+    )
+    parser.add_argument(
+        "--monkey-delay-ms",
+        type=int,
+        default=350,
+        help="Delay in milliseconds between monkey actions.",
+    )
+    parser.add_argument(
+        "--monkey-seed",
+        type=int,
+        default=7,
+        help="Random seed for monkey mode.",
+    )
     return parser
 
 
@@ -502,5 +555,9 @@ def main() -> None:
         dialogue_backend=args.dialogue_backend,
         dialogue_model=args.dialogue_model,
         dialogue_endpoint=args.dialogue_endpoint,
+        monkey=args.monkey,
+        monkey_steps=args.monkey_steps,
+        monkey_delay_ms=args.monkey_delay_ms,
+        monkey_seed=args.monkey_seed,
     )
     app.mainloop()
