@@ -4,9 +4,9 @@
 
 상태 메모:
 
-- 이 Tk 프런트엔드는 이제 레거시 실험 클라이언트다
+- 이 문서는 이제 역사적 참고용이다
+- Tk 프런트엔드는 active runtime surface 에서 제거됐다
 - 새 시뮬레이션 작업은 terminal/raw-command 흐름과 공유 가능한 web probe 를 먼저 대상으로 삼는다
-- 회귀 문제가 아닌 한 Tk parity 를 새 시스템의 요구사항으로 두지 않는다
 
 구현됨:
 
@@ -40,10 +40,7 @@ python run_acidnet_gui.py
 
 또는 editable install 이후:
 
-```bash
-python -m pip install -e .
-acidnet-gui
-```
+기존 `acidnet-gui` 엔트리포인트는 제거됐다.
 
 관찰 중심 개발용 launcher:
 

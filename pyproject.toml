@@ -18,7 +18,6 @@ training = [
 
 [project.scripts]
 acidnet = "acidnet.cli:main"
-acidnet-gui = "acidnet.frontend.tk_app:main"
 acidnet-web = "acidnet.frontend.web_app:main"
 
 [tool.setuptools.package-data]

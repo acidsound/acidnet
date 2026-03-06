@@ -4,9 +4,9 @@
 
 Status note:
 
-- this Tk frontend is now a legacy exploratory client
+- this document is now historical reference only
+- the Tk frontend has been removed from the active runtime surface
 - new simulation-facing work should target the terminal/raw-command flow and the shareable web probe first
-- do not require Tk parity for new systems unless a regression demands it
 
 Implemented:
 
@@ -41,10 +41,7 @@ python run_acidnet_gui.py
 
 Or after editable install:
 
-```bash
-python -m pip install -e .
-acidnet-gui
-```
+The old `acidnet-gui` entry point has been removed.
 
 Observation-first development launcher:
 

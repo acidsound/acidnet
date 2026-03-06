@@ -70,7 +70,7 @@
 - player-facing NPC speech에서는 teacher JSON fidelity보다 runtime-aligned dialogue SFT가 중요하다
 - 월드 순환성과 entropy 안정성이 UI 확장보다 중요하다
 - player의 생존과 돈벌이 루프는 계속 같은 rule-based economy 안에 있어야 한다
-- Tk GUI 는 이제 레거시 실험 클라이언트로 보고, 새 시뮬레이션 시스템의 parity 목표로 두지 않는다
+- Tk 는 제거된 상태로 유지하고, 새 시뮬레이션 시스템의 parity 목표로 다시 들이지 않는다
 - 프런트엔드 반복은 공유 가능한 웹 프로브를 주 관찰면으로 삼는다
 
 ## 현재 측정 상태
@@ -84,9 +84,9 @@
 - 첫 full WSL2 + Unsloth 4B candidate가 완료됐고 combined model gate를 통과했다
 - 현재 full WSL gate 결과: `prompt_avg=1.000`, `prompt_fail_rows=0`, `prompt_latency_ms=2994.443`, `circulation=0.925`
 - 현재 full WSL `50000 / 4000` 학습 시간: `6999 s`
-- Tk GUI는 현재 수리된 `local_peft` loader를 통해 full WSL-trained adapter를 붙여 실행 중이다
-- GUI에는 dialogue model startup readiness가 표시되고, `loading -> ready` 이벤트가 UI와 event log에 모두 남는다
-- 공유 dialogue system prompt는 이제 GUI에서 수정 가능하며, SQLite의 읽기 전용 preset 테이블과 수정 가능한 runtime settings 테이블에 저장된다
+- 공유 가능한 web probe 가 현재 dialogue backend 검증용 active frontend surface 다
+- web probe 에는 dialogue model startup readiness가 표시되고, `loading -> ready` 이벤트가 UI와 event log에 모두 남는다
+- 공유 dialogue system prompt는 이제 web probe 에서 수정 가능하며, SQLite의 읽기 전용 preset 테이블과 수정 가능한 runtime settings 테이블에 저장된다
 - rumor 다양성은 더 이상 단일 wheat shortage rumor에 고정되지 않고, demo world는 여러 seeded rumor로 시작하며 weather, scarcity, supply 변화에 따라 dynamic rumor를 생성한다
 - 반복된 rumor 내용은 signature 기준으로 dedupe 되며, 오래된 dynamic rumor 는 월드에서 decay out 된다
 - 다음 월드 설계 기준선은 `docs/roadmap/20-spatial-time-exchange-model.md` 에 정리되어 있다

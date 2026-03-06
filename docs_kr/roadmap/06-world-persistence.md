@@ -13,7 +13,7 @@
 - `src/acidnet/engine/simulation.py`
 - `src/acidnet/storage/sqlite_store.py`
 - `src/acidnet/cli.py`
-- `src/acidnet/frontend/tk_app.py`
+- `src/acidnet/frontend/web_app.py`
 
 ## 저장되는 것
 
