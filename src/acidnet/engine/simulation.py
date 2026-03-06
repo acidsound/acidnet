@@ -835,6 +835,10 @@ class Simulation:
         self.world.day = 1 + (self.world.tick // (12 * 60 * 24))
         lines: list[str] = []
 
+        completed_production = self._resolve_pending_production()
+        lines.extend(completed_production)
+        self.tick_log.extend(completed_production)
+
         self.player.hunger = min(100.0, self.player.hunger + 1.2)
         self.player.fatigue = min(100.0, self.player.fatigue + 0.45)
         lines.extend(self._advance_player_travel())
@@ -1011,9 +1015,9 @@ class Simulation:
                     return f"{npc.name} heads toward the farm for wheat ({self._travel_eta_turns(travel_ticks)} turns)."
                 return None
             self._adjust_item(npc.inventory, "wheat", -1)
-            self._adjust_item(npc.inventory, "bread", 2)
+            npc.production_queue["bread"] = npc.production_queue.get("bread", 0) + 2
             npc.fatigue = min(100.0, npc.fatigue + 7.0)
-            return f"{npc.name} bakes fresh bread."
+            return f"{npc.name} starts a fresh bread batch."
         if npc.profession == "cook":
             if npc.inventory.get("fish", 0) <= 0:
                 fisher = self.npcs["npc.toma"]
@@ -1029,9 +1033,9 @@ class Simulation:
                     return f"{npc.name} heads toward the riverside for fish ({self._travel_eta_turns(travel_ticks)} turns)."
                 return None
             self._adjust_item(npc.inventory, "fish", -1)
-            self._adjust_item(npc.inventory, "stew", 1)
+            npc.production_queue["stew"] = npc.production_queue.get("stew", 0) + 1
             npc.fatigue = min(100.0, npc.fatigue + 7.0)
-            return f"{npc.name} cooks a pot of stew."
+            return f"{npc.name} starts a pot of stew."
         income = self._work_income(npc)
         if income > 0:
             npc.money += income
@@ -1704,6 +1708,23 @@ class Simulation:
                 self._adjust_item(self.player.inventory, item, -1)
                 events.append(f"1 {item} spoils in your pack.")
         return events
+
+    def _resolve_pending_production(self) -> list[str]:
+        lines: list[str] = []
+        for npc in self.npcs.values():
+            if not npc.production_queue:
+                continue
+            completed = [f"{item} x{qty}" for item, qty in npc.production_queue.items() if qty > 0]
+            if not completed:
+                npc.production_queue.clear()
+                continue
+            for item, qty in list(npc.production_queue.items()):
+                if qty <= 0:
+                    continue
+                self._adjust_item(npc.inventory, item, qty)
+            npc.production_queue.clear()
+            lines.append(f"{npc.name} finishes {', '.join(completed)}.")
+        return lines
 
     def _refresh_market_snapshot(self) -> None:
         totals = {item: 0 for item in ITEM_VALUES}

@@ -59,7 +59,8 @@ The current project baseline is:
 
 - add internal sinks so inventories and production do not stay perfectly stable forever
 - keep sinks legible and recoverable instead of punitive noise
-- food spoilage and repeated tool wear are now in place; next work is storage pressure, delayed production, and monkey validation of exploit resistance
+- food spoilage, player-side tool wear, storage pressure, and one-turn bakery or tavern production delays are now in place
+- next work is monkey validation of exploit resistance and deciding whether any NPC-side sink should be added without breaking circulation
 
 ### Phase 6: Multi-Settlement Scaling
 

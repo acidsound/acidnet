@@ -169,6 +169,7 @@ class NPCState(BaseModel):
     home_location_id: str | None = None
     workplace_id: str | None = None
     inventory: dict[str, int] = Field(default_factory=dict)
+    production_queue: dict[str, int] = Field(default_factory=dict)
     hunger: float = Field(default=0.0, ge=0.0, le=100.0)
     fatigue: float = Field(default=0.0, ge=0.0, le=100.0)
     carried_weight: float = Field(default=0.0, ge=0.0)

@@ -281,6 +281,44 @@ def test_storage_pressure_leaves_part_of_field_yield_behind() -> None:
     assert any("leave" in line.lower() and "behind" in line.lower() for line in result.lines)
 
 
+def test_baker_production_finishes_one_turn_after_batch_starts() -> None:
+    simulation = Simulation.create_demo()
+    hobb = simulation.npcs["npc.hobb"]
+    starting_bread = hobb.inventory.get("bread", 0)
+    hobb.current_intent = None
+
+    event = simulation._perform_work(hobb)
+
+    assert event == "Hobb starts a fresh bread batch."
+    assert hobb.inventory.get("bread", 0) == starting_bread
+    assert hobb.production_queue.get("bread", 0) == 2
+
+    turn_result = simulation.advance_turn(1)
+
+    assert any("Hobb finishes bread x2." in line for line in turn_result.lines)
+    assert hobb.inventory.get("bread", 0) == starting_bread + 2
+    assert hobb.production_queue.get("bread", 0) >= 0
+
+
+def test_cook_production_finishes_one_turn_after_batch_starts() -> None:
+    simulation = Simulation.create_demo()
+    bina = simulation.npcs["npc.bina"]
+    starting_stew = bina.inventory.get("stew", 0)
+    bina.inventory["fish"] = 1
+
+    event = simulation._perform_work(bina)
+
+    assert event == "Bina starts a pot of stew."
+    assert bina.inventory.get("stew", 0) == starting_stew
+    assert bina.production_queue.get("stew", 0) == 1
+
+    turn_result = simulation.advance_turn(1)
+
+    assert any("Bina finishes stew x1." in line for line in turn_result.lines)
+    assert bina.inventory.get("stew", 0) == starting_stew + 1
+    assert bina.production_queue.get("stew", 0) >= 0
+
+
 def test_talk_without_target_is_rejected_when_multiple_npcs_are_present() -> None:
     simulation = Simulation.create_demo()
 

@@ -89,7 +89,8 @@ Current note:
   Progress:
   - first sinks are now in place as food spoilage over time and player-side tool wear on repeated field or riverside work
   - player resource work now loses some yield under storage pressure when the carried load is already near capacity
-  - the remaining gap is broader sink coverage such as delayed production, plus monkey validation against exploit loops
+  - baker and cook output now complete one turn after work starts instead of appearing instantly
+  - the remaining gap is monkey validation against exploit loops and any later NPC-side sink expansion
 
 - [ ] Step 20H: Add regional scaling.
   Exit criteria:

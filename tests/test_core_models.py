@@ -49,6 +49,7 @@ def test_npc_state_embeds_intent_and_rumor_ids() -> None:
         goals=["sell_food", "collect_rumors"],
         location_id="market_square",
         inventory={"bread": 3},
+        production_queue={"bread": 2},
         hunger=22.0,
         current_intent=intent,
         known_rumor_ids=["rumor.grain.shortage.01"],
@@ -66,6 +67,7 @@ def test_npc_state_embeds_intent_and_rumor_ids() -> None:
 
     assert npc.current_intent is not None
     assert npc.current_intent.intent_type == IntentType.SHARE_RUMOR
+    assert npc.production_queue["bread"] == 2
     assert rumor.category == RumorCategory.SHORTAGE
 
 
