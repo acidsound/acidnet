@@ -19,6 +19,9 @@ class OpenAICompatDialogueAdapter(DialogueModelAdapter):
     max_tokens: int = 96
     timeout_seconds: int = 30
 
+    def prepare(self) -> str | None:
+        return f"OpenAI-compatible dialogue endpoint ready: {self.model} @ {self.endpoint}"
+
     def generate(self, context: DialogueContext) -> DialogueResult:
         started_at = time.perf_counter()
         payload = {

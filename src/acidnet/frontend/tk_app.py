@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import threading
 import tkinter as tk
 from dataclasses import dataclass
 from pathlib import Path
@@ -78,6 +79,7 @@ class AcidNetApp(tk.Tk):
         self.event_log = EventLogFile(event_log_path) if event_log_path is not None else None
         self.selected_location_id = self.simulation.player.location_id
         self.status_var = tk.StringVar()
+        self.dialogue_var = tk.StringVar()
         self.footer_var = tk.StringVar()
         self.monkey_button_var = tk.StringVar()
         self._location_items: dict[str, tuple[int, int]] = {}
@@ -88,6 +90,10 @@ class AcidNetApp(tk.Tk):
         self.monkey_delay_ms = monkey_delay_ms
         self.monkey_seed = monkey_seed
         self.monkey_runner = SimulationMonkeyRunner(self.simulation, seed=monkey_seed)
+        self.dialogue_ready = False
+        self.dialogue_loading = False
+        self._monkey_waiting_for_dialogue = monkey
+        self.dialogue_var.set(f"Loading {dialogue_backend} dialogue model...")
 
         self._build_ui()
         self._refresh_monkey_button()
@@ -108,6 +114,7 @@ class AcidNetApp(tk.Tk):
                 [f"Monkey mode enabled: {self.monkey_steps_remaining} steps, {self.monkey_delay_ms}ms delay."],
                 kind="system",
             )
+        self._append_log([self.dialogue_var.get()], kind="system")
 
         if self.store is not None:
             self._save_snapshot("session_start", "GUI session started.", {"entrypoint": "gui"})
@@ -121,8 +128,7 @@ class AcidNetApp(tk.Tk):
             )
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
-        if self.monkey_enabled:
-            self.after(self.monkey_delay_ms, self._run_monkey_step)
+        self.after(50, self._start_dialogue_prepare)
 
     def _build_ui(self) -> None:
         self.columnconfigure(0, weight=3)
@@ -195,8 +201,23 @@ class AcidNetApp(tk.Tk):
         )
         self.status_label.grid(row=1, column=0, sticky="ew", pady=(4, 12))
 
+        tk.Label(sidebar, text="Dialogue", font=FONT_TITLE, fg=FG_TEXT, bg=BG_PANEL, anchor="w").grid(
+            row=2, column=0, sticky="ew"
+        )
+        self.dialogue_label = tk.Label(
+            sidebar,
+            textvariable=self.dialogue_var,
+            font=("Consolas", 10),
+            justify="left",
+            anchor="nw",
+            fg=ACCENT_ALT,
+            bg=BG_PANEL,
+            wraplength=380,
+        )
+        self.dialogue_label.grid(row=3, column=0, sticky="ew", pady=(4, 12))
+
         info_frame = tk.Frame(sidebar, bg=BG_PANEL)
-        info_frame.grid(row=2, column=0, sticky="nsew")
+        info_frame.grid(row=4, column=0, sticky="nsew")
         info_frame.columnconfigure(0, weight=1)
         info_frame.rowconfigure(1, weight=1)
         info_frame.rowconfigure(3, weight=1)
@@ -224,7 +245,7 @@ class AcidNetApp(tk.Tk):
         self.npc_list.grid(row=3, column=0, sticky="nsew", pady=(4, 10))
 
         action_frame = tk.Frame(sidebar, bg=BG_PANEL)
-        action_frame.grid(row=3, column=0, sticky="ew", pady=(0, 10))
+        action_frame.grid(row=5, column=0, sticky="ew", pady=(0, 10))
         for idx in range(3):
             action_frame.columnconfigure(idx, weight=1)
 
@@ -252,10 +273,10 @@ class AcidNetApp(tk.Tk):
         ).grid(row=2, column=1, columnspan=2, sticky="ew", padx=(3, 0), pady=(6, 0))
 
         tk.Label(sidebar, text="Direct Speech", font=FONT_TITLE, fg=FG_TEXT, bg=BG_PANEL, anchor="w").grid(
-            row=4, column=0, sticky="ew"
+            row=6, column=0, sticky="ew"
         )
         speak_frame = tk.Frame(sidebar, bg=BG_PANEL)
-        speak_frame.grid(row=5, column=0, sticky="ew", pady=(4, 10))
+        speak_frame.grid(row=7, column=0, sticky="ew", pady=(4, 10))
         speak_frame.columnconfigure(0, weight=1)
         self.say_entry = tk.Entry(
             speak_frame,
@@ -270,10 +291,10 @@ class AcidNetApp(tk.Tk):
         self._make_button(speak_frame, "Say", self._submit_say_selected).grid(row=0, column=1, sticky="ew")
 
         tk.Label(sidebar, text="Raw Command", font=FONT_TITLE, fg=FG_TEXT, bg=BG_PANEL, anchor="w").grid(
-            row=6, column=0, sticky="ew"
+            row=8, column=0, sticky="ew"
         )
         command_frame = tk.Frame(sidebar, bg=BG_PANEL)
-        command_frame.grid(row=7, column=0, sticky="ew", pady=(4, 0))
+        command_frame.grid(row=9, column=0, sticky="ew", pady=(4, 0))
         command_frame.columnconfigure(0, weight=1)
         self.command_entry = tk.Entry(
             command_frame,
@@ -296,7 +317,7 @@ class AcidNetApp(tk.Tk):
             bg=BG_PANEL,
             font=("Consolas", 10),
         )
-        footer.grid(row=8, column=0, sticky="ew", pady=(12, 0))
+        footer.grid(row=10, column=0, sticky="ew", pady=(12, 0))
 
     def _make_text(self, parent: tk.Widget, *, height: int) -> tk.Text:
         widget = tk.Text(
@@ -523,6 +544,9 @@ class AcidNetApp(tk.Tk):
         self.say_entry.icursor(tk.END)
 
     def _run_command(self, command: str, *, kind: str = "gui_command") -> None:
+        if self._is_dialogue_command(command) and not self.dialogue_ready:
+            self._append_log(["Dialogue model is still loading. Wait for the ready message."], kind="system")
+            return
         self._append_log([f"> {command}"], kind="input")
         result = self.simulation.handle_command(command)
         self._append_entries(result.entries)
@@ -598,6 +622,7 @@ class AcidNetApp(tk.Tk):
     def _toggle_monkey(self) -> None:
         if self.monkey_enabled:
             self.monkey_enabled = False
+            self._monkey_waiting_for_dialogue = False
             self._refresh_monkey_button()
             self._append_log(["Monkey mode disabled."], kind="system")
             return
@@ -605,12 +630,14 @@ class AcidNetApp(tk.Tk):
             self.monkey_steps_remaining = self.monkey_default_steps
             self.monkey_runner = SimulationMonkeyRunner(self.simulation, seed=self.monkey_seed)
         self.monkey_enabled = True
+        self._monkey_waiting_for_dialogue = not self.dialogue_ready
         self._refresh_monkey_button()
         self._append_log(
             [f"Monkey mode enabled: {self.monkey_steps_remaining} steps, {self.monkey_delay_ms}ms delay."],
             kind="system",
         )
-        self.after(self.monkey_delay_ms, self._run_monkey_step)
+        if self.dialogue_ready:
+            self.after(self.monkey_delay_ms, self._run_monkey_step)
 
     def _move_direction(self, x_dir: int, y_dir: int) -> None:
         if self._text_input_has_focus():
@@ -671,8 +698,44 @@ class AcidNetApp(tk.Tk):
             self.after(self.monkey_delay_ms, self._run_monkey_step)
         else:
             self.monkey_enabled = False
+            self._monkey_waiting_for_dialogue = False
             self._refresh_monkey_button()
             self._append_log(["Monkey run completed."], kind="system")
+
+    def _is_dialogue_command(self, command: str) -> bool:
+        lowered = command.strip().lower()
+        return lowered.startswith("talk ") or lowered.startswith("say ") or lowered.startswith("tell ") or lowered.startswith("ask ")
+
+    def _start_dialogue_prepare(self) -> None:
+        if self.dialogue_loading or self.dialogue_ready:
+            return
+        self.dialogue_loading = True
+        thread = threading.Thread(target=self._prepare_dialogue_worker, name="acidnet-dialogue-prepare", daemon=True)
+        thread.start()
+
+    def _prepare_dialogue_worker(self) -> None:
+        try:
+            message = self.simulation.prepare_dialogue_adapter()
+        except Exception as exc:
+            message = f"Dialogue model failed to load: {exc}"
+            success = False
+        else:
+            success = True
+        try:
+            self.after(0, lambda: self._finish_dialogue_prepare(success=success, message=message))
+        except tk.TclError:
+            return
+
+    def _finish_dialogue_prepare(self, *, success: bool, message: str) -> None:
+        self.dialogue_loading = False
+        if not self.winfo_exists():
+            return
+        self.dialogue_ready = success
+        self.dialogue_var.set(message)
+        self._append_log([message], kind="system")
+        if self.monkey_enabled and self._monkey_waiting_for_dialogue and self.dialogue_ready:
+            self._monkey_waiting_for_dialogue = False
+            self.after(self.monkey_delay_ms, self._run_monkey_step)
 
 
 def build_parser() -> argparse.ArgumentParser:

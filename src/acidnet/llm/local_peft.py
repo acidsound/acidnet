@@ -4,6 +4,7 @@ import importlib
 import json
 import time
 import os
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,7 @@ from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 _MODEL_CACHE: dict[tuple[str, str, bool], tuple[Any, Any]] = {}
+_MODEL_CACHE_LOCK = threading.Lock()
 
 
 @dataclass(slots=True)
@@ -40,6 +42,16 @@ class LocalPeftDialogueAdapter(DialogueModelAdapter):
     max_tokens: int = 96
     max_input_tokens: int = 4096
     load_in_4bit: bool = False
+
+    def prepare(self) -> str | None:
+        tokenizer, model = _load_bundle(
+            base_model=self.model,
+            adapter_path=self.adapter_path,
+            load_in_4bit=self.load_in_4bit,
+        )
+        device = getattr(model, "device", torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+        adapter_name = Path(self.adapter_path).name or self.adapter_path
+        return f"Local dialogue model ready: {self.model} + {adapter_name} on {device} (vocab {len(tokenizer)})"
 
     def generate(self, context: DialogueContext) -> DialogueResult:
         tokenizer, model = _load_bundle(
@@ -86,41 +98,42 @@ class LocalPeftDialogueAdapter(DialogueModelAdapter):
 def _load_bundle(*, base_model: str, adapter_path: str, load_in_4bit: bool) -> tuple[Any, Any]:
     resolved_adapter_path = str(Path(adapter_path))
     cache_key = (base_model, resolved_adapter_path, load_in_4bit)
-    cached = _MODEL_CACHE.get(cache_key)
-    if cached is not None:
-        return cached
+    with _MODEL_CACHE_LOCK:
+        cached = _MODEL_CACHE.get(cache_key)
+        if cached is not None:
+            return cached
 
-    dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float16
-    quantization_config = None
-    if load_in_4bit:
-        quantization_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_compute_dtype=dtype,
-            bnb_4bit_quant_type="nf4",
-        )
+        dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float16
+        quantization_config = None
+        if load_in_4bit:
+            quantization_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_compute_dtype=dtype,
+                bnb_4bit_quant_type="nf4",
+            )
 
-    tokenizer = AutoTokenizer.from_pretrained(base_model, trust_remote_code=True)
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer = AutoTokenizer.from_pretrained(base_model, trust_remote_code=True)
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
 
-    model_loader = _resolve_model_loader(resolved_adapter_path)
-    load_kwargs: dict[str, Any] = {
-        "torch_dtype": dtype,
-        "device_map": "auto" if torch.cuda.is_available() else None,
-        "low_cpu_mem_usage": True,
-        "quantization_config": quantization_config,
-    }
-    if model_loader is AutoModelForCausalLM:
-        load_kwargs["trust_remote_code"] = True
-    try:
-        model = model_loader.from_pretrained(base_model, **load_kwargs)
-    except TypeError:
-        load_kwargs.pop("trust_remote_code", None)
-        model = model_loader.from_pretrained(base_model, **load_kwargs)
-    model = PeftModel.from_pretrained(model, resolved_adapter_path)
-    model.eval()
-    _MODEL_CACHE[cache_key] = (tokenizer, model)
-    return tokenizer, model
+        model_loader = _resolve_model_loader(resolved_adapter_path)
+        load_kwargs: dict[str, Any] = {
+            "torch_dtype": dtype,
+            "device_map": "auto" if torch.cuda.is_available() else None,
+            "low_cpu_mem_usage": True,
+            "quantization_config": quantization_config,
+        }
+        if model_loader is AutoModelForCausalLM:
+            load_kwargs["trust_remote_code"] = True
+        try:
+            model = model_loader.from_pretrained(base_model, **load_kwargs)
+        except TypeError:
+            load_kwargs.pop("trust_remote_code", None)
+            model = model_loader.from_pretrained(base_model, **load_kwargs)
+        model = PeftModel.from_pretrained(model, resolved_adapter_path)
+        model.eval()
+        _MODEL_CACHE[cache_key] = (tokenizer, model)
+        return tokenizer, model
 
 
 def _load_adapter_config(adapter_path: str) -> dict[str, Any]:

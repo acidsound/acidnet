@@ -34,5 +34,8 @@ class DialogueResult(BaseModel):
 
 
 class DialogueModelAdapter(Protocol):
+    def prepare(self) -> str | None:
+        """Prepare any runtime resources needed before the first dialogue turn."""
+
     def generate(self, context: DialogueContext) -> DialogueResult:
         """Return an NPC utterance for the current interaction context."""

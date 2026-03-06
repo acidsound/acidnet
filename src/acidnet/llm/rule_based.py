@@ -7,6 +7,9 @@ from acidnet.models import Rumor
 
 
 class RuleBasedDialogueAdapter(DialogueModelAdapter):
+    def prepare(self) -> str | None:
+        return "Heuristic dialogue ready."
+
     def generate(self, context: DialogueContext) -> DialogueResult:
         opener = _profession_opener(context)
         memory_line = _memory_line(context)
@@ -39,6 +42,13 @@ class RuleBasedDialogueAdapter(DialogueModelAdapter):
 class FallbackDialogueAdapter(DialogueModelAdapter):
     primary: DialogueModelAdapter
     fallback: DialogueModelAdapter
+
+    def prepare(self) -> str | None:
+        try:
+            return self.primary.prepare()
+        except Exception as exc:
+            fallback_status = self.fallback.prepare() or type(self.fallback).__name__
+            return f"Primary dialogue load failed ({exc}). {fallback_status}"
 
     def generate(self, context: DialogueContext) -> DialogueResult:
         try:

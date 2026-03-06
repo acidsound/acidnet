@@ -5,7 +5,7 @@ from pathlib import Path
 
 from transformers import AutoModelForCausalLM
 
-from acidnet.llm.local_peft import _load_adapter_config, _resolve_model_loader
+from acidnet.llm.local_peft import LocalPeftDialogueAdapter, _load_adapter_config, _resolve_model_loader
 
 
 def _artifact_dir(name: str) -> Path:
@@ -62,3 +62,31 @@ def test_resolve_model_loader_falls_back_when_auto_mapping_is_invalid() -> None:
     )
 
     assert _resolve_model_loader(str(adapter_dir)) is AutoModelForCausalLM
+
+
+def test_local_peft_prepare_uses_bundle_loader(monkeypatch) -> None:
+    class FakeTokenizer:
+        def __len__(self) -> int:
+            return 32000
+
+    class FakeModel:
+        device = "cuda:0"
+
+    def fake_load_bundle(*, base_model: str, adapter_path: str, load_in_4bit: bool):
+        assert base_model == "Qwen/Qwen3.5-4B"
+        assert adapter_path == "data/adapters/demo"
+        assert load_in_4bit is False
+        return FakeTokenizer(), FakeModel()
+
+    monkeypatch.setattr("acidnet.llm.local_peft._load_bundle", fake_load_bundle)
+
+    adapter = LocalPeftDialogueAdapter(
+        model="Qwen/Qwen3.5-4B",
+        adapter_path="data/adapters/demo",
+    )
+
+    status = adapter.prepare()
+
+    assert "Local dialogue model ready" in status
+    assert "data/adapters/demo" not in status
+    assert "demo" in status

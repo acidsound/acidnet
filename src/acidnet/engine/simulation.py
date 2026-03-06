@@ -128,6 +128,9 @@ class Simulation:
             "turn_counter": self.turn_counter,
         }
 
+    def prepare_dialogue_adapter(self) -> str:
+        return self.dialogue_adapter.prepare() or f"{type(self.dialogue_adapter).__name__} ready."
+
     def help_text(self) -> str:
         return "\n".join(
             [
