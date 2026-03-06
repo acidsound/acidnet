@@ -265,6 +265,12 @@ Per-person shape:
   ],
   "sell_options": [
     {"item": "bread", "quantity": 1, "price": 2}
+  ],
+  "ask_options": [
+    {"item": "bread", "quantity": 1, "price": null}
+  ],
+  "give_options": [
+    {"item": "bread", "quantity": 1, "price": null}
   ]
 }
 ```
@@ -274,6 +280,8 @@ Notes:
 - `stock` is visible stock, not necessarily the full hidden world state
 - `buy_options` means what the player can buy from this NPC
 - `sell_options` means what the player can sell to this NPC
+- `ask_options` means what the player can request as a no-cash gift from this NPC
+- `give_options` means what the player can give away without payment while staying above reserve
 
 ### `scene.rumors`
 
@@ -360,7 +368,7 @@ Important command groups:
 - observation: `look`, `status`, `inventory`, `rumors`, `npcs`, `map`, `help`
 - targeting: `focus <npc>`, `focus clear`, `inspect [npc]`
 - dialogue: `talk [npc]`, `say <npc> <message>`, `ask [npc] rumor`
-- economy: `trade [npc] buy <item> <qty>`, `trade [npc] sell <item> <qty>`
+- economy: `trade [npc] buy <item> <qty>`, `trade [npc] sell <item> <qty>`, `trade [npc] ask <item> <qty>`, `trade [npc] give <item> <qty>`
 - survival: `meal`, `eat [item]`, `work`, `wait [turns]`
 - travel and recovery: `go <location>`, `rest [turns]`, `sleep [turns]`
 

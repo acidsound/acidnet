@@ -265,6 +265,12 @@
   ],
   "sell_options": [
     {"item": "bread", "quantity": 1, "price": 2}
+  ],
+  "ask_options": [
+    {"item": "bread", "quantity": 1, "price": null}
+  ],
+  "give_options": [
+    {"item": "bread", "quantity": 1, "price": null}
   ]
 }
 ```
@@ -274,6 +280,8 @@
 - `stock` 은 현재 보이는 재고이지 숨겨진 전체 세계 상태가 아니다
 - `buy_options` 는 플레이어가 이 NPC에게서 살 수 있는 것
 - `sell_options` 는 플레이어가 이 NPC에게 팔 수 있는 것
+- `ask_options` 는 플레이어가 이 NPC에게 무상으로 요청할 수 있는 것
+- `give_options` 는 플레이어가 reserve 를 깨지 않고 무상으로 줄 수 있는 것
 
 ### `scene.rumors`
 
@@ -360,7 +368,7 @@
 - observation: `look`, `status`, `inventory`, `rumors`, `npcs`, `map`, `help`
 - targeting: `focus <npc>`, `focus clear`, `inspect [npc]`
 - dialogue: `talk [npc]`, `say <npc> <message>`, `ask [npc] rumor`
-- economy: `trade [npc] buy <item> <qty>`, `trade [npc] sell <item> <qty>`
+- economy: `trade [npc] buy <item> <qty>`, `trade [npc] sell <item> <qty>`, `trade [npc] ask <item> <qty>`, `trade [npc] give <item> <qty>`
 - survival: `meal`, `eat [item]`, `work`, `wait [turns]`
 - travel and recovery: `go <location>`, `rest [turns]`, `sleep [turns]`
 

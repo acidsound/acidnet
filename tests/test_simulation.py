@@ -168,6 +168,44 @@ def test_player_can_buy_from_vendor() -> None:
     assert simulation.player.inventory.get("bread", 0) == starting_bread + 1
 
 
+def test_player_can_request_food_as_a_gift_when_need_is_clear() -> None:
+    simulation = Simulation.create_demo()
+    simulation.player.hunger = 78.0
+    simulation.player.money = 0
+    starting_bread = simulation.player.inventory.get("bread", 0)
+
+    result = simulation.handle_command("trade mara ask bread 1")
+
+    assert any("gives you 1 bread" in line.lower() for line in result.lines)
+    assert simulation.player.money == 0
+    assert simulation.player.inventory.get("bread", 0) == starting_bread + 1
+
+
+def test_player_request_respects_npc_reserve_floor() -> None:
+    simulation = Simulation.create_demo()
+    simulation.player.hunger = 82.0
+    simulation.npcs["npc.mara"].inventory = {"bread": 1}
+
+    result = simulation.handle_command("trade mara ask bread 1")
+
+    assert any("cannot spare" in line.lower() for line in result.lines)
+    assert simulation.player.inventory.get("bread", 0) == 1
+
+
+def test_player_can_give_items_without_payment() -> None:
+    simulation = Simulation.create_demo()
+    simulation.player.inventory["bread"] = 2
+    starting_money = simulation.player.money
+    starting_bread = simulation.npcs["npc.mara"].inventory.get("bread", 0)
+
+    result = simulation.handle_command("trade mara give bread 1")
+
+    assert any("give 1 bread to Mara".lower() in line.lower() for line in result.lines)
+    assert simulation.player.money == starting_money
+    assert simulation.player.inventory.get("bread", 0) == 1
+    assert simulation.npcs["npc.mara"].inventory.get("bread", 0) == starting_bread + 1
+
+
 def test_talk_without_target_is_rejected_when_multiple_npcs_are_present() -> None:
     simulation = Simulation.create_demo()
 
@@ -205,7 +243,7 @@ def test_look_at_npc_shows_tradeable_inventory() -> None:
     result = simulation.handle_command("look toma")
 
     assert any("Target: Toma (fisher)" in line for line in result.lines)
-    assert any("Buy: fish x3" in line for line in result.lines)
+    assert any("Buy (cash): fish x3" in line for line in result.lines)
 
 
 def test_player_can_eat_food() -> None:

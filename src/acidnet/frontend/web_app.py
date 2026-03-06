@@ -159,6 +159,14 @@ class WebSimulationRuntime:
                         {"item": option.item, "quantity": option.quantity, "price": option.price}
                         for option in self.simulation.player_trade_options(npc.npc_id, mode="sell")
                     ],
+                    "ask_options": [
+                        {"item": option.item, "quantity": option.quantity, "price": option.price}
+                        for option in self.simulation.player_trade_options(npc.npc_id, mode="ask")
+                    ],
+                    "give_options": [
+                        {"item": option.item, "quantity": option.quantity, "price": option.price}
+                        for option in self.simulation.player_trade_options(npc.npc_id, mode="give")
+                    ],
                 }
             )
         return people

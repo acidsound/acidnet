@@ -30,6 +30,7 @@ def test_scene_payload_exposes_player_view_contract() -> None:
     assert any(action["command"] == "look" for action in state["actions"]["common"])
     assert any(action["command"] == "meal" for action in state["actions"]["common"])
     assert "people" in state["scene"]
+    assert all("ask_options" in person and "give_options" in person for person in state["scene"]["people"])
     assert isinstance(state["help"], list)
 
 

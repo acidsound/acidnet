@@ -101,7 +101,7 @@ class TurnResult:
 class TradeOption:
     item: str
     quantity: int
-    price: int
+    price: int | None = None
 
 
 class Simulation:
@@ -205,6 +205,8 @@ class Simulation:
                 "  sleep [turns]            Recover more fatigue, affected by shelter quality.",
                 "  trade [npc] buy <item> <qty>",
                 "  trade [npc] sell <item> <qty>",
+                "  trade [npc] ask <item> <qty>",
+                "  trade [npc] give <item> <qty>",
                 "  inventory                Show your inventory and gold.",
                 "  status                   Show player and world status.",
                 "  rumors                   Show rumors you know.",
@@ -298,7 +300,7 @@ class Simulation:
         if npc is None:
             return []
 
-        mode = mode.lower()
+        mode = self._normalize_trade_mode(mode)
         if mode == "buy":
             inventory = npc.inventory
             buy_from_vendor = True
@@ -307,6 +309,20 @@ class Simulation:
                 return []
             inventory = self.player.inventory
             buy_from_vendor = False
+        elif mode == "ask":
+            options: list[TradeOption] = []
+            for item in ITEM_VALUES:
+                quantity = self._requestable_quantity(npc, self.player, item)
+                if quantity > 0:
+                    options.append(TradeOption(item=item, quantity=quantity))
+            return options
+        elif mode == "give":
+            options = []
+            for item in ITEM_VALUES:
+                quantity = self._giftable_quantity(self.player, item)
+                if quantity > 0:
+                    options.append(TradeOption(item=item, quantity=quantity))
+            return options
         else:
             return []
 
@@ -333,13 +349,18 @@ class Simulation:
         location = self.world.locations[npc.location_id].name
         buy_options = self.player_trade_options(npc.npc_id, mode="buy")
         sell_options = self.player_trade_options(npc.npc_id, mode="sell")
+        ask_options = self.player_trade_options(npc.npc_id, mode="ask")
+        give_options = self.player_trade_options(npc.npc_id, mode="give")
         lines = [
             f"Target: {npc.name} ({npc.profession})",
             f"Location: {location}",
             f"Mood: {self._npc_mood(npc)} | Money: {npc.money} gold",
             f"Fatigue: {npc.fatigue:.1f}/100 | Load: {npc.carried_weight:.1f}/{npc.carry_capacity:.1f}",
             f"Inventory: {self._format_inventory(npc.inventory)}",
-            "Buy: " + (", ".join(f"{option.item} x{option.quantity} ({option.price}g)" for option in buy_options) if buy_options else "nothing available."),
+            "Buy (cash): "
+            + (", ".join(f"{option.item} x{option.quantity} ({option.price}g)" for option in buy_options) if buy_options else "nothing available."),
+            "Ask (gift): " + (", ".join(f"{option.item} x{option.quantity}" for option in ask_options) if ask_options else "nothing they can spare right now."),
+            "Give (gift): " + (", ".join(f"{option.item} x{option.quantity}" for option in give_options) if give_options else "nothing you can spare right now."),
         ]
         if npc.is_vendor:
             sell_line = (
@@ -347,9 +368,9 @@ class Simulation:
                 if sell_options
                 else "nothing from your inventory."
             )
-            lines.append(f"Sell: {sell_line}")
+            lines.append(f"Sell (cash): {sell_line}")
         else:
-            lines.append("Sell: this NPC is not buying goods.")
+            lines.append("Sell (cash): this NPC is not buying goods.")
         if npc.known_rumor_ids:
             lines.append(f"Rumors known: {len(npc.known_rumor_ids)}")
         return "\n".join(lines)
@@ -579,9 +600,9 @@ class Simulation:
         if qty <= 0:
             return TurnResult(self._events("system", ["Quantity must be greater than zero."]))
 
-        mode = mode.lower()
-        if mode not in {"buy", "sell"}:
-            return TurnResult(self._events("system", ['Trade mode must be "buy" or "sell".']))
+        mode = self._normalize_trade_mode(mode)
+        if mode not in {"buy", "sell", "ask", "give"}:
+            return TurnResult(self._events("system", ['Trade mode must be "buy", "sell", "ask", or "give".']))
         candidates = self._trade_candidates(mode, item, qty)
         action = f"{mode} {item}"
         npc, error = self._resolve_interaction_npc(npc_query, action=action, candidates=candidates)
@@ -601,7 +622,7 @@ class Simulation:
             self._adjust_item(self.player.inventory, item, qty)
             self._adjust_item(npc.inventory, item, -qty)
             lines.append(f"You buy {qty} {item} from {npc.name} for {total} gold.")
-        else:
+        elif mode == "sell":
             if self.player.inventory.get(item, 0) < qty:
                 return TurnResult(self._events("system", [f"You do not have enough {item}."]))
             if not npc.is_vendor:
@@ -615,22 +636,59 @@ class Simulation:
             self._adjust_item(self.player.inventory, item, -qty)
             self._adjust_item(npc.inventory, item, qty)
             lines.append(f"You sell {qty} {item} to {npc.name} for {total} gold.")
+        elif mode == "ask":
+            giftable = self._giftable_quantity(npc, item)
+            if giftable < qty:
+                return TurnResult(self._events("system", [f"{npc.name} cannot spare that much {item} right now."]))
+            requestable = self._requestable_quantity(npc, self.player, item)
+            if requestable < qty:
+                return TurnResult(self._events("system", [f"{npc.name} is not willing to give you that much {item} right now."]))
+            self._adjust_item(self.player.inventory, item, qty)
+            self._adjust_item(npc.inventory, item, -qty)
+            lines.append(f"{npc.name} gives you {qty} {item}.")
+        else:
+            giftable = self._giftable_quantity(self.player, item)
+            if self.player.inventory.get(item, 0) < qty:
+                return TurnResult(self._events("system", [f"You do not have enough {item}."]))
+            if giftable < qty:
+                return TurnResult(self._events("system", [f"You cannot spare that much {item} without cutting into your reserve."]))
+            self._adjust_item(self.player.inventory, item, -qty)
+            self._adjust_item(npc.inventory, item, qty)
+            lines.append(f"You give {qty} {item} to {npc.name}.")
+
+        memory_summary = {
+            "buy": f"Bought {item} from {self.player.name}.",
+            "sell": f"Sold {item} to {self.player.name}.",
+            "ask": f"Gave {item} to {self.player.name}.",
+            "give": f"Received {item} from {self.player.name}.",
+        }[mode]
+        player_summary = {
+            "buy": f"Bought {item} from {npc.name}.",
+            "sell": f"Sold {item} to {npc.name}.",
+            "ask": f"Received {item} from {npc.name}.",
+            "give": f"Gave {item} to {npc.name}.",
+        }[mode]
 
         self._record_memory(
             npc_id=npc.npc_id,
-            event_type="trade",
-            summary=f"Traded {item} with {self.player.name}.",
+            event_type="exchange" if mode in {"ask", "give"} else "trade",
+            summary=memory_summary,
             entities=[self.player.player_id],
             importance=0.65,
         )
         self._record_memory(
             npc_id=self.player.player_id,
-            event_type="trade",
-            summary=f"Traded {item} with {npc.name}.",
+            event_type="exchange" if mode in {"ask", "give"} else "trade",
+            summary=player_summary,
             entities=[npc.npc_id],
             importance=0.65,
         )
-        self._change_relationship(npc, self.player.player_id, trust_delta=0.03, closeness_delta=0.02)
+        if mode == "give":
+            self._change_relationship(npc, self.player.player_id, trust_delta=0.08, closeness_delta=0.06)
+        elif mode == "ask":
+            self._change_relationship(npc, self.player.player_id, trust_delta=0.05, closeness_delta=0.05)
+        else:
+            self._change_relationship(npc, self.player.player_id, trust_delta=0.03, closeness_delta=0.02)
         self._refresh_market_snapshot()
         entries = self._events("system", lines)
         entries.extend(self.advance_turn(1).entries)
@@ -1445,6 +1503,57 @@ class Simulation:
         modifier = 1.0 + max(0.0, persona.trade_bias) * 0.25 if buy_from_vendor else 0.55 + max(0.0, persona.trade_bias) * 0.1
         return max(1, round(base_price * modifier))
 
+    def _actor_identifier(self, actor: NPCState | PlayerState) -> str:
+        return actor.npc_id if isinstance(actor, NPCState) else actor.player_id
+
+    def _reserve_floor(self, actor: NPCState | PlayerState, item: str) -> int:
+        reserve = 0
+        stock = actor.inventory.get(item, 0)
+        if stock <= 0:
+            return 0
+        if item in FOOD_ITEMS:
+            other_food = sum(actor.inventory.get(food, 0) for food in FOOD_ITEMS if food != item)
+            meals_to_keep = 2 if actor.hunger >= 45 else 1
+            reserve = max(reserve, max(0, meals_to_keep - other_food))
+        if isinstance(actor, NPCState):
+            if item == "wheat" and actor.profession in {"baker", "farmer"}:
+                reserve = max(reserve, 2)
+            if item == "tool" and actor.profession == "smith":
+                reserve = max(reserve, 1)
+        return min(stock, reserve)
+
+    def _giftable_quantity(self, giver: NPCState | PlayerState, item: str) -> int:
+        stock = giver.inventory.get(item, 0)
+        if stock <= 0:
+            return 0
+        return max(0, stock - self._reserve_floor(giver, item))
+
+    def _requestable_quantity(self, giver: NPCState, receiver: NPCState | PlayerState, item: str) -> int:
+        giftable = self._giftable_quantity(giver, item)
+        if giftable <= 0:
+            return 0
+        relationship = self._relationship_score(giver, self._actor_identifier(receiver))
+        urgency = 0.0
+        if item in FOOD_ITEMS:
+            if receiver.hunger >= 75:
+                urgency += 0.45
+            elif receiver.hunger >= 55:
+                urgency += 0.28
+            if sum(receiver.inventory.get(food, 0) for food in FOOD_ITEMS) == 0:
+                urgency += 0.12
+        if giver.profession == "priest":
+            urgency += 0.18
+        willingness = relationship + urgency
+        threshold = 0.18 if item in FOOD_ITEMS else 0.42
+        if willingness < threshold:
+            return 0
+        request_cap = 1
+        if willingness >= threshold + 0.28:
+            request_cap += 1
+        if willingness >= threshold + 0.62:
+            request_cap += 1
+        return min(giftable, request_cap)
+
     def _relationship_score(self, npc: NPCState, other_npc_id: str) -> float:
         relation = npc.relationships.get(other_npc_id)
         if relation is None:
@@ -1785,10 +1894,22 @@ class Simulation:
         return None, f"Choose who to {action}: {names}. Use `focus <npc>` or include a name."
 
     def _trade_candidates(self, mode: str, item: str, qty: int) -> list[NPCState]:
+        mode = self._normalize_trade_mode(mode)
         npcs_here = self._npcs_at(self.player.location_id)
         if mode == "buy":
             return [npc for npc in npcs_here if npc.inventory.get(item, 0) >= qty]
-        return [npc for npc in npcs_here if npc.is_vendor]
+        if mode == "sell":
+            return [npc for npc in npcs_here if npc.is_vendor]
+        if mode == "ask":
+            return [npc for npc in npcs_here if self._requestable_quantity(npc, self.player, item) >= qty]
+        if mode == "give" and self._giftable_quantity(self.player, item) >= qty:
+            return list(npcs_here)
+        return []
+
+    def _normalize_trade_mode(self, mode: str) -> str:
+        normalized = mode.lower()
+        aliases = {"gift": "give", "request": "ask"}
+        return aliases.get(normalized, normalized)
 
     def _resolve_npc_here(self, query: str) -> NPCState | None:
         lowered = query.lower()

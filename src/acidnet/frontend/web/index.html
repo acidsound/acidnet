@@ -422,15 +422,17 @@
         </section>
 
         <section class="panel">
-          <h2>Trade</h2>
+          <h2>Exchange</h2>
           <div class="trade-row">
             <select id="trade-mode">
               <option value="buy">buy</option>
               <option value="sell">sell</option>
+              <option value="ask">ask</option>
+              <option value="give">give</option>
             </select>
             <select id="trade-item"></select>
             <input id="trade-qty" type="number" min="1" value="1">
-            <button type="button" onclick="runTrade()" class="primary">Trade</button>
+            <button type="button" onclick="runTrade()" class="primary">Exchange</button>
           </div>
           <p id="trade-summary" class="empty" style="margin: 10px 0 0;"></p>
         </section>
@@ -589,24 +591,35 @@
       const qtyInput = document.getElementById('trade-qty');
       const summary = document.getElementById('trade-summary');
       const target = currentTarget();
-      const options = target ? (mode === 'buy' ? target.buy_options : target.sell_options) : [];
+      const options = target ? ({
+        buy: target.buy_options,
+        sell: target.sell_options,
+        ask: target.ask_options,
+        give: target.give_options,
+      }[mode] || []) : [];
 
       itemSelect.innerHTML = '';
       if (!target) {
-        summary.textContent = 'Pick a target before trading.';
+        summary.textContent = 'Pick a target before exchanging.';
         return;
       }
       if (!options.length) {
         summary.textContent = mode === 'buy'
           ? `${target.name} has nothing available to buy right now.`
-          : `${target.name} is not taking anything from you right now.`;
+          : mode === 'sell'
+            ? `${target.name} is not taking anything from you right now.`
+            : mode === 'ask'
+              ? `${target.name} has nothing they can spare right now.`
+              : 'You do not have anything you can spare right now.';
         return;
       }
 
       for (const option of options) {
         const element = document.createElement('option');
         element.value = option.item;
-        element.textContent = `${option.item} (${option.price}g, x${option.quantity})`;
+        element.textContent = option.price == null
+          ? `${option.item} (x${option.quantity})`
+          : `${option.item} (${option.price}g, x${option.quantity})`;
         itemSelect.appendChild(element);
       }
 
@@ -614,23 +627,27 @@
       const qty = Math.max(1, Math.min(Number(qtyInput.value || '1'), selected.quantity));
       qtyInput.max = String(selected.quantity);
       qtyInput.value = String(qty);
-      const total = selected.price * qty;
+      const total = (selected.price || 0) * qty;
       summary.textContent = mode === 'buy'
         ? `${target.name} offers ${selected.item} x${selected.quantity}. Buying ${qty} costs ${total} gold.`
-        : `${target.name} will take up to ${selected.quantity} ${selected.item}. Selling ${qty} returns ${total} gold.`;
+        : mode === 'sell'
+          ? `${target.name} will take up to ${selected.quantity} ${selected.item}. Selling ${qty} returns ${total} gold.`
+          : mode === 'ask'
+            ? `${target.name} can spare up to ${selected.quantity} ${selected.item}. Asking for ${qty} uses no gold.`
+            : `You can spare up to ${selected.quantity} ${selected.item}. Giving ${qty} uses no gold.`;
     }
 
     function runTrade() {
       const target = currentTarget();
       if (!target) {
-        alert('Pick a target before trading.');
+        alert('Pick a target before exchanging.');
         return;
       }
       const mode = document.getElementById('trade-mode').value;
       const item = document.getElementById('trade-item').value;
       const qty = Number(document.getElementById('trade-qty').value || '1');
       if (!item) {
-        alert('Choose an item to trade.');
+        alert('Choose an item to exchange.');
         return;
       }
       sendCommand(`trade ${target.npc_id} ${mode} ${item} ${qty}`);
