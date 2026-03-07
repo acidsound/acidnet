@@ -66,6 +66,12 @@ MARKET_SUPPORT_CAPS = {
     "stew": 0,
     "tool": 3,
 }
+TRANSIT_MARKET_FLOW_ITEMS = {
+    "wheat": ("wheat", "bread"),
+    "bread": ("bread",),
+    "fish": ("fish",),
+    "tool": ("tool",),
+}
 WORK_OUTPUT = {
     "farmer": ("wheat", 2),
     "fisher": ("fish", 2),
@@ -116,6 +122,7 @@ FIELD_STRESS_WEATHER_DELTA = {
 }
 HARVEST_SHORTFALL_EVENT_ID = "event.farm.harvest_shortfall"
 ROUTE_DELAY_EVENT_PREFIX = "event.route."
+MARKET_FLOW_EVENT_PREFIX = "event.market.flow."
 ROUTE_WEATHER_PRESSURE = {
     "clear": 0.0,
     "cool_rain": 0.06,
@@ -2160,6 +2167,9 @@ class Simulation:
     def _route_delay_event_id(self, route_id: str) -> str:
         return f"{ROUTE_DELAY_EVENT_PREFIX}{route_id}.delay"
 
+    def _market_flow_event_id(self, region_id: str, item: str) -> str:
+        return f"{MARKET_FLOW_EVENT_PREFIX}{region_id}.{item}"
+
     def _route_delay_event(self, route_id: str) -> WorldEvent | None:
         return self._world_event(self._route_delay_event_id(route_id))
 
@@ -2502,6 +2512,104 @@ class Simulation:
             0.0,
             sum(max(0, 6 - self.world.market.items[item].stock) for item in ("bread", "stew", "fish")) / 10.0,
         )
+        self._refresh_market_flow_events(totals)
+
+    def _refresh_market_flow_events(self, local_totals: dict[str, int]) -> None:
+        anchor_region_id = self._market_anchor_region_id()
+        keep_event_ids: set[str] = set()
+        if anchor_region_id is None:
+            self.world.active_events = [
+                event for event in self.world.active_events if not event.event_id.startswith(MARKET_FLOW_EVENT_PREFIX)
+            ]
+            return
+
+        anchor_region = self.world.regions.get(anchor_region_id)
+        if anchor_region is None:
+            self.world.active_events = [
+                event for event in self.world.active_events if not event.event_id.startswith(MARKET_FLOW_EVENT_PREFIX)
+            ]
+            return
+
+        active_by_item: dict[str, list[RegionalTransit]] = defaultdict(list)
+        for transit in self.world.regional_transits:
+            if anchor_region_id not in {transit.from_region_id, transit.to_region_id}:
+                continue
+            for item in TRANSIT_MARKET_FLOW_ITEMS.get(transit.cargo_item, (transit.cargo_item,)):
+                if item not in self.world.market.items:
+                    continue
+                active_by_item[item].append(transit)
+
+        for item, transits in active_by_item.items():
+            market_item = self.world.market.items.get(item)
+            if market_item is None:
+                continue
+            strongest_transit = max(
+                transits,
+                key=lambda transit: (transit.quantity, -transit.ticks_remaining, transit.transit_id),
+            )
+            source_region = self.world.regions.get(strongest_transit.from_region_id)
+            destination_region = self.world.regions.get(strongest_transit.to_region_id)
+            source_name = source_region.name if source_region is not None else strongest_transit.from_region_id
+            destination_name = destination_region.name if destination_region is not None else strongest_transit.to_region_id
+            item_label = {
+                "wheat": "grain",
+                "bread": "bread",
+                "fish": "fish",
+                "stew": "stew",
+                "tool": "tool",
+            }.get(item, item)
+            cargo_label = {
+                "wheat": "grain",
+                "bread": "bread",
+                "fish": "fish",
+                "stew": "stew",
+                "tool": "tool",
+            }.get(strongest_transit.cargo_item, strongest_transit.cargo_item)
+            local_stock = local_totals.get(item, 0)
+            event_type = "market_support"
+            if strongest_transit.to_region_id == anchor_region_id:
+                if market_item.current_price > market_item.base_price:
+                    summary = (
+                        f"{item_label.title()} pressure in {anchor_region.name} is being held back by {cargo_label} caravans from {source_name}."
+                    )
+                elif local_stock <= 2:
+                    summary = f"{cargo_label.title()} caravans from {source_name} are refilling thin {item_label} stocks in {anchor_region.name}."
+                else:
+                    summary = f"{cargo_label.title()} caravans from {source_name} are steadying {item_label} stocks in {anchor_region.name}."
+            else:
+                event_type = "market_pressure"
+                if market_item.current_price > market_item.base_price:
+                    summary = (
+                        f"{item_label.title()} is tightening in {anchor_region.name} while {cargo_label} caravans pull supply toward {destination_name}."
+                    )
+                else:
+                    summary = (
+                        f"{cargo_label.title()} caravans leaving {anchor_region.name} for {destination_name} are trimming the local {item_label} cushion."
+                    )
+
+            event_id = self._market_flow_event_id(anchor_region_id, item)
+            keep_event_ids.add(event_id)
+            active_event = self._world_event(event_id)
+            if active_event is None:
+                self.world.active_events.append(
+                    WorldEvent(
+                        event_id=event_id,
+                        event_type=event_type,
+                        summary=summary,
+                        start_tick=self.world.tick,
+                        region_id=anchor_region_id,
+                    )
+                )
+            else:
+                active_event.event_type = event_type
+                active_event.summary = summary
+                active_event.region_id = anchor_region_id
+
+        self.world.active_events = [
+            event
+            for event in self.world.active_events
+            if not event.event_id.startswith(MARKET_FLOW_EVENT_PREFIX) or event.event_id in keep_event_ids
+        ]
 
     def _regional_market_support(self, local_totals: dict[str, int]) -> dict[str, int]:
         support = {item: 0 for item in self.world.market.items}
@@ -2539,6 +2647,20 @@ class Simulation:
                     continue
                 cap = MARKET_SUPPORT_CAPS.get(item, 0)
                 support[item] = min(cap, support[item] + int(round(signal * throughput * factor)))
+
+        for transit in self.world.regional_transits:
+            if anchor_region_id not in {transit.from_region_id, transit.to_region_id}:
+                continue
+            direction = 1 if transit.to_region_id == anchor_region_id else -1
+            base_shift = min(2, transit.quantity)
+            for item in TRANSIT_MARKET_FLOW_ITEMS.get(transit.cargo_item, (transit.cargo_item,)):
+                cap = MARKET_SUPPORT_CAPS.get(item, 0)
+                if cap <= 0:
+                    continue
+                shift = base_shift
+                if transit.cargo_item == "wheat" and item == "bread":
+                    shift = max(1, base_shift - 1)
+                support[item] = max(-cap, min(cap, support[item] + direction * shift))
         return support
 
     def _market_anchor_region_id(self) -> str | None:

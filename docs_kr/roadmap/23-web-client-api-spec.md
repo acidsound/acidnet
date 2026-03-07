@@ -265,8 +265,9 @@
 - `market_prices`: 공유 market snapshot 에 대한 현재 server-authoritative item 가격 목록
 - `location_id`, `location_name`: 현재 player anchor location
 - `region_id`, `region_name`: 현재 player 가 속한 region 기준 정보이며 regional UI context 와 route labeling 에 안전하게 쓸 수 있다
-- `active_events`: 현재 player region 또는 현재 travel route 에서 보이는 shock/event summary 목록이다. omniscient global list 가 아니다
+- `active_events`: 현재 player region 또는 현재 travel route 에서 보이는 shock, route-event, item-aware market-flow summary 목록이다. omniscient global list 가 아니다
 - `active_events` 의 개별 항목은 현재 `event_id`, `event_type`, `summary` 를 노출한다
+- visible summarized regional transit가 local market를 actively steadying 하거나 tightening 할 때 `market_support` 또는 `market_pressure` entry가 들어올 수 있다
 - 플레이어가 traveling 중일 때는 route progress 의 기준 정보는 `scene.description` 과 `player.travel_state` 다
 
 ### `player`

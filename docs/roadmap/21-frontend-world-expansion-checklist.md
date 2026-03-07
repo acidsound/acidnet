@@ -81,7 +81,7 @@ Current note:
 - `scene.route_preview` now exposes server-authored local and regional route preview DTOs instead of leaving route preview to client reconstruction
 - `actions.travel` now exposes server-authored travel commands aligned with that route preview DTO
 
-- [ ] Step 20E: Replace random monkeying with goal monkeys.
+- [x] Step 20E: Replace random monkeying with goal monkeys.
   Exit criteria:
   - add bounded monkey roles such as survivor, trader, rumor verifier, and altruist
   - use tight action prompts with explicit goals and allowed commands
@@ -93,8 +93,7 @@ Current note:
   - observation roles now also include `shock_observer`, `hoarder`, `exploit_observer`, `regional_observer`, and `downstream_observer`
   - each step now records a goal label alongside the chosen command
   - rule-based scoring and actionable failure summaries now land in the monkey report
-  - `downstream_observer` now distinguishes a coarse route-delay -> transit -> stock-shift -> market-pressure response chain, item overlap, and bounded downstream response latency instead of only counting separate downstream signals
-  - Remaining gap: richer downstream-economy scoring beyond the current summarized response-chain, item-overlap, and latency checks
+  - `downstream_observer` now distinguishes a coarse route-delay -> transit -> stock-shift -> market-pressure response chain, item overlap, bounded downstream response latency, and item-aware market-flow event semantics instead of only counting separate downstream signals
 
 - [ ] Step 20F: Add the first controllable external shock.
   Exit criteria:
@@ -139,8 +138,9 @@ Current note:
   - summarized `regional_transits` now move goods between settlements without spawning full offscreen NPC loops
   - web regional route payloads now expose summarized `transit_count`
   - summarized regional `risk_level` now drifts with offscreen stock pressure, route throughput, and local scarcity instead of staying a static fixture
+  - active summarized regional transits now also emit item-aware `market_support` or `market_pressure` events into the visible world-event layer
   - `regional_observer` and `downstream_observer` now cover cross-settlement route, transit, stock-shift, and market-shift observation from the player side
-  - the remaining gap is deciding how much richer downstream economy impact summarized transit should have and how to score it in observation runs
+  - the remaining gap is pushing summarized transit effects beyond the current stock, route, risk, and item-aware market-flow layer into broader multi-settlement knock-on effects
 
 ## Dependency Order Of Steps
 

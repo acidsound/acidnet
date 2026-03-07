@@ -68,8 +68,8 @@ The current project baseline is:
 - `exploit_observer` now probes reserve-constrained vendor exposure and buy-floor refusals from the player side
 - `regional_observer` now fast-forwards long route completion during deterministic runs and verifies actual cross-settlement observation instead of stalling mid-route
 - `downstream_observer` now records summarized regional stock shifts together with downstream market-price reactions from the player side
-- `downstream_observer` scoring now also distinguishes a coarse route-delay -> transit -> regional-stock -> market-pressure response chain, item overlap, and bounded response latency instead of only counting separate downstream signals
-- next work is richer downstream-economy scoring beyond the current summarized response-chain, item-overlap, and latency checks
+- `downstream_observer` scoring now also distinguishes a coarse route-delay -> transit -> regional-stock -> market-pressure response chain, item overlap, bounded response latency, and item-aware market-flow event semantics instead of only counting separate downstream signals
+- Phase 4 is now closed enough to leave the immediate queue
 
 ### Phase 5: External Shocks and Recovery Loops
 
@@ -101,8 +101,9 @@ The current project baseline is:
 - summarized regional transit pulses now move goods across routes without instantiating full offscreen NPCs
 - web route payloads now surface player-visible route transit counts
 - summarized regional `risk_level` now drifts with offscreen stock pressure, route throughput, and local scarcity instead of staying fixed at seed values
+- active summarized regional transit now also emits item-aware `market_support` or `market_pressure` events into the visible world-event layer
 - `regional_observer` and `downstream_observer` now cover route, transit, stock-shift, and market-shift observation from the player side
-- next work is deciding whether summarized transit should produce richer downstream economy effects and how to score those effects in observation runs
+- next work is pushing summarized transit beyond the current stock, route, risk, and item-aware market-flow layer into broader downstream settlement effects
 
 ## Immediate Next Work
 
@@ -111,8 +112,7 @@ Use `docs/context/current-state.md` when choosing between this track and the par
 
 The current simulation-track queue is:
 
-1. resume deeper downstream-economy scoring now that `20C` and `20D` are both closed enough to leave the queue
-2. continue `20H` summarized regional scaling once that downstream scoring slice is tighter
+1. continue `20H` summarized regional scaling now that `20E` is closed enough to leave the queue
 
 The backend parity audit is now closed enough to leave the immediate queue.
 Keep parity locked through regression coverage when prompt shaping, output cleanup, runtime parser policy, or fallback behavior changes.
@@ -120,10 +120,10 @@ Keep parity locked through regression coverage when prompt shaping, output clean
 `20B` is now also closed enough to leave the immediate queue.
 `20C` is now also closed enough to leave the immediate queue.
 `20D` is now also closed enough to leave the immediate queue.
+`20E` is now also closed enough to leave the immediate queue.
 
 Open but not first in this thin-slice queue:
 
-- extend the later `20E` downstream-economy monkey scoring beyond the current response-chain, item-overlap, and latency checks
 - continue the later `20H` summarized regional scaling work
 
 ## Removal Work

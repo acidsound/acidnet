@@ -81,7 +81,7 @@
 - `scene.route_preview` 가 이제 local/regional travel option을 server-authored DTO로 노출한다
 - `actions.travel` 이 같은 route preview DTO와 맞물린 travel action catalog를 노출한다
 
-- [ ] Step 20E: random monkey를 goal monkey로 교체
+- [x] Step 20E: random monkey를 goal monkey로 교체
   Exit criteria:
   - survivor, trader, rumor verifier, altruist 같은 bounded monkey role을 추가한다
   - 명시적 목표와 허용 명령을 가진 타이트한 action prompt를 사용한다
@@ -93,8 +93,7 @@
   - observation role은 이제 `shock_observer`, `hoarder`, `exploit_observer`, `regional_observer`, `downstream_observer`까지 확장됐다
   - 각 step은 선택한 command와 함께 goal label을 기록한다
   - rule-based scoring과 actionable failure summary가 monkey report에 들어간다
-  - `downstream_observer`는 이제 분리된 downstream signal 나열만이 아니라 대략적인 route-delay -> transit -> stock-shift -> market-pressure response chain, item overlap, bounded response latency도 구분한다
-  - Remaining gap: 현재 summarized response-chain, item-overlap, latency 체크를 넘는 richer downstream-economy scoring
+  - `downstream_observer`는 이제 분리된 downstream signal 나열만이 아니라 대략적인 route-delay -> transit -> stock-shift -> market-pressure response chain, item overlap, bounded response latency, item-aware market-flow event semantics도 구분한다
 
 - [ ] Step 20F: 첫 controllable external shock 추가
   Exit criteria:
@@ -137,8 +136,9 @@
   - summarized `regional_transits`는 full offscreen NPC loop 없이 settlement 사이 goods를 이동시킨다
   - web regional route payload는 summarized `transit_count`를 노출한다
   - summarized regional `risk_level`은 이제 offscreen stock pressure, route throughput, local scarcity에 따라 drift하며 static fixture로 남지 않는다
+  - active summarized regional transit는 이제 visible world-event layer에 item-aware `market_support` 또는 `market_pressure` event도 올린다
   - `regional_observer`와 `downstream_observer`는 player side에서 cross-settlement route, transit, stock-shift, market-shift 관찰을 수행한다
-  - 남은 gap은 summarized transit의 downstream economy impact를 얼마나 더 키울지, 그리고 그 효과를 observation run에서 어떻게 score할지 정하는 것이다
+  - 남은 gap은 summarized transit effect를 현재 stock, route, risk, item-aware market-flow layer보다 더 넓은 multi-settlement knock-on effect로 밀어 올리는 것이다
 
 ## Step 의존 순서
 

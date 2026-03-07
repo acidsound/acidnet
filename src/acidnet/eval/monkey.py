@@ -52,12 +52,16 @@ class MonkeyReport:
     downstream_transit_step: int | None
     downstream_regional_stock_step: int | None
     downstream_market_pressure_step: int | None
+    downstream_market_flow_step: int | None
     downstream_response_chain_lag_steps: int | None
     transit_after_route_delay: bool
     regional_stock_shift_after_transit: bool
     market_pressure_after_stock_shift: bool
+    market_flow_after_transit: bool
     downstream_response_chain_complete: bool
     downstream_response_items: list[str]
+    observed_market_flow_items: list[str]
+    downstream_semantic_items: list[str]
     observed_constrained_vendor_ids: list[str]
     observed_exchange_refusal_types: list[str]
     reserve_refusal_events: int
@@ -115,6 +119,9 @@ class SimulationMonkeyRunner:
         self.downstream_regional_stock_step: int | None = None
         self.market_pressure_after_stock_shift = False
         self.downstream_market_pressure_step: int | None = None
+        self.market_flow_after_transit = False
+        self.downstream_market_flow_step: int | None = None
+        self.observed_market_flow_items: set[str] = set()
         self.observed_constrained_vendor_ids: set[str] = set()
         self.observed_exchange_refusal_types: set[str] = set()
         self.reserve_refusal_events = 0
@@ -161,6 +168,7 @@ class SimulationMonkeyRunner:
             transit_visible=bool(self.simulation.world.regional_transits),
             regional_stock_shifts=regional_stock_shifts,
         )
+        self._record_market_flow_events(step_index=current_step_index, visible_events=visible_events)
         self._record_visible_exchange_constraints()
         self._assert_invariants()
         step = MonkeyStep(
@@ -209,12 +217,16 @@ class SimulationMonkeyRunner:
             downstream_transit_step=self.downstream_transit_step,
             downstream_regional_stock_step=self.downstream_regional_stock_step,
             downstream_market_pressure_step=self.downstream_market_pressure_step,
+            downstream_market_flow_step=self.downstream_market_flow_step,
             downstream_response_chain_lag_steps=self.downstream_response_chain_lag_steps,
             transit_after_route_delay=self.transit_after_route_delay,
             regional_stock_shift_after_transit=self.regional_stock_shift_after_transit,
             market_pressure_after_stock_shift=self.market_pressure_after_stock_shift,
+            market_flow_after_transit=self.market_flow_after_transit,
             downstream_response_chain_complete=self.downstream_response_chain_complete,
             downstream_response_items=self.downstream_response_items,
+            observed_market_flow_items=sorted(self.observed_market_flow_items),
+            downstream_semantic_items=self.downstream_semantic_items,
             observed_constrained_vendor_ids=sorted(self.observed_constrained_vendor_ids),
             observed_exchange_refusal_types=sorted(self.observed_exchange_refusal_types),
             reserve_refusal_events=self.reserve_refusal_events,
@@ -683,6 +695,10 @@ class SimulationMonkeyRunner:
         return sorted(self.observed_regional_stock_items & self.observed_market_price_items)
 
     @property
+    def downstream_semantic_items(self) -> list[str]:
+        return sorted(self.observed_regional_stock_items & self.observed_market_flow_items)
+
+    @property
     def downstream_response_chain_lag_steps(self) -> int | None:
         if self.downstream_route_delay_step is None or self.downstream_market_pressure_step is None:
             return None
@@ -712,6 +728,16 @@ class SimulationMonkeyRunner:
             self.market_pressure_after_stock_shift = True
             if self.downstream_market_pressure_step is None:
                 self.downstream_market_pressure_step = step_index
+
+    def _record_market_flow_events(self, *, step_index: int, visible_events: list) -> None:
+        for event in visible_events:
+            if event.event_type not in {"market_support", "market_pressure"}:
+                continue
+            self.observed_market_flow_items.add(event.event_id.rsplit(".", 1)[-1])
+            if self.transit_after_route_delay:
+                self.market_flow_after_transit = True
+                if self.downstream_market_flow_step is None:
+                    self.downstream_market_flow_step = step_index
 
     def _market_pressure_differs_from_baseline(self) -> bool:
         if self.simulation.world.market.scarcity_index > self.initial_market_scarcity:
@@ -847,6 +873,11 @@ class SimulationMonkeyRunner:
                 and self.downstream_response_chain_lag_steps > DOWNSTREAM_RESPONSE_CHAIN_MAX_LAG_STEPS
             ):
                 failures.append("downstream_observer_slow_response_chain")
+            if (
+                not failures
+                and not self.downstream_semantic_items
+            ):
+                failures.append("downstream_observer_missing_market_flow_semantics")
         elif self.role == "altruist":
             if self._exchange_count(history, {"give"}) == 0:
                 failures.append("altruist_never_shared_resources")
@@ -893,6 +924,7 @@ class SimulationMonkeyRunner:
             "downstream_observer_missed_response_chain": 0.18,
             "downstream_observer_missing_item_overlap": 0.14,
             "downstream_observer_slow_response_chain": 0.12,
+            "downstream_observer_missing_market_flow_semantics": 0.12,
             "altruist_never_shared_resources": 0.28,
             "altruist_overextended_self": 0.2,
             "trader_never_completed_cash_exchange": 0.28,

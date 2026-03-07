@@ -462,3 +462,22 @@ def test_scene_payload_exposes_market_pressure_from_regional_supply_and_route_we
 
     assert clear_state["world"]["scarcity_index"] < storm_state["world"]["scarcity_index"]
     assert clear_state["world"]["market_prices"]["bread"] < storm_state["world"]["market_prices"]["bread"]
+
+
+def test_scene_payload_exposes_market_support_event_from_regional_transit() -> None:
+    runtime = build_runtime("web_frontend_market_support_event_test")
+    try:
+        runtime.simulation.player.inventory.clear()
+        for npc in runtime.simulation.npcs.values():
+            npc.inventory.clear()
+            npc.production_queue.clear()
+        runtime.simulation.world.weather = "clear"
+        runtime.simulation.world.regions["region.greenfall"].stock_signals["bread"] = 0
+        runtime.simulation.world.regions["region.hollowmarket"].stock_signals["bread"] = 20
+        runtime.simulation.advance_turn(10)
+        state = runtime.scene_payload()
+    finally:
+        runtime.close()
+
+    assert any(event["event_type"] == "market_support" for event in state["world"]["active_events"])
+    assert any("bread" in event["summary"].lower() for event in state["world"]["active_events"])

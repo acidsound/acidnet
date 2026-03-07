@@ -265,8 +265,9 @@ Failure response:
 - `market_prices`: current server-authoritative item prices for the shared market snapshot
 - `location_id`, `location_name`: current player anchor location
 - `region_id`, `region_name`: current player region anchor, safe for regional UI context and route labeling
-- `active_events`: currently visible shock or route-event summaries from the player's current region or current travel route, not the omniscient global list
+- `active_events`: currently visible shock, route-event, or item-aware market-flow summaries from the player's current region or current travel route, not the omniscient global list
 - `active_events` entries currently expose `event_id`, `event_type`, and `summary`
+- `active_events` may now include `market_support` or `market_pressure` entries when visible summarized regional transit is actively steadying or tightening the local market
 - when the player is traveling, the scene description and player travel state are the authoritative source for route progress
 
 ### `player`

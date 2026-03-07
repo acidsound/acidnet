@@ -1037,6 +1037,29 @@ def test_regional_transit_delivery_into_anchor_region_reduces_market_bread_price
     assert simulation.world.market.items["bread"].current_price < price_before
 
 
+def test_inbound_regional_transit_spawns_market_support_event_for_anchor_region() -> None:
+    simulation = Simulation.create_demo()
+    simulation.player.inventory.clear()
+    for npc in simulation.npcs.values():
+        npc.inventory.clear()
+        npc.production_queue.clear()
+    simulation.world.weather = "clear"
+    simulation.world.regions["region.greenfall"].stock_signals["bread"] = 0
+    simulation.world.regions["region.hollowmarket"].stock_signals["bread"] = 20
+
+    simulation.advance_turn(10)
+
+    visible_support_events = [
+        event for event in simulation._visible_world_events_for_player() if event.event_type == "market_support"
+    ]
+
+    assert any(
+        transit.cargo_item == "bread" and transit.to_region_id == "region.greenfall"
+        for transit in simulation.world.regional_transits
+    )
+    assert any(event.region_id == "region.greenfall" and "bread" in event.summary.lower() for event in visible_support_events)
+
+
 def test_route_pressure_slows_regional_transit_progress() -> None:
     clear_simulation = Simulation.create_demo()
     clear_simulation.world.regional_transits.append(
