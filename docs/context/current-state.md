@@ -67,6 +67,7 @@ If they compete for the next thin slice, this file decides.
 - shared dialogue output cleanup and sentence-limit enforcement now run through one post-processing path across `heuristic`, `openai_compat`, and `local_peft`
 - shared dialogue cleanup now also unwraps common code-fenced or JSON-wrapped replies before sentence limiting, reducing backend-specific formatting drift from runtime and eval servers
 - prompt-only evaluation now reaches wrapped `openai_compat` and `local_peft` adapters with `temperature=0.0`, and model-gate fallback accounting now treats `local_peft` the same way as `openai_compat`
+- runtime and eval parser policy now consistently limits promoted entrypoints to `heuristic` and `openai_compat`, while keeping `local_peft` on the dev/eval path only
 - player rumor notes can now be inferred from dialogue text during ordinary `talk` turns when a backend mentions a known rumor without populating `used_rumor_ids`
 - goal monkeys now include an `exploit_observer` role that reaches the bakery, verifies reserve-constrained vendor exposure, and probes buy-floor guardrails from the player side
 - summarized regional stock and route pressure now feed into the live market snapshot, so offscreen supply and delays can move local scarcity and prices instead of only changing summary nodes
@@ -88,10 +89,9 @@ If they compete for the next thin slice, this file decides.
 
 ### Track B: Live Simulation and World Loop
 
-1. Keep backend parity on the dialogue contract across `heuristic`, deployment `openai_compat`, and dev/eval `local_peft`, especially around any remaining server-side formatting quirks.
-2. Complete `20G` with one more economy sink or buffer rule plus exploit-oriented validation.
-3. Extend goal-driven monkey evaluation toward richer downstream-economy scoring beyond current route, transit, stock-shift, and price-shift observation.
-4. Continue toward stronger summarized regional scaling and downstream transit effects beyond price/scarcity pressure alone.
+1. Complete `20G` with one more economy sink or buffer rule plus exploit-oriented validation.
+2. Extend goal-driven monkey evaluation toward richer downstream-economy scoring beyond current route, transit, stock-shift, and price-shift observation.
+3. Continue toward stronger summarized regional scaling and downstream transit effects beyond price/scarcity pressure alone.
 
 ### Still Open Milestones, But Not The Current Thin-Slice Queue
 
@@ -106,6 +106,7 @@ If they compete for the next thin slice, this file decides.
 - Some package directories are placeholders, so refactors can accidentally target non-live paths.
 - Web payloads and raw-command behavior can drift if command semantics change without updating the browser contract.
 - Dialogue backends can silently diverge if one path stops honoring the shared `system_prompt` rules.
+- Dialogue backend parity is no longer the active next-slice queue item, but it still needs to stay locked through the regression suite whenever prompt shaping, sanitization, or runtime parser policy changes.
 - Runtime entrypoints can drift away from the promoted GGUF deployment path if `openai_compat` defaults, llama-server aliasing, and docs are not kept aligned together.
 - Windows `local_peft` still falls back to the slow torch path because the fast linear-attention kernels are not present on the Windows runtime.
 - The live market still uses one shared snapshot anchored to the current high-resolution economy, so multi-settlement pricing is still an approximation until more than one region runs at full local resolution.

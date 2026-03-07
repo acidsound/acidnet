@@ -32,6 +32,8 @@ The current project baseline is:
 - remove ambiguity between system prompt, shared output contract, and persona context
 - make all dialogue backends honor the shared output contract, including language rules
 - `active_events` and route disruption state now flow through player-visible filtering instead of the raw omniscient event list
+- runtime and eval parser policy now also separate promoted runtime backends from `local_peft` dev/eval-only paths
+- shared dialogue cleanup now strips common hidden-reasoning wrappers plus code-fenced or JSON-wrapped reply shells across `heuristic`, `openai_compat`, and `local_peft`
 
 ### Phase 2: Travel and Recovery
 
@@ -99,10 +101,12 @@ Use `docs/context/current-state.md` when choosing between this track and the par
 
 The current simulation-track queue is:
 
-1. backend parity audit: heuristic vs openai-compatible vs local-peft
-2. complete `20G` with one more economy sink or buffer rule
-3. extend goal monkeys for deeper downstream-economy scoring after route, transit, stock, and price observation
-4. continue toward `20H` summarized regional scaling
+1. complete `20G` with one more economy sink or buffer rule
+2. extend goal monkeys for deeper downstream-economy scoring after route, transit, stock, and price observation
+3. continue toward `20H` summarized regional scaling
+
+The backend parity audit is now closed enough to leave the immediate queue.
+Keep parity locked through regression coverage when prompt shaping, output cleanup, runtime parser policy, or fallback behavior changes.
 
 Open but not first in this thin-slice queue:
 
