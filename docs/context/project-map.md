@@ -103,6 +103,9 @@ For repo-split safety, the minimum simulator-only gate is `tests/test_simulation
 - Use this subset as the first no-behavior-change gate when rehoming `src/acidnet/engine`, `src/acidnet/models`, `src/acidnet/world`, or `src/acidnet/storage`.
 - If a split changes the headless control surface, add or update a terminal-path regression instead of relying on manual smoke only.
 - Keep `tests/test_simulator_boundary.py` green so deep simulator internals do not leak back into compatibility shims or live entrypoints.
+- Treat direct imports of `acidnet.simulator.simulation`, `acidnet.simulator.core`, `acidnet.simulator.demo`, `acidnet.simulator.sqlite_store`, and `acidnet.simulator.event_log_file` outside the public sub-surfaces as split failures.
+- Treat any new import from `src/acidnet/simulator/*.py` back into frontend, eval, training, or legacy shim layers as a split failure.
+- Treat `pyproject.toml`, `run_acidnet.py`, and `run_acidnet_web.py` as part of the split gate, because frontend deep testing depends on stable runtime entrypoint targets.
 
 ## Working Boundaries
 
@@ -122,3 +125,4 @@ For repo-split safety, the minimum simulator-only gate is `tests/test_simulation
 - If you change dialogue data or teacher logic, audit `src/acidnet/training/dataset_builder.py`, `src/acidnet/training/bootstrap_teacher.py`, `src/acidnet/eval/prompt_only.py`, and the latest smoke gate reports together.
 - If you change simulator package boundaries for split work, keep `src/acidnet/simulator/*.py` aligned as the public import surface.
 - If you move more logic under `src/acidnet/simulator/`, keep `engine`, `world`, and `storage` compatibility shims aligned until the split is complete.
+- Before deeper frontend testing or any realtime-transition design, recheck the split gate first so the browser audit is not run against a moving runtime boundary.

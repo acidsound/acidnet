@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
+import tomllib
 
 import acidnet.engine as engine
 import acidnet.engine.simulation as engine_simulation
@@ -35,6 +36,13 @@ FORBIDDEN_MODULES = {
     "acidnet.storage.sqlite_store",
     "acidnet.storage.event_log_file",
 }
+FORBIDDEN_DEEP_SIMULATOR_MODULES = {
+    "acidnet.simulator.core",
+    "acidnet.simulator.demo",
+    "acidnet.simulator.event_log_file",
+    "acidnet.simulator.simulation",
+    "acidnet.simulator.sqlite_store",
+}
 ALLOWED_LEGACY_IMPORT_FILES = {
     Path("src/acidnet/engine/__init__.py"),
     Path("src/acidnet/engine/simulation.py"),
@@ -47,6 +55,12 @@ ALLOWED_LEGACY_IMPORT_FILES = {
     Path("src/acidnet/storage/event_log_file.py"),
     Path("tests/test_simulator_boundary.py"),
 }
+ALLOWED_DEEP_SIMULATOR_IMPORT_FILES = {
+    Path("src/acidnet/simulator/models.py"),
+    Path("src/acidnet/simulator/runtime.py"),
+    Path("src/acidnet/simulator/storage.py"),
+    Path("src/acidnet/simulator/world.py"),
+}
 SHIM_IMPORT_ALLOWLIST = {
     Path("src/acidnet/engine/__init__.py"): {"acidnet.simulator.runtime"},
     Path("src/acidnet/engine/simulation.py"): {"acidnet.simulator.runtime"},
@@ -58,6 +72,16 @@ SHIM_IMPORT_ALLOWLIST = {
     Path("src/acidnet/storage/sqlite_store.py"): {"acidnet.simulator.storage"},
     Path("src/acidnet/storage/event_log_file.py"): {"acidnet.simulator.storage"},
 }
+FORBIDDEN_SIMULATOR_BACK_IMPORT_PREFIXES = (
+    "acidnet.cli",
+    "acidnet.engine",
+    "acidnet.eval",
+    "acidnet.frontend",
+    "acidnet.models",
+    "acidnet.storage",
+    "acidnet.training",
+    "acidnet.world",
+)
 
 
 def _iter_python_files() -> list[Path]:
@@ -134,3 +158,43 @@ def test_compatibility_shims_only_use_public_simulator_subsurfaces() -> None:
             offenders[str(relative_path)] = simulator_imports
 
     assert not offenders
+
+
+def test_repo_avoids_deep_simulator_imports_outside_public_subsurfaces() -> None:
+    offenders: dict[str, list[str]] = {}
+    for path in _iter_python_files():
+        relative_path = path.relative_to(ROOT)
+        if relative_path in ALLOWED_DEEP_SIMULATOR_IMPORT_FILES:
+            continue
+        forbidden = sorted(module for module in _iter_imported_modules(path) if module in FORBIDDEN_DEEP_SIMULATOR_MODULES)
+        if forbidden:
+            offenders[str(relative_path)] = forbidden
+
+    assert not offenders
+
+
+def test_simulator_package_has_no_back_imports_to_outer_layers() -> None:
+    offenders: dict[str, list[str]] = {}
+    for path in sorted((ROOT / "src" / "acidnet" / "simulator").glob("*.py")):
+        relative_path = path.relative_to(ROOT)
+        forbidden = sorted(
+            module
+            for module in _iter_imported_modules(path)
+            if module.startswith(FORBIDDEN_SIMULATOR_BACK_IMPORT_PREFIXES)
+        )
+        if forbidden:
+            offenders[str(relative_path)] = forbidden
+
+    assert not offenders
+
+
+def test_runtime_entrypoints_target_split_safe_modules() -> None:
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    scripts = pyproject["project"]["scripts"]
+    assert scripts["acidnet"] == "acidnet.cli:main"
+    assert scripts["acidnet-web"] == "acidnet.frontend.web_app:main"
+
+    run_acidnet_imports = _iter_imported_modules(ROOT / "run_acidnet.py")
+    run_acidnet_web_imports = _iter_imported_modules(ROOT / "run_acidnet_web.py")
+    assert "acidnet.cli" in run_acidnet_imports
+    assert "acidnet.frontend.web_app" in run_acidnet_web_imports
