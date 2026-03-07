@@ -13,6 +13,7 @@ The goal is to show where the live contracts actually sit in code and tests.
 - `AGENTS.md`: project rules and read order
 - `docs/context/current-state.md`: rolling current priorities and risks
 - `docs/roadmap/00-execution-checklist.md`: top-level goal and promotion baseline
+- `docs/context/frontend-api-handoff.md`: frontend-only summary of queryable and controllable HTTP contract
 - `docs/roadmap/20-spatial-time-exchange-model.md`: world-model direction
 - `docs/roadmap/23-web-client-api-spec.md`: browser-facing contract
 - `docs/roadmap/24-execution-roadmap.md`: current implementation sequence
@@ -29,49 +30,89 @@ The goal is to show where the live contracts actually sit in code and tests.
 - `run_acidnet.py`: terminal and raw-command runtime
 - `run_acidnet_web.py`: shareable web runtime
 - `run_acidnet_gui.py`: legacy exploratory GUI path, not a parity target
-- `run_local_adapter_server.py`: local OpenAI-compatible adapter server
+- `run_local_adapter_server.py`: local OpenAI-compatible adapter server for dev/eval, not the promoted deployment runtime
 - `run_*pipeline*.py`, `run_*train*.py`, `run_*eval*.py`: training and evaluation entrypoints
+- `scripts/launch_qwen3_5_4b_runtime_dialogue_unsloth_wsl_*.sh`: preferred WSL Unsloth training launchers for fast dialogue refresh loops
+- `data/test_artifacts/train_runtime_dialogue_hungerfix_smoke_3072.jsonl` and `data/test_artifacts/eval_runtime_dialogue_hungerfix_smoke_384.jsonl`: current correction-heavy runtime-dialogue smoke subsets for no-food hunger and food-trade grounding
 
 ## Core Runtime Files
 
-- `src/acidnet/engine/simulation.py`
+- `src/acidnet/simulator/*.py`
+  - stable headless import boundary for repo-split prep
+  - active rehome surface for `engine`, `models`, `world`, and `storage`
+  - now used by headless CLI, eval, web runtime, and split-gate/runtime-adjacent tests
+- `src/acidnet/simulator/simulation.py`
   - dominant simulation loop and command handling
   - travel, recovery, exchange, rumor flow, NPC turns, and many derived rules currently live here
-- `src/acidnet/models/core.py`
+- `src/acidnet/engine/simulation.py`
+  - compatibility shim over `src/acidnet/simulator/simulation.py`
+- `src/acidnet/simulator/core.py`
   - shared world, player, NPC, rumor, intent, and travel schemas
-- `src/acidnet/world/demo.py`
+- `src/acidnet/models/core.py`
+  - compatibility shim over `src/acidnet/simulator/core.py`
+- `src/acidnet/simulator/demo.py`
   - seeded map, personas, NPC setup, and initial rumor state
+- `src/acidnet/world/demo.py`
+  - compatibility shim over `src/acidnet/simulator/demo.py`
 - `src/acidnet/frontend/web_app.py`
   - canonical HTTP surface and derived player-view payload
+- `src/acidnet/frontend/client/index.html`
+  - current pure static browser client asset bundle
 - `src/acidnet/llm/prompt_builder.py`
   - shared dialogue prompt and interaction-mode shaping
 - `src/acidnet/llm/rule_based.py`
 - `src/acidnet/llm/openai_compat.py`
+  - promoted simulator runtime path against `llama-server` serving the `Q4_K_M` GGUF model line
 - `src/acidnet/llm/local_peft.py`
-  - dialogue backend implementations that must obey the same runtime contract
-- `src/acidnet/storage/sqlite_store.py`
+  - in-process dev/eval parity backend; not the promoted deployment runtime
+- `src/acidnet/training/dataset_builder.py`
+- `src/acidnet/training/bootstrap_teacher.py`
+- `src/acidnet/training/teacher_prompts.py`
+  - prompt-pack generation and bootstrap teacher shaping for runtime dialogue training
+- `src/acidnet/eval/prompt_only.py`
+- `src/acidnet/eval/model_gate.py`
+  - question-focused dialogue scoring and combined promotion checks
+- `src/acidnet/simulator/sqlite_store.py`
   - snapshot persistence and runtime dialogue prompt storage
+- `src/acidnet/simulator/event_log_file.py`
+  - plain-text event log persistence for headless/web runtime
+- `src/acidnet/storage/sqlite_store.py`
+  - compatibility shim over `src/acidnet/simulator/sqlite_store.py`
 
 ## Core Test Anchors
 
 - `tests/test_simulation.py`: simulation behavior and command regressions
-- `tests/test_web_frontend.py`: browser-facing payload and command contract
+- `tests/test_web_frontend.py`: browser-facing payload, command contract, and HTTP prompt-propagation checks
 - `tests/test_model_gate.py`: combined dialogue/circulation promotion checks
+- `tests/test_monkey_runner.py`: goal-monkey role behavior and observation scoring
 - `tests/test_prompt_only_eval.py`: prompt-only eval path
 - `tests/test_circulation_eval.py`: circulation harness
+- `tests/test_dialogue_backends.py`: backend parity around output cleanup, fallback config forwarding, and fallback accounting
 - `tests/test_local_peft.py`: local dialogue adapter path
 - `tests/test_storage.py`: SQLite snapshot and settings behavior
+
+For repo-split safety, the minimum simulator-only gate is `tests/test_simulation.py`, `tests/test_monkey_runner.py`, `tests/test_storage.py`, and `tests/test_event_log_file.py`.
+
+## Simulator-Only Split Gate
+
+- Structural repo splits should keep `tests/test_simulation.py`, `tests/test_monkey_runner.py`, `tests/test_storage.py`, and `tests/test_event_log_file.py` green before wider web or model-eval suites.
+- Use this subset as the first no-behavior-change gate when rehoming `src/acidnet/engine`, `src/acidnet/models`, `src/acidnet/world`, or `src/acidnet/storage`.
+- If a split changes the headless control surface, add or update a terminal-path regression instead of relying on manual smoke only.
 
 ## Working Boundaries
 
 - Simulation truth belongs in the simulation runtime and shared models, not in the web client.
+- Headless CLI, eval, and split-gate code should prefer `acidnet.simulator` as the stable import surface when possible.
+- Frontends should remain thin intent/state clients; future realtime ticking still belongs to the simulator side, not the client.
 - The browser renders derived scene state from `src/acidnet/frontend/web_app.py`.
 - Dialogue backends share one runtime contract through `system_prompt`.
 - Training and evaluation code can produce artifacts and scores, but they do not define world rules.
 
 ## Change Audit
 
-- If you change world-state fields or command meaning, audit `src/acidnet/frontend/web_app.py`, `tests/test_web_frontend.py`, and `docs/roadmap/23-web-client-api-spec.md`.
+- If you change world-state fields or command meaning, audit `src/acidnet/frontend/web_app.py`, `tests/test_web_frontend.py`, `docs/context/frontend-api-handoff.md`, and `docs/roadmap/23-web-client-api-spec.md`.
 - If you change travel, fatigue, recovery, or exchange rules, audit `docs/roadmap/20-spatial-time-exchange-model.md`, `docs/roadmap/24-execution-roadmap.md`, and player-visible web state.
 - If you change dialogue prompt behavior, audit `rule_based`, `openai_compat`, and `local_peft` parity together with `src/acidnet/storage/sqlite_store.py`.
-- If you move logic out of `src/acidnet/engine/simulation.py`, remove dead paths and update this file instead of assuming the old ownership map still holds.
+- If you change dialogue data or teacher logic, audit `src/acidnet/training/dataset_builder.py`, `src/acidnet/training/bootstrap_teacher.py`, `src/acidnet/eval/prompt_only.py`, and the latest smoke gate reports together.
+- If you change simulator package boundaries for split work, keep `src/acidnet/simulator/*.py` aligned as the public import surface.
+- If you move more logic under `src/acidnet/simulator/`, keep `engine`, `world`, and `storage` compatibility shims aligned until the split is complete.
