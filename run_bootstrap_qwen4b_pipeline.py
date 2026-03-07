@@ -140,16 +140,6 @@ def build_parser() -> argparse.ArgumentParser:
         default=str(Path("data") / "eval" / "qwen3_5_4b_bootstrap_baseline_gate_report.json"),
         help="Post-train model gate JSON report path.",
     )
-    parser.add_argument(
-        "--launch-gui",
-        action="store_true",
-        help="Launch the Tk GUI directly against the resulting local_peft adapter after preparation or training.",
-    )
-    parser.add_argument(
-        "--gui-no-persist",
-        action="store_true",
-        help="Disable SQLite persistence when launching the GUI from this pipeline.",
-    )
     return parser
 
 
@@ -269,7 +259,7 @@ def main() -> None:
         subprocess.run(launch_args, check=True)
 
     adapter_path = Path(args.training_output_dir)
-    if args.run_gate or args.launch_gui:
+    if args.run_gate:
         if not adapter_path.exists():
             raise FileNotFoundError(
                 f"Adapter directory '{adapter_path}' does not exist yet. Run with --launch-train first or point --training-output-dir at an existing adapter."
@@ -291,22 +281,6 @@ def main() -> None:
             args.gate_output,
         ]
         subprocess.run(gate_args, check=True)
-
-    if args.launch_gui:
-        gui_args = [
-            args.python_bin,
-            "run_acidnet_gui.py",
-            "--dialogue-backend",
-            "local_peft",
-            "--dialogue-model",
-            "Qwen/Qwen3.5-4B",
-            "--dialogue-adapter-path",
-            str(adapter_path),
-        ]
-        if args.gui_no_persist:
-            gui_args.append("--no-persist")
-        subprocess.run(gui_args, check=True)
-
 
 def _resolve_trainer_backend(requested_backend: str) -> str:
     if requested_backend != "auto":

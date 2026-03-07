@@ -29,8 +29,8 @@ The goal is to show where the live contracts actually sit in code and tests.
 
 - `run_acidnet.py`: terminal and raw-command runtime
 - `run_acidnet_web.py`: shareable web runtime
-- `run_acidnet_gui.py`: legacy exploratory GUI path, not a parity target
 - `run_local_adapter_server.py`: local OpenAI-compatible adapter server for dev/eval, not the promoted deployment runtime
+- `run_local_adapter_dev_loop.ps1`: optional Windows helper that now launches the local adapter server, model gate, and web runtime together for dev/eval observation
 - `run_*pipeline*.py`, `run_*train*.py`, `run_*eval*.py`: training and evaluation entrypoints
 - `scripts/launch_qwen3_5_4b_runtime_dialogue_unsloth_wsl_*.sh`: preferred WSL Unsloth training launchers for fast dialogue refresh loops
 - `data/test_artifacts/train_runtime_dialogue_hungerfix_smoke_3072.jsonl` and `data/test_artifacts/eval_runtime_dialogue_hungerfix_smoke_384.jsonl`: current correction-heavy runtime-dialogue smoke subsets for no-food hunger and food-trade grounding

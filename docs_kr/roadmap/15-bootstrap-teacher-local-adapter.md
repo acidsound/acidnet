@@ -135,7 +135,7 @@ python run_prompt_only_baseline_eval.py ^
 powershell -ExecutionPolicy Bypass -File run_local_adapter_dev_loop.ps1 `
   -AdapterPath data/test_artifacts/qwen3_5_4b_bootstrap_smoke_adapter `
   -ModelAlias acidnet-qwen3.5-4b-smoke `
-  -NoMonkey
+  -TailLog
 ```
 
 같은 adapter를 HTTP bridge 없이 CLI나 GUI에 직접 붙여 실행:
@@ -148,23 +148,13 @@ python run_acidnet.py ^
   --dialogue-adapter-path data/test_artifacts/qwen3_5_4b_runtime_dialogue_smoke_adapter
 ```
 
-```bash
-python run_acidnet_gui.py ^
-  --no-persist ^
-  --dialogue-backend local_peft ^
-  --dialogue-model Qwen/Qwen3.5-4B ^
-  --dialogue-adapter-path data/test_artifacts/qwen3_5_4b_runtime_dialogue_smoke_adapter
-```
-
 또는 dev launcher 에 직접 local adapter 를 연결:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File run_dev_world.ps1 `
-  -DialogueBackend local_peft `
-  -DialogueModel Qwen/Qwen3.5-4B `
-  -DialogueAdapterPath data/training/qwen3_5_4b_runtime_dialogue_full_adapter `
-  -RunModelGate `
-  -Detached
+powershell -ExecutionPolicy Bypass -File run_local_adapter_dev_loop.ps1 `
+  -AdapterPath data/training/qwen3_5_4b_runtime_dialogue_full_adapter `
+  -ModelAlias acidnet-qwen3.5-4b-full `
+  -TailLog
 ```
 
 ## 현재 판단

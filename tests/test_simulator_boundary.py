@@ -193,6 +193,9 @@ def test_runtime_entrypoints_target_split_safe_modules() -> None:
     scripts = pyproject["project"]["scripts"]
     assert scripts["acidnet"] == "acidnet.cli:main"
     assert scripts["acidnet-web"] == "acidnet.frontend.web_app:main"
+    assert "acidnet-gui" not in scripts
+    assert not (ROOT / "run_acidnet_gui.py").exists()
+    assert not (ROOT / "run_dev_world.ps1").exists()
 
     run_acidnet_imports = _iter_imported_modules(ROOT / "run_acidnet.py")
     run_acidnet_web_imports = _iter_imported_modules(ROOT / "run_acidnet_web.py")

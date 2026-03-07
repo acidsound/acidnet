@@ -57,10 +57,10 @@ python run_acidnet.py ^
   --dialogue-endpoint http://127.0.0.1:8000/v1/chat/completions
 ```
 
-Run the GUI against the same backend:
+Run the web probe against the same backend:
 
 ```bash
-python run_acidnet_gui.py ^
+python run_acidnet_web.py ^
   --dialogue-backend openai_compat ^
   --dialogue-model qwen3.5-4b ^
   --dialogue-endpoint http://127.0.0.1:8000/v1/chat/completions

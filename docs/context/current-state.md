@@ -26,7 +26,7 @@ If they compete for the next thin slice, this file decides.
 - frontends are thin clients: they send intents and read state, but do not own time progression
 - frontend API handoff lives in `docs/context/frontend-api-handoff.md` and stays limited to queryable and controllable browser contract
 - terminal and raw commands are the debugging control surface
-- Tk is legacy and should not regain parity scope
+- Tk runtime paths are removed and should not re-enter parity scope
 - travel is multi-turn and should consume time, fatigue, and load
 - exchange should converge on one rule path across cash, gifting, barter, and debt
 - `system_prompt` is a live runtime contract across all dialogue backends

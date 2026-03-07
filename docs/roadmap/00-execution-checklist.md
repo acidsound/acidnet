@@ -118,11 +118,11 @@ There is now a playable prototype in the repo with:
 
 - terminal runtime: `run_acidnet.py`
 - shareable web runtime: `run_acidnet_web.py`
-- keyboard GUI runtime: `run_acidnet_gui.py` (legacy exploratory client)
 - SQLite persistence path: `data/acidnet.sqlite`
 - bootstrap teacher data path: `run_bootstrap_qwen4b_pipeline.py`
 - baseline launcher: `run_qwen4b_baseline_train.py`
 - local adapter dev/eval server path: `run_local_adapter_server.py`
+- Windows local adapter dev/eval loop: `run_local_adapter_dev_loop.ps1`
 - direct in-process local adapter dev/eval path: `run_model_gate.py --dialogue-backend local_peft --dialogue-adapter-path ...`
 
 Implemented systems:

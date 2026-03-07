@@ -9,8 +9,10 @@ param(
     [int]$ModelGateTurns = 120,
     [switch]$LoadIn4Bit,
     [switch]$Persist,
-    [switch]$NoMonkey,
-    [switch]$TailLog
+    [switch]$TailLog,
+    [string]$WebHost = "127.0.0.1",
+    [int]$WebPort = 8765,
+    [string]$WebEventLogPath = "data/logs/local-adapter-web.log"
 )
 
 $ErrorActionPreference = "Stop"
@@ -64,25 +66,27 @@ Write-Host "Running combined model gate..."
     --turns $ModelGateTurns `
     --output data/eval/local_adapter_model_gate_report.json
 
-$GuiArgs = @(
-    "-ExecutionPolicy", "Bypass",
-    "-File", ".\run_dev_world.ps1",
-    "-DialogueBackend", "openai_compat",
-    "-DialogueModel", $ModelAlias,
-    "-DialogueEndpoint", $Endpoint,
-    "-RunModelGate",
-    "-ModelGateTurns", $ModelGateTurns,
-    "-Detached"
+$WebArgs = @(
+    "run_acidnet_web.py",
+    "--host", $WebHost,
+    "--port", $WebPort,
+    "--dialogue-backend", "openai_compat",
+    "--dialogue-model", $ModelAlias,
+    "--dialogue-endpoint", $Endpoint,
+    "--event-log", $WebEventLogPath
 )
-if ($Persist) {
-    $GuiArgs += "-Persist"
+if (-not $Persist) {
+    $WebArgs += "--no-persist"
 }
-if ($NoMonkey) {
-    $GuiArgs += "-NoMonkey"
-}
-if ($TailLog) {
-    $GuiArgs += "-TailLog"
+if ($TailLog -and $WebEventLogPath) {
+    Start-Process -FilePath "powershell" `
+        -ArgumentList @("-ExecutionPolicy", "Bypass", "-File", ".\run_tail_event_log.ps1", "-Path", $WebEventLogPath) `
+        -WorkingDirectory $ScriptRoot | Out-Null
 }
 
-Write-Host "Launching GUI against local adapter backend..."
-& powershell @GuiArgs
+$WebProcess = Start-Process -FilePath python -ArgumentList $WebArgs -WorkingDirectory $ScriptRoot -PassThru
+Write-Host ("Started acidnet web runtime (PID {0}) at http://{1}:{2}" -f $WebProcess.Id, $WebHost, $WebPort)
+if (-not $Persist) {
+    Write-Host "Persistence disabled for this observation session."
+}
+Write-Host ("Web event log: {0}" -f $WebEventLogPath)

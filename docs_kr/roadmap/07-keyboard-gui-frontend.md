@@ -27,26 +27,19 @@
 
 진입점:
 
-- `run_acidnet_gui.py`
-- `run_dev_world.ps1`
 - `run_monkey_world.py`
 - `run_tail_event_log.ps1`
 
 ## 실행 방법
 
-```bash
-python run_acidnet_gui.py
-```
+The old `run_acidnet_gui.py`, `run_dev_world.ps1`, and `acidnet-gui` launcher paths have been removed from the repo.
+Keep this document as historical UI reference only.
 
 또는 editable install 이후:
 
 기존 `acidnet-gui` 엔트리포인트는 제거됐다.
 
 관찰 중심 개발용 launcher:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File run_dev_world.ps1 -Detached
-```
 
 이제 dev launcher 는 기본적으로 GUI monkey mode 를 켠 채 실행하므로, 수동 입력이 없어도 월드가 계속 흐른다.
 
@@ -58,32 +51,9 @@ powershell -ExecutionPolicy Bypass -File run_tail_event_log.ps1 -Path data/logs/
 
 GUI 와 tail 을 함께 실행:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File run_dev_world.ps1 -Detached -TailLog
-```
-
 prompt-only local model 관찰:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File run_dev_world.ps1 `
-  -DialogueBackend openai_compat `
-  -DialogueModel qwen3.5-4b `
-  -DialogueEndpoint http://127.0.0.1:8000/v1/chat/completions `
-  -RunPromptOnlyEval `
-  -RunModelGate `
-  -Detached
-```
-
 HTTP bridge 없이 direct local adapter 관찰:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File run_dev_world.ps1 `
-  -DialogueBackend local_peft `
-  -DialogueModel Qwen/Qwen3.5-4B `
-  -DialogueAdapterPath data/training/qwen3_5_4b_runtime_dialogue_full_adapter `
-  -RunModelGate `
-  -Detached
-```
 
 headless monkey regression run:
 

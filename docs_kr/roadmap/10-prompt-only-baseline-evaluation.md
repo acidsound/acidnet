@@ -60,7 +60,7 @@ python run_acidnet.py ^
 같은 backend 로 GUI 실행:
 
 ```bash
-python run_acidnet_gui.py ^
+python run_acidnet_web.py ^
   --dialogue-backend openai_compat ^
   --dialogue-model qwen3.5-4b ^
   --dialogue-endpoint http://127.0.0.1:8000/v1/chat/completions
