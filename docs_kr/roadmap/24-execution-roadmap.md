@@ -102,17 +102,17 @@
 - web route payload는 player-visible `transit_count`를 노출한다
 - summarized regional `risk_level`은 이제 offscreen stock pressure, route throughput, local scarcity에 따라 drift한다
 - active summarized regional transit는 이제 visible world-event layer에 item-aware `market_support` 또는 `market_pressure` event도 올린다
+- crisis-biased summarized relief는 이제 anchor-region harvest shortfall 또는 critical scarcity 동안 inbound food caravan을 우선하고, playable remote town 없이도 cross-settlement recovery를 읽을 수 있게 만든다
 - `regional_observer`와 `downstream_observer`는 player side에서 route, transit, stock-shift, market-shift 관찰을 수행한다
-- 다음 작업은 summarized transit effect를 현재 stock, route, risk, item-aware market-flow layer보다 더 넓은 downstream settlement effect로 밀어 올리는 것이다
+- Phase 6는 이제 summarized regional-scaling milestone으로 immediate queue에서 내릴 만큼 닫혔다
 
 ## 바로 다음 작업
 
 이 섹션은 active simulation/world-expansion track 전용 즉시 실행 큐다.
 parallel structural boundary track과 우선순위가 겹치면 `docs/context/current-state.md`를 기준으로 본다.
 
-현재 simulation-track queue는 다음과 같다.
-
-1. `20E` 가 queue 에서 내려갈 만큼 닫혔으니 `20H` summarized regional scaling 을 계속한다
+현재 simulation-track에는 추가 thin-slice queue가 열려 있지 않다.
+broader playable multi-town local simulation은 summarized regional layer와 분리된 later milestone로 미룬다.
 
 backend parity audit는 이제 immediate queue에서 내릴 만큼 닫혔다.
 이후에도 prompt shaping, output cleanup, runtime parser policy, fallback behavior가 바뀌면 regression coverage로 parity를 계속 잠근다.
@@ -121,10 +121,11 @@ backend parity audit는 이제 immediate queue에서 내릴 만큼 닫혔다.
 `20C`도 이제 immediate queue에서 뺄 만큼 닫혔다.
 `20D`도 이제 immediate queue에서 뺄 만큼 닫혔다.
 `20E`도 이제 immediate queue에서 뺄 만큼 닫혔다.
+`20H`도 이제 immediate queue에서 뺄 만큼 닫혔다.
 
 열려 있지만 현재 thin-slice queue의 맨 앞은 아닌 것:
 
-- later `20H` summarized regional scaling 작업 계속
+- broader playable multi-town local simulation은 현재 summarized regional layer 밖의 later milestone로 미룬다
 
 ## 제거 작업
 

@@ -1346,8 +1346,17 @@ class Simulation:
         return events
 
     def _plan_regional_transit(self, route) -> RegionalTransit | None:
+        relief_plan = self._plan_regional_relief_transit(route)
+        if relief_plan is not None:
+            return relief_plan
         left = self.world.regions[route.from_region_id]
         right = self.world.regions[route.to_region_id]
+        anchor_region_id = self._market_anchor_region_id()
+        anchor_needs_relief = (
+            anchor_region_id is not None
+            and anchor_region_id in {route.from_region_id, route.to_region_id}
+            and self._anchor_region_needs_relief(anchor_region_id)
+        )
         best_item = None
         best_diff = 0
         source = left
@@ -1364,6 +1373,13 @@ class Simulation:
             else:
                 source = right
                 destination = left
+            if (
+                anchor_needs_relief
+                and anchor_region_id is not None
+                and item in {"bread", "wheat", "fish"}
+                and source.region_id == anchor_region_id
+            ):
+                continue
             best_item = item
             best_diff = diff
         if best_item is None or best_diff < 4:
@@ -1378,8 +1394,78 @@ class Simulation:
             from_region_id=source.region_id,
             to_region_id=destination.region_id,
             cargo_item=best_item,
+            purpose="balance",
             quantity=quantity,
             ticks_remaining=route.travel_ticks,
+        )
+
+    def _plan_regional_relief_transit(self, route) -> RegionalTransit | None:
+        anchor_region_id = self._market_anchor_region_id()
+        if anchor_region_id is None or anchor_region_id not in {route.from_region_id, route.to_region_id}:
+            return None
+        if not self._anchor_region_needs_relief(anchor_region_id):
+            return None
+        anchor_region = self.world.regions.get(anchor_region_id)
+        if anchor_region is None:
+            return None
+        remote_region_id = route.to_region_id if route.from_region_id == anchor_region_id else route.from_region_id
+        remote_region = self.world.regions.get(remote_region_id)
+        if remote_region is None:
+            return None
+
+        best_item: str | None = None
+        best_score = -1
+        best_diff = 0
+        for item in ("bread", "wheat", "fish"):
+            anchor_qty = anchor_region.stock_signals.get(item, 0)
+            remote_qty = remote_region.stock_signals.get(item, 0)
+            diff = remote_qty - anchor_qty
+            if diff < 4:
+                continue
+            score = diff
+            if item in {"bread", "fish"}:
+                score += 2
+            if item == "wheat" and self._world_event(HARVEST_SHORTFALL_EVENT_ID) is not None:
+                score += 2
+            price_state = self.world.market.items.get(item)
+            if price_state is not None:
+                score += max(0, price_state.current_price - price_state.base_price)
+            if score <= best_score:
+                continue
+            best_item = item
+            best_score = score
+            best_diff = diff
+
+        if best_item is None:
+            return None
+
+        remote_qty = remote_region.stock_signals.get(best_item, 0)
+        quantity = min(3, max(1, best_diff // 4))
+        if remote_qty - quantity < 2:
+            return None
+        return RegionalTransit(
+            transit_id=f"transit.{route.route_id}.{best_item}.relief.day{self.world.day}.turn{self.turn_counter}",
+            route_id=route.route_id,
+            from_region_id=remote_region.region_id,
+            to_region_id=anchor_region.region_id,
+            cargo_item=best_item,
+            purpose="relief",
+            quantity=quantity,
+            ticks_remaining=route.travel_ticks,
+        )
+
+    def _anchor_region_needs_relief(self, anchor_region_id: str) -> bool:
+        anchor_region = self.world.regions.get(anchor_region_id)
+        if anchor_region is None:
+            return False
+        food_total = sum(anchor_region.stock_signals.get(item, 0) for item in ("bread", "wheat", "fish"))
+        weakest_food = min(anchor_region.stock_signals.get(item, 0) for item in ("bread", "wheat", "fish"))
+        return (
+            self._world_event(HARVEST_SHORTFALL_EVENT_ID) is not None
+            or self.world.field_stress >= 0.55
+            or self.world.market.scarcity_index >= 0.9
+            or food_total <= 8
+            or weakest_food <= 1
         )
 
     def _deliver_regional_transit(self, transit: RegionalTransit) -> str | None:
@@ -2205,10 +2291,14 @@ class Simulation:
     def _regional_transit_departure_summary(self, transit: RegionalTransit) -> str:
         source = self.world.regions[transit.from_region_id].name
         destination = self.world.regions[transit.to_region_id].name
+        if transit.purpose == "relief":
+            return f"A relief caravan leaves {source} for {destination} carrying {transit.cargo_item} x{transit.quantity}."
         return f"A small caravan leaves {source} for {destination} carrying {transit.cargo_item} x{transit.quantity}."
 
     def _regional_transit_arrival_summary(self, transit: RegionalTransit) -> str:
         destination = self.world.regions[transit.to_region_id].name
+        if transit.purpose == "relief":
+            return f"A relief caravan reaches {destination} with {transit.cargo_item} x{transit.quantity}."
         return f"A caravan reaches {destination} with {transit.cargo_item} x{transit.quantity}."
 
     def _farm_yield_amount(self) -> int:
@@ -2568,14 +2658,15 @@ class Simulation:
             local_stock = local_totals.get(item, 0)
             event_type = "market_support"
             if strongest_transit.to_region_id == anchor_region_id:
+                support_label = "Relief" if strongest_transit.purpose == "relief" else cargo_label.title()
                 if market_item.current_price > market_item.base_price:
                     summary = (
-                        f"{item_label.title()} pressure in {anchor_region.name} is being held back by {cargo_label} caravans from {source_name}."
+                        f"{item_label.title()} pressure in {anchor_region.name} is being held back by {support_label.lower()} caravans from {source_name}."
                     )
                 elif local_stock <= 2:
-                    summary = f"{cargo_label.title()} caravans from {source_name} are refilling thin {item_label} stocks in {anchor_region.name}."
+                    summary = f"{support_label} caravans from {source_name} are refilling thin {item_label} stocks in {anchor_region.name}."
                 else:
-                    summary = f"{cargo_label.title()} caravans from {source_name} are steadying {item_label} stocks in {anchor_region.name}."
+                    summary = f"{support_label} caravans from {source_name} are steadying {item_label} stocks in {anchor_region.name}."
             else:
                 event_type = "market_pressure"
                 if market_item.current_price > market_item.base_price:

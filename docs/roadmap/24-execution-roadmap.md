@@ -102,17 +102,17 @@ The current project baseline is:
 - web route payloads now surface player-visible route transit counts
 - summarized regional `risk_level` now drifts with offscreen stock pressure, route throughput, and local scarcity instead of staying fixed at seed values
 - active summarized regional transit now also emits item-aware `market_support` or `market_pressure` events into the visible world-event layer
+- crisis-biased summarized relief now prioritizes inbound food caravans during anchor-region harvest shortfall or critical scarcity, making cross-settlement recovery legible without requiring playable remote towns
 - `regional_observer` and `downstream_observer` now cover route, transit, stock-shift, and market-shift observation from the player side
-- next work is pushing summarized transit beyond the current stock, route, risk, and item-aware market-flow layer into broader downstream settlement effects
+- Phase 6 is now closed enough to leave the immediate queue as a summarized regional-scaling milestone
 
 ## Immediate Next Work
 
 This section is the immediate queue for the active simulation and world-expansion track only.
 Use `docs/context/current-state.md` when choosing between this track and the parallel structural boundary track.
 
-The current simulation-track queue is:
-
-1. continue `20H` summarized regional scaling now that `20E` is closed enough to leave the queue
+There is no additional thin-slice queue open on this simulation track right now.
+Broader playable multi-town local simulation is deferred to a later milestone that must be defined separately from the summarized regional layer.
 
 The backend parity audit is now closed enough to leave the immediate queue.
 Keep parity locked through regression coverage when prompt shaping, output cleanup, runtime parser policy, or fallback behavior changes.
@@ -121,10 +121,11 @@ Keep parity locked through regression coverage when prompt shaping, output clean
 `20C` is now also closed enough to leave the immediate queue.
 `20D` is now also closed enough to leave the immediate queue.
 `20E` is now also closed enough to leave the immediate queue.
+`20H` is now also closed enough to leave the immediate queue.
 
 Open but not first in this thin-slice queue:
 
-- continue the later `20H` summarized regional scaling work
+- defer broader playable multi-town local simulation to a later milestone beyond the current summarized regional layer
 
 ## Removal Work
 

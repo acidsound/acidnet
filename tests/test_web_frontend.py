@@ -481,3 +481,4 @@ def test_scene_payload_exposes_market_support_event_from_regional_transit() -> N
 
     assert any(event["event_type"] == "market_support" for event in state["world"]["active_events"])
     assert any("bread" in event["summary"].lower() for event in state["world"]["active_events"])
+    assert any("relief" in event["summary"].lower() for event in state["world"]["active_events"])

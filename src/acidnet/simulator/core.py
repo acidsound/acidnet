@@ -70,6 +70,7 @@ class RegionalTransit(BaseModel):
     from_region_id: str
     to_region_id: str
     cargo_item: str
+    purpose: str = "balance"
     quantity: int = Field(default=1, ge=1)
     ticks_remaining: int = Field(default=0, ge=0)
 

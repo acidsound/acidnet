@@ -120,7 +120,7 @@ Current note:
   - `exploit_observer` now probes repeated gift-request refusal as well as reserve-constrained cash buys
   - circulation and monkey regressions now cover the closure path for the current entropy slice
 
-- [ ] Step 20H: Add regional scaling.
+- [x] Step 20H: Add regional scaling.
   Exit criteria:
   - support multiple settlements through summarized regional nodes
   - keep local areas high-resolution only when needed
@@ -139,8 +139,10 @@ Current note:
   - web regional route payloads now expose summarized `transit_count`
   - summarized regional `risk_level` now drifts with offscreen stock pressure, route throughput, and local scarcity instead of staying a static fixture
   - active summarized regional transits now also emit item-aware `market_support` or `market_pressure` events into the visible world-event layer
+  - crisis-biased summarized relief now prioritizes inbound food caravans during anchor-region harvest shortfall or critical scarcity, and the player can see those relief legs through caravan summaries plus market-support events
   - `regional_observer` and `downstream_observer` now cover cross-settlement route, transit, stock-shift, and market-shift observation from the player side
-  - the remaining gap is pushing summarized transit effects beyond the current stock, route, risk, and item-aware market-flow layer into broader multi-settlement knock-on effects
+  Scope note:
+  - `20H` closes the summarized multi-settlement layer only; arrived remote settlements do not become full local play spaces at this stage
 
 ## Dependency Order Of Steps
 

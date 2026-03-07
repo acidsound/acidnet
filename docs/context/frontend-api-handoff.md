@@ -70,7 +70,7 @@ Notes:
 
 - `scarcity_index` and `market_prices` are server-authoritative derived values.
 - `active_events` entries currently expose `event_id`, `event_type`, and `summary`.
-- `active_events` may now include item-aware `market_support` or `market_pressure` summaries when visible regional transits are actively steadying or tightening the local market.
+- `active_events` may now include item-aware `market_support` or `market_pressure` summaries when visible regional transits are actively steadying, tightening, or relieving a local crisis in the market.
 - `player.debts` entries currently expose `npc_id`, `name`, and `amount` for outstanding player-visible debt.
 - `scene.route_preview` is the server-authored route preview DTO for local and regional travel options.
 - `regional_nodes` is summarized regional context, including `stock_signals`; it is not raw offscreen NPC state.

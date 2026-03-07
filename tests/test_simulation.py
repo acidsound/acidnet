@@ -1060,6 +1060,42 @@ def test_inbound_regional_transit_spawns_market_support_event_for_anchor_region(
     assert any(event.region_id == "region.greenfall" and "bread" in event.summary.lower() for event in visible_support_events)
 
 
+def test_harvest_shortfall_biases_regional_transit_toward_inbound_food_relief() -> None:
+    simulation = Simulation.create_demo()
+    simulation.world.weather = "dry_wind"
+    simulation.world.regions["region.greenfall"].stock_signals["bread"] = 1
+    simulation.world.regions["region.greenfall"].stock_signals["wheat"] = 2
+    simulation.world.regions["region.greenfall"].stock_signals["fish"] = 0
+    simulation.world.regions["region.hollowmarket"].stock_signals["bread"] = 14
+    simulation.world.regions["region.hollowmarket"].stock_signals["wheat"] = 12
+    simulation.world.regions["region.hollowmarket"].stock_signals["fish"] = 6
+
+    simulation.advance_turn(4)
+    route = next(route for route in simulation.world.regional_routes if route.route_id == "route.greenfall.hollowmarket")
+    planned = simulation._plan_regional_transit(route)
+
+    assert planned is not None
+    assert planned.purpose == "relief"
+    assert planned.to_region_id == "region.greenfall"
+    assert planned.cargo_item in {"bread", "wheat", "fish"}
+
+
+def test_harvest_shortfall_spawns_visible_relief_caravan_summary() -> None:
+    simulation = Simulation.create_demo()
+    simulation.world.weather = "dry_wind"
+    simulation.world.regions["region.greenfall"].stock_signals["bread"] = 1
+    simulation.world.regions["region.greenfall"].stock_signals["wheat"] = 2
+    simulation.world.regions["region.greenfall"].stock_signals["fish"] = 0
+    simulation.world.regions["region.hollowmarket"].stock_signals["bread"] = 16
+    simulation.world.regions["region.hollowmarket"].stock_signals["wheat"] = 12
+    simulation.world.regions["region.hollowmarket"].stock_signals["fish"] = 6
+
+    result = simulation.advance_turn(10)
+
+    assert any(transit.purpose == "relief" and transit.to_region_id == "region.greenfall" for transit in simulation.world.regional_transits)
+    assert any("relief caravan leaves hollow market for greenfall village" in line.lower() for line in result.lines)
+
+
 def test_route_pressure_slows_regional_transit_progress() -> None:
     clear_simulation = Simulation.create_demo()
     clear_simulation.world.regional_transits.append(

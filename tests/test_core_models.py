@@ -166,3 +166,4 @@ def test_world_state_supports_regional_summary_fields() -> None:
     assert world.regions["region.a"].stock_signals["bread"] == 4
     assert world.regional_routes[0].travel_ticks == 96
     assert world.regional_transits[0].cargo_item == "bread"
+    assert world.regional_transits[0].purpose == "balance"

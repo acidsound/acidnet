@@ -77,6 +77,7 @@ If they compete for the next thin slice, this file decides.
 - `downstream_observer` now records summarized regional stock shifts together with downstream market-price reactions from the player side
 - `downstream_observer` scoring now distinguishes a coarse route-delay -> transit -> regional-stock -> market-pressure response chain, tracks item overlap, and rejects slow downstream responses that arrive only after the bounded observation window
 - active summarized regional transits now also emit item-aware `market_support` or `market_pressure` events into the player-visible `active_events` feed, and `downstream_observer` now scores those market-flow semantics on top of the earlier response-chain checks
+- crisis-biased summarized regional relief now prioritizes inbound food caravans during anchor-region harvest shortfall or critical scarcity, making cross-settlement recovery legible without turning remote towns into full local play spaces
 - the web player-view contract now exposes `scarcity_index` and `market_prices`, so browser-side observation can track market pressure without reading raw persistence
 - simulator-only split readiness now explicitly locks load-sensitive travel ETA/risk, deterministic monkey replay, and multi-save latest-snapshot persistence
 - headless CLI, eval, and simulator-only tests now import the rehome surface through `acidnet.simulator` instead of reaching directly into `engine` and `storage`
@@ -101,11 +102,12 @@ If they compete for the next thin slice, this file decides.
 
 ### Track B: Live Simulation and World Loop
 
-1. Continue stronger summarized regional effects now that `20E` is closed enough to leave the queue and item-aware transit market-flow events are in place.
+1. No new thin-slice queue is active on the summarized multi-settlement track after the narrow `20H` crisis-balancing closure.
 
 ### Still Open Milestones, But Not The Current Thin-Slice Queue
 
-- keep future simulation/world-loop churn behind the now-closed `20C`, `20D`, and `20E` contract slices unless a regression forces reopening them
+- keep future simulation/world-loop churn behind the now-closed `20C`, `20D`, `20E`, and narrow `20H` contract slices unless a regression forces reopening them
+- defer broader playable multi-town local simulation to a later milestone that is explicitly defined as larger than the current summarized regional layer
 
 ## Current Risks
 

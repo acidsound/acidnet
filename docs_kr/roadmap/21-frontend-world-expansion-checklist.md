@@ -118,7 +118,7 @@
   - `exploit_observer`는 이제 repeated gift-request refusal과 reserve-constrained cash buy를 함께 점검한다
   - circulation과 monkey regression이 현재 entropy slice의 closure path를 잠근다
 
-- [ ] Step 20H: regional scaling 추가
+- [x] Step 20H: regional scaling 추가
   Exit criteria:
   - summarized regional node를 통해 여러 settlement를 지원한다
   - 필요한 곳에서만 local area를 high-resolution으로 유지한다
@@ -137,8 +137,10 @@
   - web regional route payload는 summarized `transit_count`를 노출한다
   - summarized regional `risk_level`은 이제 offscreen stock pressure, route throughput, local scarcity에 따라 drift하며 static fixture로 남지 않는다
   - active summarized regional transit는 이제 visible world-event layer에 item-aware `market_support` 또는 `market_pressure` event도 올린다
+  - crisis-biased summarized relief는 이제 anchor-region harvest shortfall 또는 critical scarcity 동안 inbound food caravan을 우선하고, player는 caravan summary와 market-support event로 그 relief leg를 볼 수 있다
   - `regional_observer`와 `downstream_observer`는 player side에서 cross-settlement route, transit, stock-shift, market-shift 관찰을 수행한다
-  - 남은 gap은 summarized transit effect를 현재 stock, route, risk, item-aware market-flow layer보다 더 넓은 multi-settlement knock-on effect로 밀어 올리는 것이다
+  Scope note:
+  - `20H`는 summarized multi-settlement layer만 닫는다. arrived remote settlement가 full local play space가 되는 것은 이 단계 범위가 아니다
 
 ## Step 의존 순서
 
