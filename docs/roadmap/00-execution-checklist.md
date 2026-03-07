@@ -93,9 +93,8 @@ Current measured status:
 - the promoted simulator runtime path is `openai_compat` against `llama-server` serving the `Q4_K_M` GGUF base model plus optional GGUF LoRA adapter
 - the latest runtime-dialogue smoke adapter clears the combined model gate
 - current gate result: `prompt_avg=1.000`, `prompt_fail_rows=0`, `prompt_latency_ms=1672.6`, `circulation=0.925`
-- the WSL2 + Unsloth smoke path is now validated with fast-path kernels installed
-- current WSL smoke gate result: `prompt_avg=1.000`, `prompt_fail_rows=0`, `prompt_latency_ms=2554.396`, `circulation=0.925`
-- current WSL smoke `2048 / 256` benchmark train runtime: `335 s`
+- the WSL2 + Unsloth training path is revalidated on Python 3.12 with `flash-linear-attention` and `causal-conv1d` available in the default `.venv-wsl`
+- current maintained WSL bench smoke `1024 / 128` train runtime: `169 s`
 - the first full WSL2 + Unsloth 4B candidate is complete and clears the combined model gate
 - current full WSL gate result: `prompt_avg=1.000`, `prompt_fail_rows=0`, `prompt_latency_ms=2994.443`, `circulation=0.925`
 - current full WSL `50000 / 4000` train runtime: `6999 s`

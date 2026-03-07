@@ -2,7 +2,7 @@ from pathlib import Path
 from dataclasses import asdict
 from types import SimpleNamespace
 
-from run_qwen4b_baseline_train import _apply_hf_peft_overrides, _apply_unsloth_overrides
+from run_qwen4b_baseline_train import _apply_hf_peft_overrides, _apply_unsloth_overrides, _assert_training_dependencies
 
 from acidnet.training.teacher_prompts import TeacherConfig, dialogue_user_prompt, teacher_system_prompt
 from acidnet.training import (
@@ -514,6 +514,20 @@ def test_unsloth_overrides_are_applied() -> None:
     assert updated.num_train_epochs == 1
     assert updated.eval_steps == 128
     assert updated.save_steps == 256
+
+
+def test_unsloth_dependency_check_imports_unsloth_before_trl(monkeypatch) -> None:
+    imports: list[str] = []
+
+    def fake_import_module(name: str):
+        imports.append(name)
+        return object()
+
+    monkeypatch.setattr("run_qwen4b_baseline_train.importlib.import_module", fake_import_module)
+
+    _assert_training_dependencies("unsloth")
+
+    assert imports[:3] == ["datasets", "unsloth", "trl"]
 
 
 def test_dialogue_preference_examples_can_be_built_from_bootstrap_rows() -> None:

@@ -90,25 +90,24 @@ See:
 ## Smoke Fine-Tune Result
 
 A tiny HF/PEFT LoRA smoke run already completed successfully against the bootstrap dataset shape.
-A stronger runtime-dialogue smoke run also completed successfully on a `2048 train / 256 eval` subset of the regenerated full bootstrap dataset.
+A maintained runtime-dialogue smoke benchmark now runs against the standard `1024 train / 128 eval` bench split under `data/sft`.
 
 Artifacts:
 
 - `data/test_artifacts/train_bootstrap_smoke.jsonl`
 - `data/test_artifacts/eval_bootstrap_smoke.jsonl`
 - `data/test_artifacts/qwen3_5_4b_bootstrap_smoke_adapter/`
-- `data/test_artifacts/train_runtime_dialogue_smoke_2048.jsonl`
-- `data/test_artifacts/eval_runtime_dialogue_smoke_256.jsonl`
-- `data/test_artifacts/qwen3_5_4b_runtime_dialogue_smoke_adapter/`
+- `data/sft/bench_train_1024.jsonl`
+- `data/sft/bench_eval_128.jsonl`
+- `data/training/qwen3_5_4b_runtime_dialogue_unsloth_wsl_smoke_adapter/`
 
 Observed result:
 
-- training completed for 2 epochs
+- training completed successfully on the maintained bench split
 - adapter weights were written successfully
-- the adapter can be served through the local runtime server
-- the same adapter now runs directly through the in-process `local_peft` backend
-- the runtime-dialogue smoke adapter clears the combined model gate
-- current gate result: `prompt_avg=1.000`, `prompt_fail_rows=0`, `prompt_latency_ms=1672.6`, `circulation=0.925`
+- the latest standard WSL smoke benchmark on Python 3.12 reports `train_runtime=169 s`, `train_samples_per_second=6.06`, and `train_steps_per_second=0.379`
+- fast-path setup is active in WSL with `flash-linear-attention` and `causal-conv1d`
+- the runtime-dialogue smoke track has already shown a gate-clearing adapter with `prompt_avg=1.000`, `prompt_fail_rows=0`, `prompt_latency_ms=1672.6`, and `circulation=0.925`
 
 ## Local Adapter Runtime
 
@@ -116,7 +115,7 @@ Serve a fine-tuned adapter:
 
 ```bash
 python run_local_adapter_server.py ^
-  --adapter-path data/test_artifacts/qwen3_5_4b_bootstrap_smoke_adapter ^
+  --adapter-path data/training/qwen3_5_4b_runtime_dialogue_unsloth_wsl_smoke_adapter ^
   --base-model Qwen/Qwen3.5-4B ^
   --model-alias acidnet-qwen3.5-4b-smoke ^
   --port 8011
@@ -133,7 +132,7 @@ python run_prompt_only_baseline_eval.py ^
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File run_local_adapter_dev_loop.ps1 `
-  -AdapterPath data/test_artifacts/qwen3_5_4b_bootstrap_smoke_adapter `
+  -AdapterPath data/training/qwen3_5_4b_runtime_dialogue_unsloth_wsl_smoke_adapter `
   -ModelAlias acidnet-qwen3.5-4b-smoke `
   -TailLog
 ```
@@ -145,14 +144,14 @@ python run_acidnet.py ^
   --no-persist ^
   --dialogue-backend local_peft ^
   --dialogue-model Qwen/Qwen3.5-4B ^
-  --dialogue-adapter-path data/test_artifacts/qwen3_5_4b_runtime_dialogue_smoke_adapter
+  --dialogue-adapter-path data/training/qwen3_5_4b_runtime_dialogue_unsloth_wsl_smoke_adapter
 ```
 
 Or launch the web runtime against a locally served adapter:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File run_local_adapter_dev_loop.ps1 `
-  -AdapterPath data/training/qwen3_5_4b_runtime_dialogue_full_adapter `
+  -AdapterPath data/training/qwen3_5_4b_runtime_dialogue_unsloth_wsl_full_adapter `
   -ModelAlias acidnet-qwen3.5-4b-full `
   -TailLog
 ```

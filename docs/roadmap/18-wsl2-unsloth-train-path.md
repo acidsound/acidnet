@@ -32,7 +32,7 @@ Create the WSL-specific `uv` environment:
 powershell -ExecutionPolicy Bypass -File run_wsl_qwen_training.ps1 -Mode setup
 ```
 
-This creates `.venv-wsl` inside the project root with Python 3.11 and installs:
+This now creates `.venv-wsl` inside the project root with Python 3.12 by default and installs:
 
 - CUDA `torch`
 - `unsloth`
@@ -45,13 +45,22 @@ This creates `.venv-wsl` inside the project root with Python 3.11 and installs:
 - `causal-conv1d`
 - project training extras
 
+Use `-PythonVersion 3.11` only when you explicitly need to compare against the older known-good baseline or isolate a version-specific issue.
+
 ## Smoke Benchmark
 
-Run a small WSL Unsloth benchmark against the existing runtime-dialogue smoke dataset:
+Run the maintained WSL Unsloth benchmark against the standard runtime-dialogue bench split:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File run_wsl_qwen_training.ps1 -Mode smoke
 ```
+
+Default datasets:
+
+- `data/sft/bench_train_1024.jsonl`
+- `data/sft/bench_eval_128.jsonl`
+
+The launcher also accepts `ACIDNET_WSL_TRAIN_DATASET` and `ACIDNET_WSL_EVAL_DATASET` overrides when a specialized subset is needed.
 
 Artifacts:
 
@@ -75,20 +84,17 @@ Artifacts:
 
 ## Current Measured Result
 
-The WSL smoke path is now validated.
+The default WSL smoke path is now revalidated on Python 3.12.
 
-- adapter: `data/training/qwen3_5_4b_runtime_dialogue_unsloth_wsl_smoke_adapter`
-- gate report: `data/eval/model_gate_runtime_dialogue_unsloth_wsl_smoke_report.json`
-- gate result: `PASS`
-- prompt average score: `1.000`
-- prompt average latency: `2554.396 ms`
-- circulation score: `0.925`
-- starving NPCs: `0`
-
-Measured training improvement on the same `2048 / 256` smoke dataset:
-
-- earlier WSL smoke before fast-path installs: `train_runtime = 1204 s`
-- current WSL smoke after `flash-linear-attention` and `causal-conv1d`: `train_runtime = 335 s`
+- default setup probe in `.venv-wsl` reports `Python 3.12.10`, `unsloth 2026.3.3`, `fla 0.4.1`, and `causal_conv1d 1.6.0`
+- standard smoke artifacts:
+  - `data/logs/qwen3_5_4b_runtime_dialogue_unsloth_wsl_smoke.log`
+  - `data/training/qwen3_5_4b_runtime_dialogue_unsloth_wsl_smoke_adapter/`
+  - `data/training/qwen3_5_4b_runtime_dialogue_unsloth_wsl_smoke_run_spec.json`
+- current maintained `1024 / 128` bench smoke runtime: `train_runtime = 169 s`
+- current maintained `1024 / 128` bench smoke throughput: `train_samples_per_second = 6.06`, `train_steps_per_second = 0.379`
+- the standard smoke log shows `Fast Qwen3_5 patching` and `FA [Xformers = 0.0.35. FA2 = False]`
+- the launcher-side dependency check now imports `unsloth` before `trl`, so the earlier warning about reversed import order no longer appears during standard launches
 
 The first full WSL candidate is also complete.
 

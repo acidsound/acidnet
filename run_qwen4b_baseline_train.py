@@ -227,7 +227,7 @@ def _apply_unsloth_overrides(run_spec, args):
 
 def _assert_training_dependencies(backend: str, *, requires_4bit: bool = False) -> None:
     missing: list[str] = []
-    required_modules = ("datasets", "trl", "unsloth") if backend == "unsloth" else ("datasets", "peft", "transformers")
+    required_modules = ("datasets", "unsloth", "trl") if backend == "unsloth" else ("datasets", "peft", "transformers")
     if requires_4bit and backend == "hf_peft":
         required_modules = required_modules + ("bitsandbytes",)
     for module_name in required_modules:

@@ -10,25 +10,37 @@ export HF_HUB_CACHE="${HF_HUB_CACHE:-$HF_HOME/hub}"
 export TRANSFORMERS_CACHE="${TRANSFORMERS_CACHE:-$HF_HOME/transformers}"
 export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
 export TOKENIZERS_PARALLELISM=false
+ENV_DIR="${ACIDNET_WSL_ENV_DIR:-.venv-wsl}"
+RUN_NAME="qwen3_5_4b_runtime_dialogue_unsloth_wsl_full${ACIDNET_WSL_RUN_SUFFIX:-}"
+TRAIN_DATASET="${ACIDNET_WSL_TRAIN_DATASET:-data/sft/train_bootstrap_teacher_sft_dataset.jsonl}"
+EVAL_DATASET="${ACIDNET_WSL_EVAL_DATASET:-data/sft/eval_bootstrap_teacher_sft_dataset.jsonl}"
 
 cd "$ROOT"
 
-if [[ ! -x .venv-wsl/bin/python ]]; then
-  echo "Missing .venv-wsl. Run scripts/setup_wsl_uv_unsloth.sh first." >&2
+if [[ ! -x "$ENV_DIR/bin/python" ]]; then
+  echo "Missing $ENV_DIR. Run scripts/setup_wsl_uv_unsloth.sh first." >&2
+  exit 1
+fi
+if [[ ! -f "$TRAIN_DATASET" ]]; then
+  echo "Missing train dataset $TRAIN_DATASET." >&2
+  exit 1
+fi
+if [[ ! -f "$EVAL_DATASET" ]]; then
+  echo "Missing eval dataset $EVAL_DATASET." >&2
   exit 1
 fi
 
-mkdir -p data/logs
-LOG_PATH="data/logs/qwen3_5_4b_runtime_dialogue_unsloth_wsl_full.log"
+mkdir -p data/logs data/training
+LOG_PATH="data/logs/${RUN_NAME}.log"
 
 {
   echo "[$(date '+%F %T')] Starting WSL Unsloth full training..."
-  .venv-wsl/bin/python run_qwen4b_baseline_train.py \
-    --train-dataset data/sft/train_bootstrap_teacher_sft_dataset.jsonl \
-    --eval-dataset data/sft/eval_bootstrap_teacher_sft_dataset.jsonl \
-    --output-dir data/training/qwen3_5_4b_runtime_dialogue_unsloth_wsl_full_adapter \
-    --script-output data/training/train_qwen3_5_4b_runtime_dialogue_unsloth_wsl_full.py \
-    --spec-output data/training/qwen3_5_4b_runtime_dialogue_unsloth_wsl_full_run_spec.json \
+  "$ENV_DIR/bin/python" run_qwen4b_baseline_train.py \
+    --train-dataset "$TRAIN_DATASET" \
+    --eval-dataset "$EVAL_DATASET" \
+    --output-dir "data/training/${RUN_NAME}_adapter" \
+    --script-output "data/training/train_${RUN_NAME}.py" \
+    --spec-output "data/training/${RUN_NAME}_run_spec.json" \
     --trainer-backend unsloth \
     --epochs 1 \
     --eval-steps 1000 \

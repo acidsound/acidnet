@@ -90,25 +90,24 @@ python run_bootstrap_qwen4b_pipeline.py ^
 ## Smoke Fine-Tune 결과
 
 bootstrap dataset 형태를 대상으로 하는 작은 HF/PEFT LoRA smoke run은 이미 성공했다.
-재생성한 full bootstrap dataset에서 잘라낸 `2048 train / 256 eval` 기준의 runtime-dialogue smoke run도 성공했다.
+유지 중인 runtime-dialogue smoke benchmark는 이제 `data/sft` 아래의 표준 `1024 train / 128 eval` bench split을 기준으로 돈다.
 
 artifact:
 
 - `data/test_artifacts/train_bootstrap_smoke.jsonl`
 - `data/test_artifacts/eval_bootstrap_smoke.jsonl`
 - `data/test_artifacts/qwen3_5_4b_bootstrap_smoke_adapter/`
-- `data/test_artifacts/train_runtime_dialogue_smoke_2048.jsonl`
-- `data/test_artifacts/eval_runtime_dialogue_smoke_256.jsonl`
-- `data/test_artifacts/qwen3_5_4b_runtime_dialogue_smoke_adapter/`
+- `data/sft/bench_train_1024.jsonl`
+- `data/sft/bench_eval_128.jsonl`
+- `data/training/qwen3_5_4b_runtime_dialogue_unsloth_wsl_smoke_adapter/`
 
 확인된 사실:
 
-- 2 epoch 학습이 끝까지 완료됐다
+- 유지 중인 bench split 기준 학습이 정상 완료됐다
 - adapter weight가 정상적으로 기록됐다
-- 해당 adapter를 local runtime server 뒤에 붙여 서빙할 수 있다
-- 같은 adapter를 in-process `local_peft` backend로도 직접 실행할 수 있다
-- runtime-dialogue smoke adapter는 combined model gate를 통과했다
-- 현재 gate 결과: `prompt_avg=1.000`, `prompt_fail_rows=0`, `prompt_latency_ms=1672.6`, `circulation=0.925`
+- 최신 표준 WSL smoke benchmark는 Python 3.12 기준 `train_runtime=169 s`, `train_samples_per_second=6.06`, `train_steps_per_second=0.379` 이다
+- WSL fast-path 는 `flash-linear-attention`, `causal-conv1d`가 활성화된 상태다
+- runtime-dialogue smoke 트랙은 이미 `prompt_avg=1.000`, `prompt_fail_rows=0`, `prompt_latency_ms=1672.6`, `circulation=0.925` 수준의 gate-clearing adapter를 보여줬다
 
 ## Local Adapter Runtime
 
@@ -116,7 +115,7 @@ fine-tuned adapter 서빙:
 
 ```bash
 python run_local_adapter_server.py ^
-  --adapter-path data/test_artifacts/qwen3_5_4b_bootstrap_smoke_adapter ^
+  --adapter-path data/training/qwen3_5_4b_runtime_dialogue_unsloth_wsl_smoke_adapter ^
   --base-model Qwen/Qwen3.5-4B ^
   --model-alias acidnet-qwen3.5-4b-smoke ^
   --port 8011
@@ -133,7 +132,7 @@ python run_prompt_only_baseline_eval.py ^
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File run_local_adapter_dev_loop.ps1 `
-  -AdapterPath data/test_artifacts/qwen3_5_4b_bootstrap_smoke_adapter `
+  -AdapterPath data/training/qwen3_5_4b_runtime_dialogue_unsloth_wsl_smoke_adapter `
   -ModelAlias acidnet-qwen3.5-4b-smoke `
   -TailLog
 ```
@@ -145,14 +144,14 @@ python run_acidnet.py ^
   --no-persist ^
   --dialogue-backend local_peft ^
   --dialogue-model Qwen/Qwen3.5-4B ^
-  --dialogue-adapter-path data/test_artifacts/qwen3_5_4b_runtime_dialogue_smoke_adapter
+  --dialogue-adapter-path data/training/qwen3_5_4b_runtime_dialogue_unsloth_wsl_smoke_adapter
 ```
 
 또는 dev launcher 에 직접 local adapter 를 연결:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File run_local_adapter_dev_loop.ps1 `
-  -AdapterPath data/training/qwen3_5_4b_runtime_dialogue_full_adapter `
+  -AdapterPath data/training/qwen3_5_4b_runtime_dialogue_unsloth_wsl_full_adapter `
   -ModelAlias acidnet-qwen3.5-4b-full `
   -TailLog
 ```

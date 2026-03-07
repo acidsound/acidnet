@@ -34,7 +34,7 @@ WSL 전용 `uv` 환경을 만든다.
 powershell -ExecutionPolicy Bypass -File run_wsl_qwen_training.ps1 -Mode setup
 ```
 
-이 명령은 프로젝트 루트에 `.venv-wsl`을 만들고 Python 3.11과 다음 패키지를 설치한다.
+이 명령은 이제 기본적으로 프로젝트 루트에 Python 3.12 기반 `.venv-wsl`을 만들고 다음 패키지를 설치한다.
 
 - CUDA `torch`
 - `unsloth`
@@ -47,13 +47,22 @@ powershell -ExecutionPolicy Bypass -File run_wsl_qwen_training.ps1 -Mode setup
 - `causal-conv1d`
 - 프로젝트 학습 extra
 
+구버전과 비교하거나 버전별 문제를 격리해야 할 때만 `-PythonVersion 3.11`을 사용한다.
+
 ## Smoke Benchmark
 
-기존 runtime-dialogue smoke dataset으로 작은 WSL Unsloth benchmark를 돌린다.
+표준 runtime-dialogue bench split으로 유지 중인 WSL Unsloth benchmark를 돌린다.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File run_wsl_qwen_training.ps1 -Mode smoke
 ```
+
+기본 dataset:
+
+- `data/sft/bench_train_1024.jsonl`
+- `data/sft/bench_eval_128.jsonl`
+
+특수 subset이 필요하면 `ACIDNET_WSL_TRAIN_DATASET`, `ACIDNET_WSL_EVAL_DATASET` override를 사용할 수 있다.
 
 생성물:
 
@@ -77,20 +86,17 @@ powershell -ExecutionPolicy Bypass -File run_wsl_qwen_training.ps1 -Mode full
 
 ## 현재 측정 결과
 
-WSL smoke 경로는 이제 검증됐다.
+기본 WSL smoke 경로는 이제 Python 3.12 기준으로 다시 검증됐다.
 
-- adapter: `data/training/qwen3_5_4b_runtime_dialogue_unsloth_wsl_smoke_adapter`
-- gate report: `data/eval/model_gate_runtime_dialogue_unsloth_wsl_smoke_report.json`
-- gate 결과: `PASS`
-- prompt average score: `1.000`
-- prompt average latency: `2554.396 ms`
-- circulation score: `0.925`
-- starving NPCs: `0`
-
-같은 `2048 / 256` smoke dataset 기준 학습 시간 개선:
-
-- fast-path 설치 전 WSL smoke: `train_runtime = 1204 s`
-- `flash-linear-attention`, `causal-conv1d` 설치 후 WSL smoke: `train_runtime = 335 s`
+- 기본 `.venv-wsl` setup probe 결과는 `Python 3.12.10`, `unsloth 2026.3.3`, `fla 0.4.1`, `causal_conv1d 1.6.0` 이다
+- 표준 smoke artifact:
+  - `data/logs/qwen3_5_4b_runtime_dialogue_unsloth_wsl_smoke.log`
+  - `data/training/qwen3_5_4b_runtime_dialogue_unsloth_wsl_smoke_adapter/`
+  - `data/training/qwen3_5_4b_runtime_dialogue_unsloth_wsl_smoke_run_spec.json`
+- 현재 유지 중인 `1024 / 128` bench smoke 학습 시간: `train_runtime = 169 s`
+- 현재 유지 중인 `1024 / 128` bench smoke 처리량: `train_samples_per_second = 6.06`, `train_steps_per_second = 0.379`
+- 표준 smoke 로그에는 `Fast Qwen3_5 patching`, `FA [Xformers = 0.0.35. FA2 = False]` 가 확인된다
+- launcher-side dependency check도 이제 `unsloth`를 `trl`보다 먼저 import하므로, 표준 실행에서는 예전 import-order warning이 다시 나오지 않는다
 
 첫 full WSL candidate도 완료됐다.
 

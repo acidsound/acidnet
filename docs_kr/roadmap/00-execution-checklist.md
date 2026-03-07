@@ -93,9 +93,8 @@
 - 승격된 simulator runtime 경로는 `Q4_K_M` GGUF base model과 optional GGUF LoRA adapter를 `llama-server`로 서빙하고 `openai_compat`로 붙는 방식이다
 - 최신 runtime-dialogue smoke adapter가 combined model gate를 통과했다
 - 현재 gate 결과: `prompt_avg=1.000`, `prompt_fail_rows=0`, `prompt_latency_ms=1672.6`, `circulation=0.925`
-- WSL2 + Unsloth smoke 경로는 fast-path kernel 설치까지 포함해 검증됐다
-- 현재 WSL smoke gate 결과: `prompt_avg=1.000`, `prompt_fail_rows=0`, `prompt_latency_ms=2554.396`, `circulation=0.925`
-- 현재 WSL smoke `2048 / 256` benchmark 학습 시간: `335 s`
+- WSL2 + Unsloth 학습 경로는 기본 `.venv-wsl` 기준 Python 3.12에서 `flash-linear-attention`, `causal-conv1d`까지 포함해 다시 검증됐다
+- 현재 유지 중인 WSL bench smoke `1024 / 128` 학습 시간: `169 s`
 - 첫 full WSL2 + Unsloth 4B candidate가 완료됐고 combined model gate를 통과했다
 - 현재 full WSL gate 결과: `prompt_avg=1.000`, `prompt_fail_rows=0`, `prompt_latency_ms=2994.443`, `circulation=0.925`
 - 현재 full WSL `50000 / 4000` 학습 시간: `6999 s`
