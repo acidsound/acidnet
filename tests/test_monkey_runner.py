@@ -210,6 +210,8 @@ def test_downstream_observer_monkey_tracks_regional_stock_and_market_shift() -> 
     assert report.regional_stock_shift_after_transit is True
     assert report.market_pressure_after_stock_shift is True
     assert report.downstream_response_chain_complete is True
+    assert report.downstream_response_chain_lag_steps is not None
+    assert report.downstream_response_chain_lag_steps <= 4
     assert report.downstream_response_items
     assert set(report.downstream_response_items) == (
         set(report.observed_regional_stock_items) & set(report.observed_market_price_items)
@@ -221,6 +223,7 @@ def test_downstream_observer_monkey_tracks_regional_stock_and_market_shift() -> 
     assert "downstream_observer_missed_market_shift" not in report.failure_reasons
     assert "downstream_observer_missed_response_chain" not in report.failure_reasons
     assert "downstream_observer_missing_item_overlap" not in report.failure_reasons
+    assert "downstream_observer_slow_response_chain" not in report.failure_reasons
 
 
 def test_downstream_observer_failure_reason_flags_missing_response_chain() -> None:
@@ -254,3 +257,26 @@ def test_downstream_observer_failure_reason_flags_missing_item_overlap() -> None
     failures = runner._collect_failure_reasons([], Counter(), Counter({"regions": 1}))
 
     assert "downstream_observer_missing_item_overlap" in failures
+
+
+def test_downstream_observer_failure_reason_flags_slow_response_chain() -> None:
+    simulation = Simulation.create_demo()
+    runner = SimulationMonkeyRunner(simulation, seed=5, role="downstream_observer")
+    runner.observed_route_delay_ids.add("route.synthetic")
+    runner.route_delay_seen_for_downstream_chain = True
+    runner.downstream_route_delay_step = 0
+    runner.peak_regional_transits = 1
+    runner.transit_after_route_delay = True
+    runner.downstream_transit_step = 1
+    runner.regional_stock_shift_events = 1
+    runner.regional_stock_shift_after_transit = True
+    runner.downstream_regional_stock_step = 2
+    runner.market_price_shift_events = 1
+    runner.market_pressure_after_stock_shift = True
+    runner.downstream_market_pressure_step = 6
+    runner.observed_regional_stock_items.add("fish")
+    runner.observed_market_price_items.add("fish")
+
+    failures = runner._collect_failure_reasons([], Counter(), Counter({"regions": 1}))
+
+    assert "downstream_observer_slow_response_chain" in failures

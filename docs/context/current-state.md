@@ -75,7 +75,7 @@ If they compete for the next thin slice, this file decides.
 - summarized regional stock and route pressure now feed into the live market snapshot, so offscreen supply and delays can move local scarcity and prices instead of only changing summary nodes
 - `regional_observer` now fast-forwards long route completion during deterministic monkey runs and can clear actual cross-settlement observation inside short regression windows
 - `downstream_observer` now records summarized regional stock shifts together with downstream market-price reactions from the player side
-- `downstream_observer` scoring now distinguishes a coarse route-delay -> transit -> regional-stock -> market-pressure response chain and tracks item overlap instead of only counting independent downstream signals
+- `downstream_observer` scoring now distinguishes a coarse route-delay -> transit -> regional-stock -> market-pressure response chain, tracks item overlap, and rejects slow downstream responses that arrive only after the bounded observation window
 - the web player-view contract now exposes `scarcity_index` and `market_prices`, so browser-side observation can track market pressure without reading raw persistence
 - simulator-only split readiness now explicitly locks load-sensitive travel ETA/risk, deterministic monkey replay, and multi-save latest-snapshot persistence
 - headless CLI, eval, and simulator-only tests now import the rehome surface through `acidnet.simulator` instead of reaching directly into `engine` and `storage`

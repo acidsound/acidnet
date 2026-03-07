@@ -68,8 +68,8 @@
 - `exploit_observer`는 reserve-constrained vendor 노출과 buy-floor refusal을 player side에서 점검한다
 - `regional_observer`는 deterministic run에서 긴 regional travel을 빠르게 넘기고, mid-route에서 멈추지 않고 실제 cross-settlement observation을 검증한다
 - `downstream_observer`는 요약 regional stock shift와 downstream market-price reaction을 player side에서 함께 기록한다
-- `downstream_observer` scoring은 이제 분리된 downstream signal 나열만이 아니라 대략적인 route-delay -> transit -> regional-stock -> market-pressure response chain과 item overlap도 구분한다
-- 다음 작업은 현재 summarized response-chain과 item-overlap 체크를 넘어 richer downstream-economy scoring으로 가는 것이다
+- `downstream_observer` scoring은 이제 분리된 downstream signal 나열만이 아니라 대략적인 route-delay -> transit -> regional-stock -> market-pressure response chain, item overlap, bounded response latency도 구분한다
+- 다음 작업은 현재 summarized response-chain, item-overlap, latency 체크를 넘어 richer downstream-economy scoring으로 가는 것이다
 
 ### Phase 5: External Shocks and Recovery Loops
 
@@ -122,7 +122,7 @@ backend parity audit는 이제 immediate queue에서 내릴 만큼 닫혔다.
 
 열려 있지만 현재 thin-slice queue의 맨 앞은 아닌 것:
 
-- 현재 response-chain과 item-overlap 체크를 넘는 later `20E` downstream-economy monkey scoring 확장
+- 현재 response-chain, item-overlap, latency 체크를 넘는 later `20E` downstream-economy monkey scoring 확장
 - later `20H` summarized regional scaling 작업 계속
 
 ## 제거 작업

@@ -93,8 +93,8 @@ Current note:
   - observation roles now also include `shock_observer`, `hoarder`, `exploit_observer`, `regional_observer`, and `downstream_observer`
   - each step now records a goal label alongside the chosen command
   - rule-based scoring and actionable failure summaries now land in the monkey report
-  - `downstream_observer` now distinguishes a coarse route-delay -> transit -> stock-shift -> market-pressure response chain and item overlap instead of only counting separate downstream signals
-  - Remaining gap: richer downstream-economy scoring beyond the current summarized response-chain and item-overlap checks
+  - `downstream_observer` now distinguishes a coarse route-delay -> transit -> stock-shift -> market-pressure response chain, item overlap, and bounded downstream response latency instead of only counting separate downstream signals
+  - Remaining gap: richer downstream-economy scoring beyond the current summarized response-chain, item-overlap, and latency checks
 
 - [ ] Step 20F: Add the first controllable external shock.
   Exit criteria:

@@ -68,8 +68,8 @@ The current project baseline is:
 - `exploit_observer` now probes reserve-constrained vendor exposure and buy-floor refusals from the player side
 - `regional_observer` now fast-forwards long route completion during deterministic runs and verifies actual cross-settlement observation instead of stalling mid-route
 - `downstream_observer` now records summarized regional stock shifts together with downstream market-price reactions from the player side
-- `downstream_observer` scoring now also distinguishes a coarse route-delay -> transit -> regional-stock -> market-pressure response chain and item overlap instead of only counting separate downstream signals
-- next work is richer downstream-economy scoring beyond the current summarized response-chain and item-overlap checks
+- `downstream_observer` scoring now also distinguishes a coarse route-delay -> transit -> regional-stock -> market-pressure response chain, item overlap, and bounded response latency instead of only counting separate downstream signals
+- next work is richer downstream-economy scoring beyond the current summarized response-chain, item-overlap, and latency checks
 
 ### Phase 5: External Shocks and Recovery Loops
 
@@ -122,7 +122,7 @@ Keep parity locked through regression coverage when prompt shaping, output clean
 
 Open but not first in this thin-slice queue:
 
-- extend the later `20E` downstream-economy monkey scoring beyond the current response-chain and item-overlap checks
+- extend the later `20E` downstream-economy monkey scoring beyond the current response-chain, item-overlap, and latency checks
 - continue the later `20H` summarized regional scaling work
 
 ## Removal Work

@@ -9,6 +9,8 @@ from pathlib import Path
 from acidnet.simulator import Simulation
 from acidnet.simulator.runtime import CONSUMPTION_VALUE, FOOD_ITEMS, TradeOption, TurnEvent
 
+DOWNSTREAM_RESPONSE_CHAIN_MAX_LAG_STEPS = 4
+
 
 @dataclass(slots=True)
 class MonkeyStep:
@@ -46,6 +48,11 @@ class MonkeyReport:
     peak_market_scarcity: float
     observed_market_price_items: list[str]
     market_price_shift_events: int
+    downstream_route_delay_step: int | None
+    downstream_transit_step: int | None
+    downstream_regional_stock_step: int | None
+    downstream_market_pressure_step: int | None
+    downstream_response_chain_lag_steps: int | None
     transit_after_route_delay: bool
     regional_stock_shift_after_transit: bool
     market_pressure_after_stock_shift: bool
@@ -101,9 +108,13 @@ class SimulationMonkeyRunner:
         self.initial_market_prices = dict(self.last_market_prices)
         self.initial_market_scarcity = simulation.world.market.scarcity_index
         self.route_delay_seen_for_downstream_chain = bool(self.observed_route_delay_ids)
+        self.downstream_route_delay_step: int | None = 0 if self.route_delay_seen_for_downstream_chain else None
         self.transit_after_route_delay = self.route_delay_seen_for_downstream_chain and self.peak_regional_transits > 0
+        self.downstream_transit_step: int | None = 0 if self.transit_after_route_delay else None
         self.regional_stock_shift_after_transit = False
+        self.downstream_regional_stock_step: int | None = None
         self.market_pressure_after_stock_shift = False
+        self.downstream_market_pressure_step: int | None = None
         self.observed_constrained_vendor_ids: set[str] = set()
         self.observed_exchange_refusal_types: set[str] = set()
         self.reserve_refusal_events = 0
@@ -112,6 +123,7 @@ class SimulationMonkeyRunner:
         self._record_visible_exchange_constraints()
 
     def run_one_step(self) -> MonkeyStep:
+        current_step_index = self.step_index
         goal, command = self.choose_action()
         targeted_npc_id = self._targeted_npc_id(command)
         targeted_trade_npc_id = self._targeted_trade_npc_id(command)
@@ -144,6 +156,7 @@ class SimulationMonkeyRunner:
         regional_stock_shifts = self._record_regional_stock_shifts()
         self._record_market_price_shifts()
         self._record_downstream_response_chain(
+            step_index=current_step_index,
             route_delay_visible=route_delay_visible,
             transit_visible=bool(self.simulation.world.regional_transits),
             regional_stock_shifts=regional_stock_shifts,
@@ -192,6 +205,11 @@ class SimulationMonkeyRunner:
             peak_market_scarcity=round(self.peak_market_scarcity, 3),
             observed_market_price_items=sorted(self.observed_market_price_items),
             market_price_shift_events=self.market_price_shift_events,
+            downstream_route_delay_step=self.downstream_route_delay_step,
+            downstream_transit_step=self.downstream_transit_step,
+            downstream_regional_stock_step=self.downstream_regional_stock_step,
+            downstream_market_pressure_step=self.downstream_market_pressure_step,
+            downstream_response_chain_lag_steps=self.downstream_response_chain_lag_steps,
             transit_after_route_delay=self.transit_after_route_delay,
             regional_stock_shift_after_transit=self.regional_stock_shift_after_transit,
             market_pressure_after_stock_shift=self.market_pressure_after_stock_shift,
@@ -664,21 +682,36 @@ class SimulationMonkeyRunner:
     def downstream_response_items(self) -> list[str]:
         return sorted(self.observed_regional_stock_items & self.observed_market_price_items)
 
+    @property
+    def downstream_response_chain_lag_steps(self) -> int | None:
+        if self.downstream_route_delay_step is None or self.downstream_market_pressure_step is None:
+            return None
+        return self.downstream_market_pressure_step - self.downstream_route_delay_step
+
     def _record_downstream_response_chain(
         self,
         *,
+        step_index: int,
         route_delay_visible: bool,
         transit_visible: bool,
         regional_stock_shifts: int,
     ) -> None:
         if route_delay_visible:
             self.route_delay_seen_for_downstream_chain = True
+            if self.downstream_route_delay_step is None:
+                self.downstream_route_delay_step = step_index
         if transit_visible and self.route_delay_seen_for_downstream_chain:
             self.transit_after_route_delay = True
+            if self.downstream_transit_step is None:
+                self.downstream_transit_step = step_index
         if regional_stock_shifts > 0 and self.transit_after_route_delay:
             self.regional_stock_shift_after_transit = True
+            if self.downstream_regional_stock_step is None:
+                self.downstream_regional_stock_step = step_index
         if self.regional_stock_shift_after_transit and self._market_pressure_differs_from_baseline():
             self.market_pressure_after_stock_shift = True
+            if self.downstream_market_pressure_step is None:
+                self.downstream_market_pressure_step = step_index
 
     def _market_pressure_differs_from_baseline(self) -> bool:
         if self.simulation.world.market.scarcity_index > self.initial_market_scarcity:
@@ -808,6 +841,12 @@ class SimulationMonkeyRunner:
                 and not self.downstream_response_items
             ):
                 failures.append("downstream_observer_missing_item_overlap")
+            if (
+                not failures
+                and self.downstream_response_chain_lag_steps is not None
+                and self.downstream_response_chain_lag_steps > DOWNSTREAM_RESPONSE_CHAIN_MAX_LAG_STEPS
+            ):
+                failures.append("downstream_observer_slow_response_chain")
         elif self.role == "altruist":
             if self._exchange_count(history, {"give"}) == 0:
                 failures.append("altruist_never_shared_resources")
@@ -853,6 +892,7 @@ class SimulationMonkeyRunner:
             "downstream_observer_missed_market_shift": 0.2,
             "downstream_observer_missed_response_chain": 0.18,
             "downstream_observer_missing_item_overlap": 0.14,
+            "downstream_observer_slow_response_chain": 0.12,
             "altruist_never_shared_resources": 0.28,
             "altruist_overextended_self": 0.2,
             "trader_never_completed_cash_exchange": 0.28,
