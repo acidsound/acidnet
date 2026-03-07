@@ -1,6 +1,6 @@
-"""Structured domain models used across the simulation."""
+"""Structured models exposed through the headless simulator boundary."""
 
-from acidnet.simulator.models import (
+from acidnet.simulator.core import (
     Belief,
     EpisodicMemory,
     GoalScore,

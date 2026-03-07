@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from acidnet.storage import EventLogFile
+from acidnet.simulator import EventLogFile
 
 
 def test_event_log_file_writes_plain_text_lines() -> None:

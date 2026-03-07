@@ -1,6 +1,6 @@
 from pydantic import ValidationError
 
-from acidnet.models import (
+from acidnet.simulator.models import (
     Intent,
     IntentType,
     Location,

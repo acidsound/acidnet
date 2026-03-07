@@ -4,7 +4,7 @@ from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from acidnet.models import Belief, EpisodicMemory, Location, NPCState, PersonaProfile, PlayerState, Rumor, WorldState
+from acidnet.simulator.models import Belief, EpisodicMemory, Location, NPCState, PersonaProfile, PlayerState, Rumor, WorldState
 
 
 class DialogueContext(BaseModel):

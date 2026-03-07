@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from acidnet.models import Intent, IntentType
+from acidnet.simulator.models import Intent, IntentType
 from acidnet.planner.protocols import Planner, PlannerContext, PlannerResult
 
 

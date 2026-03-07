@@ -1,4 +1,4 @@
-"""Compatibility shim for demo world fixtures."""
+"""Fixture exports for the headless simulator boundary."""
 
 from acidnet.simulator.demo import DemoSetup, build_demo_setup
 

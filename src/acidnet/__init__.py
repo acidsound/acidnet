@@ -1,3 +1,3 @@
 """Core package for the acidnet NPC simulation."""
 
-__all__ = ["models"]
+__all__ = ["models", "simulator"]

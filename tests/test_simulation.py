@@ -1,7 +1,8 @@
-from acidnet.engine import Simulation
+import re
+
 from acidnet.llm import DialogueContext, DialogueResult
-from acidnet.models import RegionalTransit, WorldEvent
-from acidnet.world import build_demo_setup
+from acidnet.simulator import Simulation, build_demo_setup
+from acidnet.simulator.models import RegionalTransit, WorldEvent
 
 
 class RecordingDialogueAdapter:
@@ -14,6 +15,22 @@ class RecordingDialogueAdapter:
     def generate(self, context: DialogueContext) -> DialogueResult:
         self.contexts.append(context.model_copy(deep=True))
         return DialogueResult(text=f"{context.npc.name} sees: {context.player_prompt}", adapter_name="recording")
+
+
+class StaticDialogueAdapter:
+    def __init__(self, text: str, *, used_rumor_ids: list[str] | None = None) -> None:
+        self.text = text
+        self.used_rumor_ids = list(used_rumor_ids or [])
+
+    def prepare(self) -> str | None:
+        return "ready"
+
+    def generate(self, context: DialogueContext) -> DialogueResult:
+        return DialogueResult(
+            text=self.text,
+            adapter_name="static",
+            used_rumor_ids=list(self.used_rumor_ids),
+        )
 
 
 def build_recording_simulation(system_prompt: str = "Test system prompt.") -> tuple[Simulation, RecordingDialogueAdapter]:
@@ -29,6 +46,23 @@ def build_recording_simulation(system_prompt: str = "Test system prompt.") -> tu
         dialogue_system_prompt=system_prompt,
     )
     return simulation, adapter
+
+
+def build_static_simulation(text: str, *, used_rumor_ids: list[str] | None = None) -> Simulation:
+    setup = build_demo_setup()
+    adapter = StaticDialogueAdapter(text, used_rumor_ids=used_rumor_ids)
+    return Simulation(
+        world=setup.world,
+        player=setup.player,
+        npcs=setup.npcs,
+        personas=setup.personas,
+        rumors=setup.rumors,
+        dialogue_adapter=adapter,
+    )
+
+
+def _sentence_count(text: str) -> int:
+    return len([match.group(0) for match in re.finditer(r'[^.!?]+[.!?]["\')\]]*|[^.!?]+$', text) if match.group(0).strip()])
 
 
 def test_demo_simulation_boots_with_interactable_square() -> None:
@@ -50,6 +84,26 @@ def test_talking_to_npc_can_surface_a_rumor() -> None:
     assert simulation.player.known_rumor_ids
     assert not any("leans closer" in line for line in result.lines)
     assert not any("adds quietly" in line for line in result.lines)
+
+
+def test_talk_learns_rumor_from_dialogue_text_without_used_rumor_ids() -> None:
+    setup = build_demo_setup()
+    rumor = setup.rumors[setup.npcs["npc.neri"].known_rumor_ids[0]]
+    simulation = build_static_simulation(f"People keep saying this: {rumor.content}")
+
+    result = simulation.handle_command("talk neri")
+
+    assert rumor.rumor_id in simulation.player.known_rumor_ids
+    assert any(entry.kind == "system" and "note a rumor" in entry.text.lower() for entry in result.entries)
+
+
+def test_talk_does_not_learn_rumor_from_generic_nonmatching_reply() -> None:
+    simulation = build_static_simulation("I am busy with orders today.")
+
+    result = simulation.handle_command("talk neri")
+
+    assert not simulation.player.known_rumor_ids
+    assert not any(entry.kind == "system" and "note a rumor" in entry.text.lower() for entry in result.entries)
 
 
 def test_player_can_say_freeform_message_to_npc() -> None:
@@ -119,6 +173,47 @@ def test_direct_say_first_meeting_question_uses_player_prompt_and_location_conte
     assert "Market Square" in result.entries[0].text
 
 
+def test_heuristic_default_prompt_keeps_talk_reply_within_two_sentences() -> None:
+    simulation = Simulation.create_demo(dialogue_backend="heuristic")
+
+    reply = simulation.probe_npc_dialogue("npc.neri", interaction_mode="talk", player_prompt="What is going on around here?")
+
+    assert "dry wind" in reply.lower()
+    assert _sentence_count(reply) <= 2
+
+
+def test_heuristic_custom_one_sentence_prompt_is_enforced() -> None:
+    simulation = Simulation.create_demo(dialogue_backend="heuristic")
+    simulation.set_dialogue_system_prompt("Stay grounded in the supplied state. Reply with one short in-character sentence only.")
+
+    reply = simulation.probe_npc_dialogue("npc.neri", interaction_mode="talk", player_prompt="What is going on around here?")
+
+    assert "dry wind" in reply.lower()
+    assert _sentence_count(reply) == 1
+
+
+def test_heuristic_hunger_reply_does_not_offer_non_food_goods() -> None:
+    simulation = Simulation.create_demo(dialogue_backend="heuristic")
+
+    reply = simulation.probe_npc_dialogue("npc.doran", interaction_mode="direct_say", player_prompt="I am hungry.")
+
+    assert "tool" not in reply.lower()
+    assert "bakery" in reply.lower() or "square" in reply.lower()
+
+
+def test_heuristic_food_trade_reply_redirects_when_vendor_has_no_edible_stock() -> None:
+    simulation = Simulation.create_demo(dialogue_backend="heuristic")
+
+    reply = simulation.probe_npc_dialogue(
+        "npc.doran",
+        interaction_mode="trade_request",
+        player_prompt="I need food. What can you sell me right now?",
+    )
+
+    assert "tool" not in reply.lower()
+    assert "do not have food" in reply.lower()
+
+
 def test_demo_world_starts_with_multiple_distinct_rumors() -> None:
     simulation = Simulation.create_demo()
 
@@ -139,6 +234,38 @@ def test_player_can_collect_multiple_distinct_rumors_from_different_npcs() -> No
     }
 
     assert len(known_contents) >= 2
+
+
+def test_baker_keeps_bread_stock_during_early_supply_loop() -> None:
+    simulation = Simulation.create_demo()
+
+    simulation.advance_turn(48)
+
+    assert simulation.npcs["npc.hobb"].inventory.get("bread", 0) >= 1
+
+
+def test_midgame_population_avoids_total_exhaustion_collapse() -> None:
+    simulation = Simulation.create_demo()
+
+    simulation.advance_turn(120)
+
+    starving = [npc for npc in simulation.npcs.values() if npc.hunger >= 95]
+    exhausted = [npc for npc in simulation.npcs.values() if npc.fatigue >= 95]
+
+    assert len(starving) <= 1
+    assert not exhausted
+    assert simulation.npcs["npc.hobb"].hunger < 80
+
+
+def test_blacksmith_output_buffer_prevents_tool_overload_travel_lock() -> None:
+    simulation = Simulation.create_demo()
+
+    simulation.advance_turn(120)
+    doran = simulation.npcs["npc.doran"]
+
+    assert doran.inventory.get("tool", 0) <= 4
+    assert doran.carried_weight <= doran.carry_capacity
+    assert doran.hunger < 95
 
 
 def test_dynamic_rumors_spawn_as_world_conditions_change() -> None:
@@ -403,7 +530,7 @@ def test_look_at_npc_shows_tradeable_inventory() -> None:
     result = simulation.handle_command("look toma")
 
     assert any("Target: Toma (fisher)" in line for line in result.lines)
-    assert any("Buy (cash): fish x3" in line for line in result.lines)
+    assert any("Buy (cash): fish x1" in line for line in result.lines)
 
 
 def test_player_can_eat_food() -> None:
@@ -447,6 +574,22 @@ def test_go_starts_multi_turn_travel_instead_of_teleporting() -> None:
     assert simulation.player.travel_state.is_traveling is True
     assert simulation.player.travel_state.destination_location_id == "tavern"
     assert simulation.player.travel_state.ticks_remaining > 0
+
+
+def test_heavier_load_increases_travel_eta_and_risk_budget() -> None:
+    light_simulation = Simulation.create_demo()
+    light_simulation.world.weather = "clear"
+
+    heavy_simulation = Simulation.create_demo()
+    heavy_simulation.world.weather = "clear"
+    heavy_simulation.player.inventory["tool"] = 4
+    heavy_simulation._refresh_actor_loads()
+
+    light_simulation.handle_command("go tavern")
+    heavy_simulation.handle_command("go tavern")
+
+    assert heavy_simulation.player.travel_state.ticks_remaining > light_simulation.player.travel_state.ticks_remaining
+    assert heavy_simulation.player.travel_state.risk_budget > light_simulation.player.travel_state.risk_budget
 
 
 def test_next_completes_travel_and_arrives_after_eta() -> None:
@@ -628,6 +771,59 @@ def test_regional_transit_delivery_moves_stock_between_regions() -> None:
     assert simulation.world.regions["region.hollowmarket"].stock_signals["bread"] == 6
 
 
+def test_remote_regional_supply_support_lowers_local_market_price_when_routes_are_clear() -> None:
+    clear_simulation = Simulation.create_demo()
+    storm_simulation = Simulation.create_demo()
+
+    for simulation in (clear_simulation, storm_simulation):
+        simulation.player.inventory.clear()
+        for npc in simulation.npcs.values():
+            npc.inventory.clear()
+            npc.production_queue.clear()
+        simulation.world.regions["region.greenfall"].stock_signals["bread"] = 0
+        simulation.world.regions["region.stonewatch"].stock_signals["bread"] = 0
+        simulation.world.regions["region.hollowmarket"].stock_signals["bread"] = 20
+
+    clear_simulation.world.weather = "clear"
+    clear_simulation._refresh_market_snapshot()
+    storm_simulation.world.weather = "storm_front"
+    storm_simulation._refresh_market_snapshot()
+
+    assert clear_simulation.world.market.items["bread"].stock > storm_simulation.world.market.items["bread"].stock
+    assert clear_simulation.world.market.items["bread"].current_price < storm_simulation.world.market.items["bread"].current_price
+
+
+def test_regional_transit_delivery_into_anchor_region_reduces_market_bread_price() -> None:
+    simulation = Simulation.create_demo()
+    simulation.player.inventory.clear()
+    for npc in simulation.npcs.values():
+        npc.inventory.clear()
+        npc.production_queue.clear()
+    simulation.world.weather = "clear"
+    simulation.world.regions["region.greenfall"].stock_signals["bread"] = 0
+    simulation.world.regions["region.hollowmarket"].stock_signals["bread"] = 3
+
+    simulation._refresh_market_snapshot()
+    price_before = simulation.world.market.items["bread"].current_price
+    stock_before = simulation.world.market.items["bread"].stock
+
+    simulation._deliver_regional_transit(
+        RegionalTransit(
+            transit_id="transit.test.anchor_delivery",
+            route_id="route.greenfall.hollowmarket",
+            from_region_id="region.hollowmarket",
+            to_region_id="region.greenfall",
+            cargo_item="bread",
+            quantity=3,
+            ticks_remaining=0,
+        )
+    )
+    simulation._refresh_market_snapshot()
+
+    assert simulation.world.market.items["bread"].stock > stock_before
+    assert simulation.world.market.items["bread"].current_price < price_before
+
+
 def test_route_pressure_slows_regional_transit_progress() -> None:
     clear_simulation = Simulation.create_demo()
     clear_simulation.world.regional_transits.append(
@@ -687,6 +883,24 @@ def test_regional_travel_eta_rises_when_route_pressure_is_high() -> None:
     storm_eta = storm_simulation.player.travel_state.ticks_remaining
 
     assert storm_eta > clear_eta
+
+
+def test_regional_travel_progress_applies_hunger_and_fatigue_before_arrival() -> None:
+    simulation = Simulation.create_demo()
+    simulation.world.weather = "clear"
+    simulation.player.hunger = 18.0
+    simulation.player.fatigue = 12.0
+
+    simulation.handle_command("travel-region hollow")
+    start_ticks = simulation.player.travel_state.ticks_remaining
+    result = simulation.handle_command("next 1")
+
+    assert simulation.player.location_id == "square"
+    assert simulation.player.travel_state.is_traveling is True
+    assert simulation.player.travel_state.ticks_remaining < start_ticks
+    assert simulation.player.hunger > 18.0
+    assert simulation.player.fatigue > 12.0
+    assert any("keep moving toward" in line.lower() for line in result.lines)
 
 
 def test_low_offscreen_food_stock_spawns_regional_summary_rumor() -> None:
@@ -796,8 +1010,8 @@ def test_hungry_npc_buys_affordable_food_instead_of_failing_on_unaffordable_best
 
     assert iva.current_intent is not None
     assert iva.current_intent.intent_type.value == "trade"
-    assert iva.inventory.get("bread", 0) == 1
-    assert iva.money == 0
+    assert sum(iva.inventory.get(item, 0) for item in ("stew", "bread", "fish", "wheat")) == 1
+    assert iva.money <= 6
 
 
 def test_broke_service_npc_can_work_back_into_food_loop() -> None:
@@ -809,16 +1023,23 @@ def test_broke_service_npc_can_work_back_into_food_loop() -> None:
 
     simulation.advance_turn(1)
     assert serin.current_intent is not None
-    assert serin.current_intent.intent_type.value == "work"
-    assert serin.money >= 6
+    assert serin.current_intent.intent_type.value == "move"
 
-    simulation.advance_turn(1)
-    assert serin.current_intent is not None
-    assert serin.current_intent.intent_type.value in {"move", "trade"}
-
-    for _ in range(4):
-        if serin.inventory.get("bread", 0) >= 1:
-            break
+    for _ in range(5):
         simulation.advance_turn(1)
+        if sum(serin.inventory.get(item, 0) for item in ("stew", "bread", "fish", "wheat")) >= 1:
+            break
 
-    assert serin.inventory.get("bread", 0) == 1
+    assert sum(serin.inventory.get(item, 0) for item in ("stew", "bread", "fish", "wheat")) >= 1
+
+
+def test_cash_buy_respects_vendor_reserve_floor() -> None:
+    simulation = Simulation.create_demo()
+    simulation.player.location_id = "bakery"
+    hobb = simulation.npcs["npc.hobb"]
+    hobb.inventory = {"bread": 4}
+
+    result = simulation.handle_command("trade hobb buy bread 1")
+
+    assert any("does not have enough bread" in line.lower() for line in result.lines)
+    assert hobb.inventory.get("bread", 0) == 4

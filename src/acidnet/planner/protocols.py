@@ -4,7 +4,7 @@ from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from acidnet.models.core import Belief, Intent, NPCState, PersonaProfile, Rumor
+from acidnet.simulator.models import Belief, Intent, NPCState, PersonaProfile, Rumor
 
 
 class PlannerContext(BaseModel):
@@ -30,4 +30,3 @@ class PlannerResult(BaseModel):
 class Planner(Protocol):
     def plan(self, context: PlannerContext) -> PlannerResult:
         """Return the next high-level intent for an NPC."""
-
