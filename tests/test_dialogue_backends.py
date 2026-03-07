@@ -5,6 +5,7 @@ from acidnet.eval.model_gate import run_model_gate
 from acidnet.eval.prompt_only import PromptOnlyEvalRow
 from acidnet.llm import DialogueContext, DialogueResult, FallbackDialogueAdapter
 from acidnet.llm.openai_compat import OpenAICompatDialogueAdapter
+from acidnet.llm.prompt_builder import sanitize_dialogue_text
 from acidnet.llm.rule_based import RuleBasedDialogueAdapter
 from acidnet.simulator import build_demo_setup
 
@@ -59,6 +60,16 @@ def test_openai_compat_generate_sanitizes_hidden_reasoning_and_sentence_limit(mo
     result = adapter.generate(_build_dialogue_context("Stay grounded. Reply with one short in-character sentence only."))
 
     assert result.text == "Bread is still on my shelf."
+
+
+def test_sanitize_dialogue_text_unwraps_code_fenced_json_payload() -> None:
+    cleaned = sanitize_dialogue_text(
+        """```json
+{"response":"assistant: Thinking Process: answer directly.\\n\\nI keep close to Market Square. The square hears everything."}
+```"""
+    )
+
+    assert cleaned == "I keep close to Market Square. The square hears everything."
 
 
 def test_fallback_dialogue_adapter_forwards_temperature_to_primary() -> None:

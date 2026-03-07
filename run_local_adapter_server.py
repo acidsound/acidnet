@@ -24,6 +24,7 @@ ensure_windows_shims_on_path()
 import torch
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from acidnet.llm.prompt_builder import sanitize_dialogue_text
 
 
 @dataclass(slots=True)
@@ -248,16 +249,7 @@ def _generate_text(
 
 
 def _sanitize_generated_text(text: str) -> str:
-    cleaned = text.strip()
-    if "<think>" in cleaned and "</think>" in cleaned:
-        _, cleaned = cleaned.split("</think>", 1)
-        cleaned = cleaned.strip()
-    if cleaned.lower().startswith("thinking process:"):
-        parts = cleaned.split("\n\n")
-        cleaned = parts[-1].strip() if parts else ""
-    if cleaned.startswith("1.") and "\n\n" in cleaned:
-        cleaned = cleaned.split("\n\n")[-1].strip()
-    return cleaned
+    return sanitize_dialogue_text(text)
 
 
 if __name__ == "__main__":

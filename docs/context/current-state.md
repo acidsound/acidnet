@@ -65,6 +65,7 @@ If they compete for the next thin slice, this file decides.
 - HTTP `/api/command` was rechecked in-process with the hungerfix adapter: Hobb answers origin and rumor requests correctly and Doran now redirects hunger cleanly instead of inventing edible stock
 - bootstrap teacher trade guidance now handles food-buy requests to no-food vendors by refusing plainly and redirecting instead of naming unrelated stock
 - shared dialogue output cleanup and sentence-limit enforcement now run through one post-processing path across `heuristic`, `openai_compat`, and `local_peft`
+- shared dialogue cleanup now also unwraps common code-fenced or JSON-wrapped replies before sentence limiting, reducing backend-specific formatting drift from runtime and eval servers
 - prompt-only evaluation now reaches wrapped `openai_compat` and `local_peft` adapters with `temperature=0.0`, and model-gate fallback accounting now treats `local_peft` the same way as `openai_compat`
 - player rumor notes can now be inferred from dialogue text during ordinary `talk` turns when a backend mentions a known rumor without populating `used_rumor_ids`
 - goal monkeys now include an `exploit_observer` role that reaches the bakery, verifies reserve-constrained vendor exposure, and probes buy-floor guardrails from the player side

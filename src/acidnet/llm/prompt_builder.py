@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from typing import Any
 
@@ -84,7 +85,7 @@ def build_system_prompt(context: DialogueContext | None = None) -> str:
 
 
 def finalize_dialogue_text(text: str, context: DialogueContext) -> str:
-    cleaned = _strip_hidden_reasoning(text)
+    cleaned = sanitize_dialogue_text(text)
     cleaned = " ".join(cleaned.split()).strip()
     sentence_limit = _sentence_limit(context)
     if not cleaned or sentence_limit is None or sentence_limit <= 0:
@@ -276,6 +277,65 @@ def _strip_hidden_reasoning(text: str) -> str:
     if cleaned.startswith("1.") and "\n\n" in cleaned:
         cleaned = cleaned.split("\n\n")[-1].strip()
     return cleaned
+
+
+def sanitize_dialogue_text(text: str) -> str:
+    cleaned = str(text or "").strip()
+    if not cleaned:
+        return ""
+    for _ in range(3):
+        previous = cleaned
+        cleaned = _strip_code_fence(cleaned)
+        cleaned = _unwrap_text_payload(cleaned)
+        cleaned = _strip_hidden_reasoning(cleaned)
+        cleaned = _strip_outer_quotes(cleaned).strip()
+        if cleaned == previous:
+            break
+    return cleaned
+
+
+def _strip_code_fence(text: str) -> str:
+    match = re.fullmatch(r"```(?:[a-zA-Z0-9_-]+)?\s*(.*?)\s*```", text, flags=re.DOTALL)
+    if match is None:
+        return text
+    return match.group(1).strip()
+
+
+def _unwrap_text_payload(text: str) -> str:
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return text
+    extracted = _extract_text_payload(payload)
+    if extracted is None:
+        return text
+    return extracted.strip()
+
+
+def _extract_text_payload(payload: Any, *, depth: int = 0) -> str | None:
+    if depth > 4:
+        return None
+    if isinstance(payload, str):
+        return payload
+    if isinstance(payload, list):
+        if len(payload) != 1:
+            return None
+        return _extract_text_payload(payload[0], depth=depth + 1)
+    if not isinstance(payload, dict):
+        return None
+    for key in ("response", "text", "content", "message", "reply", "answer", "output", "choices"):
+        if key not in payload:
+            continue
+        extracted = _extract_text_payload(payload[key], depth=depth + 1)
+        if extracted is not None:
+            return extracted
+    return None
+
+
+def _strip_outer_quotes(text: str) -> str:
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in {"'", '"'}:
+        return text[1:-1].strip()
+    return text
 
 
 def _sentence_limit(context: DialogueContext) -> int | None:

@@ -42,8 +42,10 @@ def test_openai_compat_generate_sanitizes_hidden_reasoning_and_sentence_limit(mo
                     {
                         "message": {
                             "content": (
-                                "assistant: Thinking Process: answer the origin question directly.\n\n"
-                                "I keep close to Market Square. The square hears everything."
+                                "```json\n"
+                                '{"response":"assistant: Thinking Process: answer the origin question directly.\\n\\n'
+                                'I keep close to Market Square. The square hears everything."}\n'
+                                "```"
                             )
                         }
                     }

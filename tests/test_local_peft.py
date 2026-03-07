@@ -125,7 +125,12 @@ def test_local_peft_generate_sanitizes_hidden_reasoning_and_sentence_limit(monke
             }
 
         def decode(self, tokens, skip_special_tokens: bool) -> str:  # noqa: ANN001
-            return "assistant: <think>check stock</think>\n\nI can spare bread if we settle the exchange. Do not wait too long."
+            return (
+                "```json\n"
+                '{"response":"assistant: <think>check stock</think>\\n\\n'
+                'I can spare bread if we settle the exchange. Do not wait too long."}\n'
+                "```"
+            )
 
     class FakeModel:
         device = "cpu"
