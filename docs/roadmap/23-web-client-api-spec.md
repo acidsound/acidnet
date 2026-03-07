@@ -20,7 +20,8 @@ Anyone implementing a new client should be able to read this file and build a co
 The current implementation lives in:
 
 - `src/acidnet/frontend/web_app.py`
-- `src/acidnet/frontend/web/index.html`
+- `docs/context/frontend-api-handoff.md`
+- `src/acidnet/frontend/client/index.html`
 - `tests/test_web_frontend.py`
 
 The browser should treat `src/acidnet/frontend/web_app.py` as the canonical HTTP surface.
@@ -55,11 +56,27 @@ Response shape:
   "world": {
     "day": 1,
     "tick": 0,
-    "weather": "dry_wind",
+    "weather": "storm_front",
     "field_stress": 0.18,
+    "scarcity_index": 0.4,
+    "market_prices": {
+      "bread": 5,
+      "fish": 4,
+      "stew": 7,
+      "tool": 15,
+      "wheat": 2
+    },
     "location_id": "square",
     "location_name": "Market Square",
-    "active_events": []
+    "region_id": "region.greenfall",
+    "region_name": "Greenfall Village",
+    "active_events": [
+      {
+        "event_id": "event.route.route.greenfall.hollowmarket.delay",
+        "event_type": "route_delay",
+        "summary": "The road toward Hollow Market is slowing under the storm front, and caravans are arriving late."
+      }
+    ]
   },
   "player": {
     "name": "Jaeho",
@@ -87,6 +104,8 @@ Response shape:
       {"label": "Look", "command": "look"},
       {"label": "Work", "command": "work"},
       {"label": "Meal", "command": "meal", "enabled": true, "item": "bread"},
+      {"label": "Rest", "command": "rest 1"},
+      {"label": "Sleep", "command": "sleep 3"},
       {"label": "Next", "command": "next 1"}
     ],
     "consume": [
@@ -102,7 +121,10 @@ Response shape:
     "description": "You are at Market Square [market].\nExits: ...",
     "people": [],
     "rumors": [],
-    "map_nodes": []
+    "map_nodes": [],
+    "map_edges": [],
+    "regional_nodes": [],
+    "regional_routes": []
   },
   "target": null,
   "recent_events": [],
@@ -134,6 +156,11 @@ Success response shape:
   "state": {}
 }
 ```
+
+Notes:
+
+- `state` is the same player-view snapshot shape returned by `GET /api/state`
+- `entries` is the appendable event list for the submitted command, not a full replacement for `recent_events`
 
 Failure response shape:
 
@@ -218,8 +245,12 @@ Failure response:
 
 - `day`, `tick`, `weather`: current simulation time and broad environment
 - `field_stress`: current farm-yield pressure scalar used by the first shock chain
+- `scarcity_index`: current player-visible market scarcity pressure derived from the live local snapshot plus summarized regional support
+- `market_prices`: current server-authoritative item prices for the shared market snapshot
 - `location_id`, `location_name`: current player anchor location
+- `region_id`, `region_name`: current player region anchor, safe for regional UI context and route labeling
 - `active_events`: currently visible shock or route-event summaries from the player's current region or current travel route, not the omniscient global list
+- `active_events` entries currently expose `event_id`, `event_type`, and `summary`
 - when the player is traveling, the scene description and player travel state are the authoritative source for route progress
 
 ### `player`
@@ -353,6 +384,36 @@ Notes:
 - regional edges represent summarized inter-region routes between anchor locations
 - the client should render these as display hints only; route validity still comes from commands returned by the server
 
+### `scene.regional_nodes`
+
+Summarized region cards for the current known regional graph.
+
+Per-node shape:
+
+```json
+{
+  "region_id": "region.greenfall",
+  "name": "Greenfall Village",
+  "kind": "settlement",
+  "summary": "The current high-resolution village where the player starts.",
+  "risk_level": 0.22,
+  "is_current_region": true,
+  "known_local_locations": ["bakery", "farm", "riverside", "shrine", "smithy", "square", "tavern"],
+  "stock_signals": {
+    "bread": 10,
+    "fish": 8,
+    "wheat": 18,
+    "tool": 2
+  }
+}
+```
+
+Notes:
+
+- `stock_signals` is a summarized regional stock view for player-facing context, not raw offscreen actor inventory
+- `known_local_locations` is a region-summary hint for map and route presentation, not a second navigation rules engine
+- `is_current_region` marks the player's present region in the summarized graph
+
 ### `scene.regional_routes`
 
 Summarized inter-settlement route metadata.
@@ -463,9 +524,10 @@ However, backend behavior has contract implications:
 Whenever any endpoint, field name, response shape, or command meaning changes:
 
 1. update this document
-2. update `docs_kr/roadmap/23-web-client-api-spec.md`
-3. update tests that lock the contract
-4. update the current frontend implementation if it consumes the changed field
+2. update `docs/context/frontend-api-handoff.md`
+3. update `docs_kr/roadmap/23-web-client-api-spec.md`
+4. update tests that lock the contract
+5. update the current frontend implementation if it consumes the changed field
 
 ## Non-Goals
 

@@ -20,7 +20,8 @@
 현재 구현은 다음 파일에 있다.
 
 - `src/acidnet/frontend/web_app.py`
-- `src/acidnet/frontend/web/index.html`
+- `docs/context/frontend-api-handoff.md`
+- `src/acidnet/frontend/client/index.html`
 - `tests/test_web_frontend.py`
 
 브라우저는 `src/acidnet/frontend/web_app.py` 를 실제 HTTP 표면의 기준 구현으로 봐야 한다.
@@ -55,11 +56,27 @@
   "world": {
     "day": 1,
     "tick": 0,
-    "weather": "dry_wind",
+    "weather": "storm_front",
     "field_stress": 0.18,
+    "scarcity_index": 0.4,
+    "market_prices": {
+      "bread": 5,
+      "fish": 4,
+      "stew": 7,
+      "tool": 15,
+      "wheat": 2
+    },
     "location_id": "square",
     "location_name": "Market Square",
-    "active_events": []
+    "region_id": "region.greenfall",
+    "region_name": "Greenfall Village",
+    "active_events": [
+      {
+        "event_id": "event.route.route.greenfall.hollowmarket.delay",
+        "event_type": "route_delay",
+        "summary": "The road toward Hollow Market is slowing under the storm front, and caravans are arriving late."
+      }
+    ]
   },
   "player": {
     "name": "Jaeho",
@@ -87,6 +104,8 @@
       {"label": "Look", "command": "look"},
       {"label": "Work", "command": "work"},
       {"label": "Meal", "command": "meal", "enabled": true, "item": "bread"},
+      {"label": "Rest", "command": "rest 1"},
+      {"label": "Sleep", "command": "sleep 3"},
       {"label": "Next", "command": "next 1"}
     ],
     "consume": [
@@ -102,7 +121,10 @@
     "description": "You are at Market Square [market].\nExits: ...",
     "people": [],
     "rumors": [],
-    "map_nodes": []
+    "map_nodes": [],
+    "map_edges": [],
+    "regional_nodes": [],
+    "regional_routes": []
   },
   "target": null,
   "recent_events": [],
@@ -134,6 +156,11 @@
   "state": {}
 }
 ```
+
+주의:
+
+- `state` 는 `GET /api/state` 와 같은 player-view snapshot 구조를 그대로 반환한다
+- `entries` 는 이번 command 결과에 바로 붙여 그릴 수 있는 이벤트 목록이지 `recent_events` 전체를 대체하지 않는다
 
 실패 응답 구조:
 
@@ -218,8 +245,12 @@
 
 - `day`, `tick`, `weather`: 현재 시뮬레이션 시간과 환경
 - `field_stress`: 첫 shock chain 에서 쓰는 현재 농장 yield 압박 수치
+- `scarcity_index`: live local snapshot 과 summarized regional support 에서 파생된 현재 player-visible market scarcity 압박 수치
+- `market_prices`: 공유 market snapshot 에 대한 현재 server-authoritative item 가격 목록
 - `location_id`, `location_name`: 현재 player anchor location
-- `active_events`: 현재 살아 있는 world shock/event summary 목록
+- `region_id`, `region_name`: 현재 player 가 속한 region 기준 정보이며 regional UI context 와 route labeling 에 안전하게 쓸 수 있다
+- `active_events`: 현재 player region 또는 현재 travel route 에서 보이는 shock/event summary 목록이다. omniscient global list 가 아니다
+- `active_events` 의 개별 항목은 현재 `event_id`, `event_type`, `summary` 를 노출한다
 - 플레이어가 traveling 중일 때는 route progress 의 기준 정보는 `scene.description` 과 `player.travel_state` 다
 
 ### `player`
@@ -316,11 +347,100 @@
   "glyph": "+",
   "is_player_here": true,
   "is_adjacent": true,
+  "is_reachable": true,
+  "move_command": "look",
+  "connection_kind": "local",
   "occupant_count": 3
 }
 ```
 
-이건 presentation guidance 이지 physics system 이 아니다.
+주의:
+
+- `row`, `column`, `glyph` 는 frontend 상수가 아니라 world/location data 에서 온다
+- `move_command` 는 타일 활성화 시 client 가 보내야 하는 server-authoritative command 다
+- `connection_kind` 는 현재 `local` 또는 `regional` 이다
+- `is_adjacent` 는 local topology 힌트일 뿐이고, 실제 상호작용 가능 여부는 `move_command` 와 `is_reachable` 를 기준으로 본다
+
+### `scene.map_edges`
+
+브라우저 프로브용 현재 visible map connection 목록이다.
+
+개별 항목 구조:
+
+```json
+{
+  "from_location_id": "square",
+  "to_location_id": "farm",
+  "kind": "local",
+  "route_id": null,
+  "is_delayed": false
+}
+```
+
+주의:
+
+- `kind` 는 현재 `local` 또는 `regional` 이다
+- local edge 는 같은 region 안의 직접 이동 링크다
+- regional edge 는 anchor location 사이의 summarized inter-region route 다
+- client 는 이것을 display hint 로만 렌더링해야 하며, 실제 route validity 는 여전히 server command 결과를 따른다
+
+### `scene.regional_nodes`
+
+현재 알려진 regional graph 에 대한 summarized region card 목록이다.
+
+개별 항목 구조:
+
+```json
+{
+  "region_id": "region.greenfall",
+  "name": "Greenfall Village",
+  "kind": "settlement",
+  "summary": "The current high-resolution village where the player starts.",
+  "risk_level": 0.22,
+  "is_current_region": true,
+  "known_local_locations": ["bakery", "farm", "riverside", "shrine", "smithy", "square", "tavern"],
+  "stock_signals": {
+    "bread": 10,
+    "fish": 8,
+    "wheat": 18,
+    "tool": 2
+  }
+}
+```
+
+주의:
+
+- `stock_signals` 는 player-facing regional summary 이지 raw offscreen actor inventory 가 아니다
+- `known_local_locations` 는 map 과 route presentation 을 돕는 region-summary 힌트이지 두 번째 navigation rules engine 이 아니다
+- `is_current_region` 은 summarized graph 에서 플레이어의 현재 region 을 표시한다
+
+### `scene.regional_routes`
+
+요약된 inter-settlement route metadata 다.
+
+개별 항목 구조:
+
+```json
+{
+  "route_id": "route.greenfall.hollowmarket",
+  "from_region_id": "region.greenfall",
+  "to_region_id": "region.hollowmarket",
+  "travel_ticks": 96,
+  "cargo_risk": 0.24,
+  "weather_sensitivity": 0.45,
+  "seasonal_capacity": 1.0,
+  "transit_count": 1,
+  "status": "delayed",
+  "status_summary": "The road toward Hollow Market is slowing under the storm front, and caravans are arriving late."
+}
+```
+
+주의:
+
+- `transit_count` 는 route 에 대한 player-visible summarized logistics count 이지 전체 NPC 목록이 아니다
+- `status` 는 player-visible route knowledge 이지 omniscient logistics channel 이 아니다
+- 현재 기대값은 `stable`, `delayed`, `unknown` 이다
+- `unknown` 은 regional graph 에 route 가 있지만 플레이어가 현재 그 disruption state 를 직접 볼 수 없다는 뜻이다
 
 ### `target`
 
@@ -404,9 +524,10 @@ Dialogue backend 선택은 runtime concern 이지 client concern 이 아니다.
 어떤 endpoint, field name, response shape, command meaning 이 바뀌면:
 
 1. 이 문서를 갱신한다
-2. `docs_kr/roadmap/23-web-client-api-spec.md` 를 같이 갱신한다
-3. 계약을 고정하는 테스트를 수정한다
-4. 그 필드를 소비하는 현재 frontend 구현도 같이 갱신한다
+2. `docs/context/frontend-api-handoff.md` 를 같이 갱신한다
+3. `docs_kr/roadmap/23-web-client-api-spec.md` 를 같이 갱신한다
+4. 계약을 고정하는 테스트를 수정한다
+5. 그 필드를 소비하는 현재 frontend 구현도 같이 갱신한다
 
 ## 비목표
 
