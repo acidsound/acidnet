@@ -66,7 +66,7 @@ Reference:
   - `trade [npc] debt <item> <qty>` now keeps credit exchange on the same stock, reserve-floor, relationship, urgency, and debt-ceiling path
   - `repay [npc] [amount]` now closes the player-visible debt leg on the same live command surface, and web state exposes `player.debts` plus per-NPC `debt_options`
 
-- [ ] Step 20D: Define the frontend state contract.
+- [x] Step 20D: Define the frontend state contract.
   Exit criteria:
   - add derived scene DTOs separate from raw persistence snapshots
   - expose player-visible state, not omniscient world state, by default
@@ -78,7 +78,8 @@ Current note:
 - the web probe now lives in `src/acidnet/frontend/web_app.py` and `src/acidnet/frontend/client/index.html`
 - the browser already consumes derived player-view state plus command POSTs instead of raw persistence snapshots
 - the HTTP contract is now documented in `docs/context/frontend-api-handoff.md` and `docs/roadmap/23-web-client-api-spec.md`
-- formal DTO naming, route preview, and fuller action catalogs still remain before `20D` is complete
+- `scene.route_preview` now exposes server-authored local and regional route preview DTOs instead of leaving route preview to client reconstruction
+- `actions.travel` now exposes server-authored travel commands aligned with that route preview DTO
 
 - [ ] Step 20E: Replace random monkeying with goal monkeys.
   Exit criteria:

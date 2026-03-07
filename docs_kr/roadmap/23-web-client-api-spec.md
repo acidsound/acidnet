@@ -116,12 +116,27 @@
       {"label": "Inspect", "command": "inspect", "requires_target": true, "enabled": false},
       {"label": "Talk", "command": "talk", "requires_target": true, "enabled": false},
       {"label": "Ask Rumor", "command": "ask rumor", "requires_target": true, "enabled": false}
+    ],
+    "travel": [
+      {
+        "label": "Go Warm Crust Bakery",
+        "command": "go bakery",
+        "enabled": true,
+        "kind": "local",
+        "destination_location_id": "bakery",
+        "destination_region_id": "region.greenfall",
+        "travel_ticks": 18,
+        "travel_turns": 2,
+        "blocked_reason": null,
+        "route_id": null
+      }
     ]
   },
   "scene": {
     "description": "You are at Market Square [market].\nExits: ...",
     "people": [],
     "rumors": [],
+    "route_preview": [],
     "map_nodes": [],
     "map_edges": [],
     "regional_nodes": [],
@@ -270,6 +285,7 @@
 - `common`: 전역 저마찰 액션
 - `consume`: 현재 inventory 에서 파생되는 item-specific consumption 액션
 - `target`: 현재 focused NPC 에 의존하는 액션
+- `travel`: `scene.route_preview` 와 맞물린 local/regional travel action catalog
 
 클라이언트는 이 목록을 직접 렌더링할 수 있다.
 빠진 액션을 클라이언트가 임의로 유효하다고 가정하면 안 된다.
@@ -338,6 +354,33 @@
   "confidence": 0.82
 }
 ```
+
+### `scene.route_preview`
+
+지금 이동 가능한 local / regional route preview DTO 목록이다.
+
+개별 항목 구조:
+
+```json
+{
+  "connection_kind": "regional",
+  "destination_location_id": "hollowmarket_gate",
+  "destination_region_id": "region.hollowmarket",
+  "destination_name": "Hollow Market",
+  "command": "travel-region Hollow Market",
+  "travel_ticks": 96,
+  "travel_turns": 8,
+  "enabled": true,
+  "blocked_reason": null,
+  "route_id": "route.greenfall.hollowmarket",
+  "status": "ready",
+  "status_summary": null
+}
+```
+
+- browser 가 topology 를 다시 해석하지 않도록 server-authoritative route preview DTO 를 직접 준다
+- local preview 는 현재 weather/load 때문에 막힌 경로를 `blocked_reason` 으로 보여줄 수 있다
+- regional preview 는 현재 player-visible delayed-route summary 를 같이 실을 수 있다
 
 ### `scene.map_nodes`
 

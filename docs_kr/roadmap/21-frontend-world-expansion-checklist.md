@@ -66,7 +66,7 @@
   - `trade [npc] debt <item> <qty>` 는 credit exchange 를 같은 stock, reserve-floor, relationship, urgency, debt-ceiling path 위에 둔다
   - `repay [npc] [amount]` 는 player-visible debt leg 를 같은 live command surface 위에서 닫고, web state 는 `player.debts` 와 per-NPC `debt_options` 를 노출한다
 
-- [ ] Step 20D: frontend state contract 정의
+- [x] Step 20D: frontend state contract 정의
   Exit criteria:
   - raw persistence snapshot과 분리된 derived scene DTO를 갖춘다
   - 기본값으로 omniscient world state가 아니라 player-visible state를 노출한다
@@ -78,7 +78,8 @@
 - web probe는 이제 `src/acidnet/frontend/web_app.py`와 `src/acidnet/frontend/client/index.html`에 있다
 - 브라우저는 이미 raw persistence snapshot 대신 derived player-view state와 command POST를 사용한다
 - HTTP contract는 `docs/context/frontend-api-handoff.md`와 `docs/roadmap/23-web-client-api-spec.md`에 문서화돼 있다
-- formal DTO naming, route preview, 더 넓은 action catalog가 아직 남아 있으므로 `20D`는 아직 완료가 아니다
+- `scene.route_preview` 가 이제 local/regional travel option을 server-authored DTO로 노출한다
+- `actions.travel` 이 같은 route preview DTO와 맞물린 travel action catalog를 노출한다
 
 - [ ] Step 20E: random monkey를 goal monkey로 교체
   Exit criteria:

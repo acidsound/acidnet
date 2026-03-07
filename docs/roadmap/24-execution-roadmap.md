@@ -110,14 +110,15 @@ Use `docs/context/current-state.md` when choosing between this track and the par
 
 The current simulation-track queue is:
 
-1. tighten the remaining `20D` frontend state contract gaps before reopening later-phase tuning as the main slice
-2. after the earlier checklist closures are tighter, resume deeper downstream-economy scoring and `20H` summarized regional scaling
+1. resume deeper downstream-economy scoring now that `20C` and `20D` are both closed enough to leave the queue
+2. continue `20H` summarized regional scaling once that downstream scoring slice is tighter
 
 The backend parity audit is now closed enough to leave the immediate queue.
 Keep parity locked through regression coverage when prompt shaping, output cleanup, runtime parser policy, or fallback behavior changes.
 `20G` is now also closed enough to leave the immediate queue.
 `20B` is now also closed enough to leave the immediate queue.
 `20C` is now also closed enough to leave the immediate queue.
+`20D` is now also closed enough to leave the immediate queue.
 
 Open but not first in this thin-slice queue:
 

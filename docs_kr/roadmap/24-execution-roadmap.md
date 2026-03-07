@@ -110,14 +110,15 @@ parallel structural boundary track과 우선순위가 겹치면 `docs/context/cu
 
 현재 simulation-track queue는 다음과 같다.
 
-1. later-phase tuning을 다시 main slice로 올리기 전에 남아 있는 `20D` frontend state contract gap을 조인다
-2. 앞 단계 체크리스트가 더 조여진 뒤에 deeper downstream-economy scoring과 `20H` summarized regional scaling으로 다시 돌아간다
+1. `20C` 와 `20D` 가 queue 에서 내려갈 만큼 닫혔으니 deeper downstream-economy scoring 으로 다시 돌아간다
+2. 그 downstream scoring slice 가 더 조여지면 `20H` summarized regional scaling 을 계속한다
 
 backend parity audit는 이제 immediate queue에서 내릴 만큼 닫혔다.
 이후에도 prompt shaping, output cleanup, runtime parser policy, fallback behavior가 바뀌면 regression coverage로 parity를 계속 잠근다.
 `20G`도 이제 immediate queue에서 뺄 만큼 닫혔다.
 `20B`도 이제 immediate queue에서 뺄 만큼 닫혔다.
 `20C`도 이제 immediate queue에서 뺄 만큼 닫혔다.
+`20D`도 이제 immediate queue에서 뺄 만큼 닫혔다.
 
 열려 있지만 현재 thin-slice queue의 맨 앞은 아닌 것:
 

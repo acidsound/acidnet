@@ -60,6 +60,7 @@ Current `scene` fields that are explicitly safe to render:
 - `description`
 - `people`
 - `rumors`
+- `route_preview`
 - `map_nodes`
 - `map_edges`
 - `regional_nodes`
@@ -70,8 +71,10 @@ Notes:
 - `scarcity_index` and `market_prices` are server-authoritative derived values.
 - `active_events` entries currently expose `event_id`, `event_type`, and `summary`.
 - `player.debts` entries currently expose `npc_id`, `name`, and `amount` for outstanding player-visible debt.
+- `scene.route_preview` is the server-authored route preview DTO for local and regional travel options.
 - `regional_nodes` is summarized regional context, including `stock_signals`; it is not raw offscreen NPC state.
 - `scene.people` cards now also expose `debt_options` alongside `buy_options`, `sell_options`, `ask_options`, and `give_options`.
+- `actions.travel` is the server-authored travel action catalog aligned with `scene.route_preview`.
 - `actions` is the allowed action catalog for the current state, not a hint to rebuild rules in the browser.
 - `recent_events` is the append-only player-visible feed, not a full simulation log.
 

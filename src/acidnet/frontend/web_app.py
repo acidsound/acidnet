@@ -266,9 +266,25 @@ class WebSimulationRuntime:
             )
         return edges
 
+    def _route_preview(self) -> list[dict[str, Any]]:
+        if self.simulation.player.travel_state.is_traveling:
+            return []
+        previews: list[dict[str, Any]] = []
+        current = self.simulation.world.locations[self.simulation.player.location_id]
+        for neighbor_id in current.neighbors:
+            preview = self.simulation._preview_local_route(neighbor_id)
+            if preview is not None:
+                previews.append(preview)
+        for region in self.simulation.world.regions.values():
+            preview = self.simulation._preview_regional_route(region.region_id)
+            if preview is not None:
+                previews.append(preview)
+        return previews
+
     def _action_catalog(self) -> dict[str, list[dict[str, Any]]]:
         focused_npc = self.simulation._focused_npc_here()
         best_food = self.simulation._best_food_in_inventory(self.simulation.player.inventory)
+        route_preview = self._route_preview()
         common = [
             {"label": "Look", "command": "look"},
             {"label": "Work", "command": "work"},
@@ -312,7 +328,22 @@ class WebSimulationRuntime:
                 "enabled": focused_npc is not None and self.dialogue_ready,
             },
         ]
-        return {"common": common, "consume": consume, "target": target}
+        travel = [
+            {
+                "label": ("Go " if preview["connection_kind"] == "local" else "Travel to ") + str(preview["destination_name"]),
+                "command": preview["command"],
+                "enabled": preview["enabled"],
+                "kind": preview["connection_kind"],
+                "destination_location_id": preview["destination_location_id"],
+                "destination_region_id": preview["destination_region_id"],
+                "travel_ticks": preview["travel_ticks"],
+                "travel_turns": preview["travel_turns"],
+                "blocked_reason": preview["blocked_reason"],
+                "route_id": preview["route_id"],
+            }
+            for preview in route_preview
+        ]
+        return {"common": common, "consume": consume, "target": target, "travel": travel}
 
     def dialogue_prompt_payload(self) -> dict[str, Any]:
         with self.lock:
@@ -428,6 +459,7 @@ class WebSimulationRuntime:
                             dedupe_by_signature=True,
                         )
                     ],
+                    "route_preview": self._route_preview(),
                     "map_nodes": self._map_nodes(),
                     "map_edges": self._map_edges(),
                     "regional_nodes": [

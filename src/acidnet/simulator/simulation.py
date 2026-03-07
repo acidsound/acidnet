@@ -2887,6 +2887,80 @@ class Simulation:
     def _route_base_ticks(self, start: str, destination: str) -> int:
         return TRAVEL_EDGE_BASE_TICKS.get(frozenset((start, destination)), self.turn_ticks * 2)
 
+    def _preview_local_route(self, destination_id: str) -> dict[str, Any] | None:
+        if self.player.travel_state.is_traveling:
+            return None
+        current = self.world.locations.get(self.player.location_id)
+        destination = self.world.locations.get(destination_id)
+        if current is None or destination is None or destination_id not in current.neighbors:
+            return None
+        self._refresh_actor_loads()
+        load_ratio = max(0.0, self._actor_load_ratio(self.player))
+        weather_multiplier = WEATHER_TRAVEL_MULTIPLIERS.get(self.world.weather, 1.0)
+        load_multiplier = 1.0 + (load_ratio * 0.45)
+        fatigue_multiplier = 1.0 + (self.player.fatigue / 180.0)
+        travel_ticks = max(
+            self.turn_ticks,
+            int(round(self._route_base_ticks(current.location_id, destination_id) * weather_multiplier * load_multiplier * fatigue_multiplier)),
+        )
+        blocked_reason = self._travel_block_reason(current.location_id, destination_id, self.player) or None
+        return {
+            "connection_kind": "local",
+            "destination_location_id": destination.location_id,
+            "destination_region_id": destination.region_id,
+            "destination_name": destination.name,
+            "command": f"go {destination.location_id}",
+            "travel_ticks": travel_ticks,
+            "travel_turns": self._travel_eta_turns(travel_ticks),
+            "enabled": blocked_reason is None,
+            "blocked_reason": blocked_reason,
+            "route_id": None,
+            "status": "blocked" if blocked_reason is not None else "ready",
+            "status_summary": blocked_reason,
+        }
+
+    def _preview_regional_route(self, destination_region_id: str) -> dict[str, Any] | None:
+        if self.player.travel_state.is_traveling:
+            return None
+        current_region = self.current_region()
+        destination_region = self.world.regions.get(destination_region_id)
+        if current_region is None or destination_region is None or current_region.region_id == destination_region.region_id:
+            return None
+        route = self._regional_route_between(current_region.region_id, destination_region.region_id)
+        if route is None or destination_region.anchor_location_id is None:
+            return None
+        self._refresh_actor_loads()
+        load_ratio = max(0.0, self._actor_load_ratio(self.player))
+        weather_multiplier = WEATHER_TRAVEL_MULTIPLIERS.get(self.world.weather, 1.0)
+        route_multiplier = 1.0 + self._regional_route_pressure(route) * 0.9
+        travel_ticks = max(
+            self.turn_ticks * 2,
+            int(
+                round(
+                    route.travel_ticks
+                    * weather_multiplier
+                    * route_multiplier
+                    * (1.0 + load_ratio * 0.35)
+                    * (1.0 + self.player.fatigue / 200.0)
+                )
+            ),
+        )
+        route_event = self._visible_route_delay_event_for_player(route.route_id)
+        return {
+            "connection_kind": "regional",
+            "destination_location_id": destination_region.anchor_location_id,
+            "destination_region_id": destination_region.region_id,
+            "destination_name": destination_region.name,
+            "command": f"travel-region {destination_region.name}",
+            "travel_ticks": travel_ticks,
+            "travel_turns": self._travel_eta_turns(travel_ticks),
+            "enabled": True,
+            "blocked_reason": None,
+            "route_id": route.route_id,
+            "status": "delayed" if route_event is not None else "ready",
+            "status_summary": None if route_event is None else route_event.summary,
+        }
+
     def _travel_eta_turns(self, ticks_remaining: int) -> int:
         return max(1, (max(0, ticks_remaining) + self.turn_ticks - 1) // self.turn_ticks)
 

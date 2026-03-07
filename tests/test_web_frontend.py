@@ -114,11 +114,16 @@ def test_scene_payload_exposes_player_view_contract() -> None:
     assert all("stock_signals" in node for node in state["scene"]["regional_nodes"])
     assert state["scene"]["regional_routes"]
     assert state["scene"]["map_edges"]
+    assert state["scene"]["route_preview"]
+    assert any(preview["command"] == "go tavern" for preview in state["scene"]["route_preview"])
+    assert any(preview["command"] == "travel-region Hollow Market" for preview in state["scene"]["route_preview"])
     assert any(edge["kind"] == "local" for edge in state["scene"]["map_edges"])
     assert any(edge["kind"] == "regional" for edge in state["scene"]["map_edges"])
     assert all("transit_count" in route for route in state["scene"]["regional_routes"])
     assert any(action["command"] == "look" for action in state["actions"]["common"])
     assert any(action["command"] == "meal" for action in state["actions"]["common"])
+    assert any(action["command"] == "go tavern" for action in state["actions"]["travel"])
+    assert any(action["command"] == "travel-region Hollow Market" for action in state["actions"]["travel"])
     assert "people" in state["scene"]
     assert all("ask_options" in person and "give_options" in person for person in state["scene"]["people"])
     assert isinstance(state["help"], list)
@@ -318,7 +323,27 @@ def test_scene_payload_hides_people_during_travel() -> None:
 
     assert state["player"]["travel_state"]["is_traveling"] is True
     assert state["scene"]["people"] == []
+    assert state["scene"]["route_preview"] == []
+    assert state["actions"]["travel"] == []
     assert "On the road to" in state["world"]["location_name"]
+
+
+def test_scene_payload_marks_blocked_local_route_in_route_preview_and_action_catalog() -> None:
+    runtime = build_runtime("web_frontend_route_preview_blocked_test")
+    try:
+        runtime.simulation.player.location_id = "farm"
+        runtime.simulation.world.weather = "storm_front"
+        state = runtime.scene_payload()
+    finally:
+        runtime.close()
+
+    riverside_preview = next(preview for preview in state["scene"]["route_preview"] if preview["destination_location_id"] == "riverside")
+    riverside_action = next(action for action in state["actions"]["travel"] if action["command"] == "go riverside")
+
+    assert riverside_preview["enabled"] is False
+    assert "unsafe" in riverside_preview["blocked_reason"].lower()
+    assert riverside_action["enabled"] is False
+    assert "unsafe" in riverside_action["blocked_reason"].lower()
 
 
 def test_scene_payload_exposes_active_shock_state() -> None:

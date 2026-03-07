@@ -88,6 +88,7 @@ If they compete for the next thin slice, this file decides.
 - `trade [npc] barter <give_item> <give_qty> for <get_item> <get_qty>` now lets item-for-item exchange use the same reserve-floor and acceptance path even with non-vendor NPCs
 - `trade [npc] debt <item> <qty>` now extends credit through the same stock, reserve-floor, relationship, urgency, and debt-ceiling checks, and `repay [npc] [amount]` settles that debt on the live command path
 - web state now exposes player debt summaries and per-NPC `debt_options`, so browser-visible exchange state no longer hides the remaining debt leg of `20C`
+- web state now also exposes `scene.route_preview` plus `actions.travel`, so browser-visible route preview no longer has to be reconstructed from map topology or ad hoc client rules
 
 ## Immediate Queue
 
@@ -98,12 +99,12 @@ If they compete for the next thin slice, this file decides.
 
 ### Track B: Live Simulation and World Loop
 
-1. Tighten the remaining `20D` frontend state contract gaps around DTO naming, route preview, and fuller action catalogs now that `20C` is closed.
-2. After the earlier checklist closures are tighter, resume richer downstream-economy scoring and stronger summarized regional effects.
+1. Resume richer downstream-economy scoring now that both `20C` and `20D` are closed enough to leave the queue.
+2. Continue stronger summarized regional effects after the deeper downstream-economy scoring slice is tighter.
 
 ### Still Open Milestones, But Not The Current Thin-Slice Queue
 
-- keep the later downstream-economy monkey tuning and summarized regional-effect expansion behind the earlier `20D` checklist closure
+- keep future simulation/world-loop churn behind the now-closed `20C` and `20D` contract slices unless a regression forces reopening them
 
 ## Current Risks
 

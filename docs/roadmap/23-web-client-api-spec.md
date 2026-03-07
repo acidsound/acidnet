@@ -116,12 +116,27 @@ Response shape:
       {"label": "Inspect", "command": "inspect", "requires_target": true, "enabled": false},
       {"label": "Talk", "command": "talk", "requires_target": true, "enabled": false},
       {"label": "Ask Rumor", "command": "ask rumor", "requires_target": true, "enabled": false}
+    ],
+    "travel": [
+      {
+        "label": "Go Warm Crust Bakery",
+        "command": "go bakery",
+        "enabled": true,
+        "kind": "local",
+        "destination_location_id": "bakery",
+        "destination_region_id": "region.greenfall",
+        "travel_ticks": 18,
+        "travel_turns": 2,
+        "blocked_reason": null,
+        "route_id": null
+      }
     ]
   },
   "scene": {
     "description": "You are at Market Square [market].\nExits: ...",
     "people": [],
     "rumors": [],
+    "route_preview": [],
     "map_nodes": [],
     "map_edges": [],
     "regional_nodes": [],
@@ -269,6 +284,7 @@ This is a derived command catalog, not a second rules engine.
 - `common`: globally available low-friction actions
 - `consume`: item-specific consumption actions derived from current inventory
 - `target`: actions that rely on the currently focused NPC
+- `travel`: server-authored local and regional travel actions aligned with `scene.route_preview`
 
 The client may render these directly.
 The client must not assume missing actions are still valid.
@@ -336,6 +352,35 @@ Per-rumor shape:
   "confidence": 0.82
 }
 ```
+
+### `scene.route_preview`
+
+Server-authored route preview DTOs for reachable local and regional movement options.
+
+Per-entry shape:
+
+```json
+{
+  "connection_kind": "regional",
+  "destination_location_id": "hollowmarket_gate",
+  "destination_region_id": "region.hollowmarket",
+  "destination_name": "Hollow Market",
+  "command": "travel-region Hollow Market",
+  "travel_ticks": 96,
+  "travel_turns": 8,
+  "enabled": true,
+  "blocked_reason": null,
+  "route_id": "route.greenfall.hollowmarket",
+  "status": "ready",
+  "status_summary": null
+}
+```
+
+Notes:
+
+- this is the browser-safe route preview DTO, not a raw topology dump that the client must reinterpret
+- local previews can surface `blocked_reason` when weather or load currently prevents travel
+- regional previews reuse the current player-visible route state and may surface delayed-route summaries
 
 ### `scene.map_nodes`
 
