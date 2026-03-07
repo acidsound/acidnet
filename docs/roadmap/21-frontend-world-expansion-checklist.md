@@ -34,7 +34,7 @@ Reference:
   - tests cover bounds and serialization
   - snapshots and storage handle the new fields cleanly
 
-- [ ] Step 20B: Convert movement into multi-turn travel.
+- [x] Step 20B: Convert movement into multi-turn travel.
   Exit criteria:
   - `go <location>` becomes a travel action with ETA
   - travel consumes time and cost before arrival
@@ -48,7 +48,7 @@ Reference:
   - `rest` and `sleep` are already live in the command surface and browser action catalog
   - player `status` now surfaces current shelter quality, and sleep now bottoms out at a shelter-sensitive fatigue floor so poor cover only gives shallow recovery
   - terminal and web state both expose travel progress through `player.travel_state` and scene text
-  - Remaining gap: keep auditing for dead instant-move paths and finish any last recovery tuning needed to call the phase closed
+  - travel now explicitly blocks the old location-bound command surface until arrival, so dead instant-move assumptions stay locked out in regression
 
 - [ ] Step 20C: Unify exchange modes.
   Exit criteria:

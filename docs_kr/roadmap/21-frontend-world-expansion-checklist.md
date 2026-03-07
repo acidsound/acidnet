@@ -34,7 +34,7 @@
   - bounds와 serialization 테스트가 있다
   - snapshot과 storage가 새 필드를 정상 처리한다
 
-- [ ] Step 20B: 이동을 multi-turn travel로 전환
+- [x] Step 20B: 이동을 multi-turn travel로 전환
   Exit criteria:
   - `go <location>`이 ETA를 가진 travel action이 된다
   - 도착 전까지 시간과 비용이 실제로 소모된다
@@ -48,7 +48,7 @@
   - `rest`와 `sleep`은 이미 command surface와 browser action catalog에 들어가 있다
   - player `status`는 이제 현재 shelter quality를 보여주고, sleep은 shelter-sensitive fatigue floor 아래로는 바로 떨어지지 않으므로 poor cover에서는 얕은 회복만 가능하다
   - terminal과 web state는 `player.travel_state`와 scene text로 travel progress를 노출한다
-  - Remaining gap: dead instant-move path를 계속 감사하고, phase를 닫기 위한 마지막 recovery tuning을 마무리한다
+  - travel은 이제 도착 전까지 예전 location-bound command surface를 명시적으로 막으므로, dead instant-move 가정이 regression으로 잠겨 있다
 
 - [ ] Step 20C: exchange mode 통합
   Exit criteria:

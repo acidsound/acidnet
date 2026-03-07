@@ -682,6 +682,28 @@ def test_traveling_blocks_location_bound_interactions() -> None:
     assert any("already on the road" in line.lower() for line in result.lines)
 
 
+def test_traveling_blocks_location_bound_commands_across_the_old_instant_move_surface() -> None:
+    simulation = Simulation.create_demo()
+    simulation.world.weather = "clear"
+
+    simulation.handle_command("go tavern")
+
+    blocked_commands = [
+        "go bakery",
+        "focus neri",
+        "inspect neri",
+        "talk neri",
+        "say neri hello",
+        "ask neri rumor",
+        "trade neri ask bread 1",
+        "work",
+    ]
+
+    for command in blocked_commands:
+        result = simulation.handle_command(command)
+        assert any("already on the road" in line.lower() for line in result.lines), command
+
+
 def test_sleep_recovers_more_fatigue_than_rest_when_shelter_is_better() -> None:
     square_simulation = Simulation.create_demo()
     square_simulation.player.fatigue = 60.0

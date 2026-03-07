@@ -44,7 +44,8 @@
 - terminal과 web에서 route progress를 보여준다
 - baseline travel, ETA, fatigue, recovery 동작은 이미 들어가 있다
 - sleep은 이제 shelter-sensitive fatigue floor 아래로는 바로 떨어지지 않으므로, poor cover에서는 얕은 회복만 가능하고 shrine이나 tavern shelter에서는 더 깊은 회복이 가능하다
-- 남은 일은 dead instant-move 가정 정리와 phase를 닫기 위한 마지막 recovery tuning이다
+- travel은 이제 도착 전까지 예전 location-bound command surface를 명시적으로 막으므로, dead instant-move 가정이 regression으로 잠겨 있다
+- `20B`는 이제 immediate queue에서 내릴 만큼 닫혔다
 
 ### Phase 3: Exchange Unification
 
@@ -106,13 +107,14 @@ parallel structural boundary track과 우선순위가 겹치면 `docs/context/cu
 
 현재 simulation-track queue는 다음과 같다.
 
-1. 남아 있는 shelter/recovery와 dead-path gap이 닫힐 때까지 `20B` travel/recovery hardening을 계속한다
-2. later-phase tuning을 다시 main slice로 올리기 전에 `20C` exchange unification을 계속한다
+1. barter, debt, clearer gift-default behavior가 닫힐 때까지 `20C` exchange unification을 계속한다
+2. later-phase tuning을 다시 main slice로 올리기 전에 남아 있는 `20D` frontend state contract gap을 조인다
 3. 앞 단계 체크리스트가 더 조여진 뒤에 deeper downstream-economy scoring과 `20H` summarized regional scaling으로 다시 돌아간다
 
 backend parity audit는 이제 immediate queue에서 내릴 만큼 닫혔다.
 이후에도 prompt shaping, output cleanup, runtime parser policy, fallback behavior가 바뀌면 regression coverage로 parity를 계속 잠근다.
 `20G`도 이제 immediate queue에서 뺄 만큼 닫혔다.
+`20B`도 이제 immediate queue에서 뺄 만큼 닫혔다.
 
 열려 있지만 현재 thin-slice queue의 맨 앞은 아닌 것:
 

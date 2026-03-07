@@ -48,6 +48,7 @@ If they compete for the next thin slice, this file decides.
 - shared fatigue, load, carry-capacity, and `travel_state` fields in the core models
 - first multi-turn travel baseline with route progress
 - player `status` now surfaces current shelter quality, and sleep now bottoms out at a shelter-sensitive fatigue floor so poor cover only gives shallow recovery
+- travel now explicitly blocks the old location-bound command surface until arrival, so dead instant-move assumptions stay locked out in regression
 - seeded rumors plus dynamic rumor dedupe and stale-rumor decay
 - direct `local_peft` dev/eval path and model-gate harness
 - HTTP-level prompt propagation tests for `say` and `ask rumor` through the web API
@@ -93,14 +94,13 @@ If they compete for the next thin slice, this file decides.
 
 ### Track B: Live Simulation and World Loop
 
-1. Continue travel and recovery hardening so shelter quality, sleep depth, and remaining dead instant-move audit can close the `20B` gap.
-2. Continue exchange unification so `20C` closes before later-phase monkey and regional tuning becomes the main queue again.
+1. Continue exchange unification so `20C` closes before later-phase monkey and regional tuning becomes the main queue again.
+2. Tighten the remaining `20D` frontend state contract gaps around DTO naming, route preview, and fuller action catalogs.
 3. After the earlier checklist closures are tighter, resume richer downstream-economy scoring and stronger summarized regional effects.
 
 ### Still Open Milestones, But Not The Current Thin-Slice Queue
 
-- continue the travel and recovery slice so fatigue stays meaningfully tied to `rest`, `sleep`, shelter, and route cost
-- continue exchange unification instead of letting vendor trade and gifting drift into separate rule systems
+- keep the later downstream-economy monkey tuning and summarized regional-effect expansion behind the earlier `20C` and `20D` checklist closures
 
 ## Current Risks
 

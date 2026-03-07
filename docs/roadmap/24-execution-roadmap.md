@@ -44,7 +44,8 @@ The current project baseline is:
 - expose route progress in terminal and web
 - baseline travel, ETA, fatigue, and recovery behavior are now in place
 - sleep now bottoms out at a shelter-sensitive fatigue floor, so poor cover only gives shallow recovery while shrine or tavern shelter supports deeper recovery
-- remaining work is cleanup of any dead instant-move assumptions plus any final recovery tuning needed to close the phase cleanly
+- travel now explicitly blocks the old location-bound command surface until arrival, so dead instant-move assumptions stay locked out in regression
+- `20B` is now closed enough to leave the immediate queue
 
 ### Phase 3: Exchange Unification
 
@@ -106,13 +107,14 @@ Use `docs/context/current-state.md` when choosing between this track and the par
 
 The current simulation-track queue is:
 
-1. continue `20B` travel and recovery hardening until the remaining shelter/recovery and dead-path gaps are closed
-2. continue `20C` exchange unification before reopening later-phase tuning as the main slice
+1. continue `20C` exchange unification until barter, debt, and clearer gift-default behavior are closed
+2. tighten the remaining `20D` frontend state contract gaps before reopening later-phase tuning as the main slice
 3. after the earlier checklist closures are tighter, resume deeper downstream-economy scoring and `20H` summarized regional scaling
 
 The backend parity audit is now closed enough to leave the immediate queue.
 Keep parity locked through regression coverage when prompt shaping, output cleanup, runtime parser policy, or fallback behavior changes.
 `20G` is now also closed enough to leave the immediate queue.
+`20B` is now also closed enough to leave the immediate queue.
 
 Open but not first in this thin-slice queue:
 
