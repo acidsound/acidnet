@@ -1,1 +1,47 @@
-from acidnet.simulator.core import *  # noqa: F401,F403
+"""Compatibility shim for the shared simulator model set."""
+
+from acidnet.simulator.models import (
+    Belief,
+    EpisodicMemory,
+    GoalScore,
+    Intent,
+    IntentType,
+    Location,
+    MarketItemState,
+    MarketState,
+    NPCState,
+    PersonaProfile,
+    PlayerState,
+    RegionNode,
+    RegionalRoute,
+    RegionalTransit,
+    RelationshipState,
+    Rumor,
+    RumorCategory,
+    TravelState,
+    WorldEvent,
+    WorldState,
+)
+
+__all__ = [
+    "Belief",
+    "EpisodicMemory",
+    "GoalScore",
+    "Intent",
+    "IntentType",
+    "Location",
+    "MarketItemState",
+    "MarketState",
+    "NPCState",
+    "PersonaProfile",
+    "PlayerState",
+    "RegionNode",
+    "RegionalRoute",
+    "RegionalTransit",
+    "RelationshipState",
+    "Rumor",
+    "RumorCategory",
+    "TravelState",
+    "WorldEvent",
+    "WorldState",
+]

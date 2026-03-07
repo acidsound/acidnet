@@ -1,5 +1,5 @@
 """Compatibility shim for simulator event log persistence."""
 
-from acidnet.simulator.event_log_file import EventLogFile
+from acidnet.simulator.storage import EventLogFile
 
 __all__ = ["EventLogFile"]

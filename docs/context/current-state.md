@@ -83,6 +83,8 @@ If they compete for the next thin slice, this file decides.
 - headless CLI, eval, and simulator-only tests now import the rehome surface through `acidnet.simulator` instead of reaching directly into `engine` and `storage`
 - the web runtime and runtime-adjacent backend tests now also import through `acidnet.simulator`, shrinking the remaining split-facing direct imports
 - the concrete simulation, shared model definitions, demo world fixture, and SQLite/event-log persistence implementations now live under `src/acidnet/simulator/`, with `engine`, `models`, `world`, and `storage` left as compatibility shims
+- compatibility shims now re-export only through the public `acidnet.simulator.runtime`, `acidnet.simulator.models`, `acidnet.simulator.world`, and `acidnet.simulator.storage` sub-surfaces instead of reaching into deeper simulator internals
+- `tests/test_simulator_boundary.py` now locks the split boundary by checking shim identity and by rejecting new live imports of legacy `engine`, `models`, `world`, and `storage` simulator paths outside the compatibility modules
 - the pure browser asset bundle now lives under `src/acidnet/frontend/client/`, separating static client resources more cleanly from the Python web runtime
 - repeated food `ask` requests to the same NPC now hit a recent-help buffer before they turn into a zero-cash farm loop, while acute hunger still bypasses the buffer
 - `exploit_observer` now probes repeated food requests as well as reserve-constrained cash buys, so zero-cash gift farming is covered by the same monkey regression family
@@ -98,6 +100,7 @@ If they compete for the next thin slice, this file decides.
 ### Track A: Structural Boundary
 
 1. Continue repo split prep by rehoming simulator packages behind `acidnet.simulator` without mixing in new simulation semantics.
+   The compatibility layer is now locked to the public `runtime/models/world/storage` sub-surfaces, so keep the remaining split work structure-only on top of that boundary gate.
 2. Queue the realtime-transition refactor after the split work: separate command resolution from world time progression so the simulator owns the clock and frontends remain request/response clients only.
 
 ### Track B: Live Simulation and World Loop
@@ -125,6 +128,7 @@ If they compete for the next thin slice, this file decides.
 ## Simulator-Only Split Gate
 
 - Keep `tests/test_simulation.py`, `tests/test_monkey_runner.py`, `tests/test_storage.py`, and `tests/test_event_log_file.py` green together before and through any repo split.
+- Keep `tests/test_simulator_boundary.py` green as the structural import/export gate for the compatibility shims.
 - Treat the repo split as structure-only on top of a green simulator gate; do not mix new simulation semantics into the same refactor slice.
 - The minimum internal guarantees to preserve are travel progression cost, recovery behavior, exchange reserve floors, regional pressure observation, and persisted mid-travel snapshots.
 

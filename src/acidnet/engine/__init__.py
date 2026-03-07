@@ -1,5 +1,5 @@
 """Simulation engine entrypoints."""
 
-from acidnet.simulator.simulation import Simulation
+from acidnet.simulator.runtime import Simulation
 
 __all__ = ["Simulation"]

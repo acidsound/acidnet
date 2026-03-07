@@ -1,3 +1,19 @@
 """Compatibility shim for the simulator runtime implementation."""
 
-from acidnet.simulator.simulation import *  # noqa: F401,F403
+from acidnet.simulator.runtime import (
+    CONSUMPTION_VALUE,
+    FOOD_ITEMS,
+    Simulation,
+    TradeOption,
+    TurnEvent,
+    TurnResult,
+)
+
+__all__ = [
+    "CONSUMPTION_VALUE",
+    "FOOD_ITEMS",
+    "Simulation",
+    "TradeOption",
+    "TurnEvent",
+    "TurnResult",
+]

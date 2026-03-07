@@ -41,6 +41,9 @@ The goal is to show where the live contracts actually sit in code and tests.
   - stable headless import boundary for repo-split prep
   - active rehome surface for `engine`, `models`, `world`, and `storage`
   - now used by headless CLI, eval, web runtime, and split-gate/runtime-adjacent tests
+- `src/acidnet/simulator/runtime.py`, `src/acidnet/simulator/models.py`, `src/acidnet/simulator/world.py`, `src/acidnet/simulator/storage.py`
+  - public split-safe sub-surfaces under the simulator package
+  - compatibility shims should re-export from these modules rather than from deeper simulator internals
 - `src/acidnet/simulator/simulation.py`
   - dominant simulation loop and command handling
   - travel, recovery, exchange, rumor flow, NPC turns, and many derived rules currently live here
@@ -90,6 +93,7 @@ The goal is to show where the live contracts actually sit in code and tests.
 - `tests/test_dialogue_backends.py`: backend parity around output cleanup, fallback config forwarding, and fallback accounting
 - `tests/test_local_peft.py`: local dialogue adapter path
 - `tests/test_storage.py`: SQLite snapshot and settings behavior
+- `tests/test_simulator_boundary.py`: split-boundary import/export gate for simulator public sub-surfaces and compatibility shims
 
 For repo-split safety, the minimum simulator-only gate is `tests/test_simulation.py`, `tests/test_monkey_runner.py`, `tests/test_storage.py`, and `tests/test_event_log_file.py`.
 
@@ -98,11 +102,13 @@ For repo-split safety, the minimum simulator-only gate is `tests/test_simulation
 - Structural repo splits should keep `tests/test_simulation.py`, `tests/test_monkey_runner.py`, `tests/test_storage.py`, and `tests/test_event_log_file.py` green before wider web or model-eval suites.
 - Use this subset as the first no-behavior-change gate when rehoming `src/acidnet/engine`, `src/acidnet/models`, `src/acidnet/world`, or `src/acidnet/storage`.
 - If a split changes the headless control surface, add or update a terminal-path regression instead of relying on manual smoke only.
+- Keep `tests/test_simulator_boundary.py` green so deep simulator internals do not leak back into compatibility shims or live entrypoints.
 
 ## Working Boundaries
 
 - Simulation truth belongs in the simulation runtime and shared models, not in the web client.
 - Headless CLI, eval, and split-gate code should prefer `acidnet.simulator` as the stable import surface when possible.
+- Compatibility shims in `engine`, `models`, `world`, and `storage` should import from `acidnet.simulator.runtime`, `acidnet.simulator.models`, `acidnet.simulator.world`, and `acidnet.simulator.storage`, not from deeper simulator modules.
 - Frontends should remain thin intent/state clients; future realtime ticking still belongs to the simulator side, not the client.
 - The browser renders derived scene state from `src/acidnet/frontend/web_app.py`.
 - Dialogue backends share one runtime contract through `system_prompt`.
