@@ -20,6 +20,7 @@ class WebSimulationRuntime:
         *,
         db_path: str | Path = Path("data") / "acidnet.sqlite",
         persist: bool = True,
+        player_name: str | None = None,
         dialogue_backend: str = "heuristic",
         dialogue_model: str | None = None,
         dialogue_endpoint: str | None = None,
@@ -29,16 +30,21 @@ class WebSimulationRuntime:
         prepare_dialogue: bool = True,
     ) -> None:
         self.lock = threading.RLock()
+        self.config_store = SQLiteWorldStore(db_path)
+        if player_name is not None:
+            self.config_store.set_player_name(player_name)
         provided_simulation = simulation is not None
         self.simulation = simulation or Simulation.create_demo(
+            player_name=self.config_store.get_player_name(),
             dialogue_backend=dialogue_backend,
             dialogue_model=dialogue_model,
             dialogue_endpoint=dialogue_endpoint,
             dialogue_adapter_path=dialogue_adapter_path,
         )
-        self.config_store = SQLiteWorldStore(db_path)
         self.store = self.config_store if persist else None
         self.event_log = EventLogFile(event_log_path) if event_log_path is not None else None
+        if provided_simulation and player_name is not None:
+            self.simulation.player.name = self.config_store.get_player_name()
         if not provided_simulation:
             self.simulation.set_dialogue_system_prompt(self.config_store.get_dialogue_system_prompt())
         self.dialogue_ready = False
@@ -642,6 +648,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--host", default="127.0.0.1", help="Host interface to bind.")
     parser.add_argument("--port", type=int, default=8765, help="Port to bind.")
     parser.add_argument(
+        "--player-name",
+        default=None,
+        help="Override and persist the default single-player name used for new demo sessions.",
+    )
+    parser.add_argument(
         "--db",
         default=str(Path("data") / "acidnet.sqlite"),
         help="SQLite database path for world snapshots.",
@@ -685,6 +696,7 @@ def main() -> None:
     runtime = WebSimulationRuntime(
         db_path=args.db,
         persist=not args.no_persist,
+        player_name=args.player_name,
         dialogue_backend=args.dialogue_backend,
         dialogue_model=args.dialogue_model,
         dialogue_endpoint=args.dialogue_endpoint,

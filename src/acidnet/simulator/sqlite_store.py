@@ -9,6 +9,8 @@ from acidnet.llm.prompt_builder import DEFAULT_SYSTEM_PROMPT
 
 SYSTEM_PROMPT_SETTING_KEY = "dialogue.system_prompt"
 SYSTEM_PROMPT_PRESET_ID = "system.default"
+PLAYER_NAME_SETTING_KEY = "player.name"
+DEFAULT_PLAYER_NAME = "Player"
 
 
 class SQLiteWorldStore:
@@ -97,6 +99,13 @@ class SQLiteWorldStore:
             VALUES (?, ?)
             """,
             (SYSTEM_PROMPT_SETTING_KEY, DEFAULT_SYSTEM_PROMPT),
+        )
+        self.connection.execute(
+            """
+            INSERT OR IGNORE INTO runtime_settings (key, value_text)
+            VALUES (?, ?)
+            """,
+            (PLAYER_NAME_SETTING_KEY, DEFAULT_PLAYER_NAME),
         )
         self.connection.commit()
 
@@ -215,6 +224,18 @@ class SQLiteWorldStore:
 
     def get_default_dialogue_system_prompt(self) -> str:
         return DEFAULT_SYSTEM_PROMPT
+
+    def get_player_name(self) -> str:
+        name = self.get_setting(PLAYER_NAME_SETTING_KEY, DEFAULT_PLAYER_NAME)
+        cleaned = (name or "").strip()
+        return cleaned or DEFAULT_PLAYER_NAME
+
+    def set_player_name(self, name: str) -> None:
+        cleaned = (name or "").strip() or DEFAULT_PLAYER_NAME
+        self.set_setting(PLAYER_NAME_SETTING_KEY, cleaned)
+
+    def get_default_player_name(self) -> str:
+        return DEFAULT_PLAYER_NAME
 
     def close(self) -> None:
         self.connection.close()

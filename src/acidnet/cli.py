@@ -16,6 +16,11 @@ and collect rumors as the NPC simulation runs around you.
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run the acidnet terminal village simulation.")
     parser.add_argument(
+        "--player-name",
+        default=None,
+        help="Override and persist the default single-player name used for new demo sessions.",
+    )
+    parser.add_argument(
         "--db",
         default=str(Path("data") / "acidnet.sqlite"),
         help="SQLite database path for world snapshots.",
@@ -56,15 +61,18 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = build_parser().parse_args()
+    config_store = SQLiteWorldStore(args.db)
+    if args.player_name is not None:
+        config_store.set_player_name(args.player_name)
     simulation = Simulation.create_demo(
+        player_name=config_store.get_player_name(),
         dialogue_backend=args.dialogue_backend,
         dialogue_model=args.dialogue_model,
         dialogue_endpoint=args.dialogue_endpoint,
     )
-    store = None if args.no_persist else SQLiteWorldStore(args.db)
+    store = None if args.no_persist else config_store
     event_log = None if args.no_event_log else EventLogFile(args.event_log)
-    if store is not None:
-        simulation.set_dialogue_system_prompt(store.get_dialogue_system_prompt())
+    simulation.set_dialogue_system_prompt(config_store.get_dialogue_system_prompt())
 
     if store is not None:
         store.save_simulation(
@@ -133,6 +141,8 @@ def main() -> None:
                 payload={"entrypoint": "cli"},
             )
             store.close()
+        else:
+            config_store.close()
         if event_log is not None:
             event_log.write(
                 kind="session_end",

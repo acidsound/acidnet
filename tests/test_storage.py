@@ -59,6 +59,24 @@ def test_sqlite_store_round_trips_dialogue_system_prompt_setting() -> None:
         store.close()
 
 
+def test_sqlite_store_round_trips_player_name_setting() -> None:
+    artifact_dir = Path("data") / "test_artifacts"
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    db_path = artifact_dir / "acidnet_player_name_test.sqlite"
+    if db_path.exists():
+        db_path.unlink()
+
+    store = SQLiteWorldStore(db_path)
+    try:
+        assert store.get_player_name() == store.get_default_player_name()
+
+        store.set_player_name("Seoha")
+
+        assert store.get_player_name() == "Seoha"
+    finally:
+        store.close()
+
+
 def test_sqlite_store_latest_snapshot_tracks_latest_runtime_state_across_multiple_saves() -> None:
     artifact_dir = Path("data") / "test_artifacts"
     artifact_dir.mkdir(parents=True, exist_ok=True)

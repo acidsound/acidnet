@@ -79,7 +79,7 @@
     ]
   },
   "player": {
-    "name": "Jaeho",
+    "name": "Player",
     "location_id": "square",
     "money": 35,
     "hunger": 12.0,
@@ -272,6 +272,7 @@
 
 ### `player`
 
+- `name`: 현재 세션의 single-player identity 이며 runtime setting 에서 로드된다
 - `focused_npc_id`: 현재 interaction target 또는 `null`
 - `inventory`: 수량이 양수인 visible inventory 만 노출
 - `travel_state`: route progress 와 travel metadata

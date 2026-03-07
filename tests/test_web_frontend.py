@@ -5,7 +5,7 @@ from urllib import request
 
 from acidnet.frontend.web_app import AcidNetWebServer, WebSimulationRuntime
 from acidnet.llm import DialogueContext, DialogueResult
-from acidnet.simulator import Simulation, build_demo_setup
+from acidnet.simulator import SQLiteWorldStore, Simulation, build_demo_setup
 
 
 class RecordingDialogueAdapter:
@@ -47,12 +47,18 @@ def build_recording_runtime(name: str, system_prompt: str) -> tuple[WebSimulatio
     return runtime, adapter
 
 
-def build_runtime(name: str) -> WebSimulationRuntime:
+def build_runtime(name: str, *, player_name: str | None = None) -> WebSimulationRuntime:
     artifact_dir = Path("data") / "test_artifacts"
     artifact_dir.mkdir(parents=True, exist_ok=True)
     db_path = artifact_dir / f"{name}.sqlite"
     if db_path.exists():
         db_path.unlink()
+    if player_name is not None:
+        store = SQLiteWorldStore(db_path)
+        try:
+            store.set_player_name(player_name)
+        finally:
+            store.close()
     return WebSimulationRuntime(
         db_path=db_path,
         persist=False,
@@ -127,6 +133,16 @@ def test_scene_payload_exposes_player_view_contract() -> None:
     assert "people" in state["scene"]
     assert all("ask_options" in person and "give_options" in person for person in state["scene"]["people"])
     assert isinstance(state["help"], list)
+
+
+def test_runtime_loads_player_name_from_runtime_settings() -> None:
+    runtime = build_runtime("web_frontend_player_name_test", player_name="Seoha")
+    try:
+        state = runtime.scene_payload()
+    finally:
+        runtime.close()
+
+    assert state["player"]["name"] == "Seoha"
 
 
 def test_run_command_updates_target_and_recent_events() -> None:

@@ -79,7 +79,7 @@ Response shape:
     ]
   },
   "player": {
-    "name": "Jaeho",
+    "name": "Player",
     "location_id": "square",
     "money": 35,
     "hunger": 12.0,
@@ -272,6 +272,7 @@ Failure response:
 
 ### `player`
 
+- `name`: runtime-configured single-player identity for the current session
 - `focused_npc_id`: current interaction target or `null`
 - `inventory`: positive-count visible inventory only
 - `debts`: outstanding player debt entries with `npc_id`, `name`, and `amount`

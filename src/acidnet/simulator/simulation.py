@@ -221,8 +221,9 @@ class Simulation:
         dialogue_endpoint: str | None = None,
         dialogue_adapter_path: str | None = None,
         dialogue_system_prompt: str | None = None,
+        player_name: str = "Player",
     ) -> "Simulation":
-        setup = build_demo_setup()
+        setup = build_demo_setup(player_name=player_name)
         return cls(
             world=setup.world,
             player=setup.player,

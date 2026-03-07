@@ -27,7 +27,7 @@ class DemoSetup:
     rumors: dict[str, Rumor]
 
 
-def build_demo_setup() -> DemoSetup:
+def build_demo_setup(*, player_name: str = "Player") -> DemoSetup:
     locations = {
         "square": Location(
             location_id="square",
@@ -528,7 +528,7 @@ def build_demo_setup() -> DemoSetup:
                 npcs[npc_id].known_rumor_ids.append(rumor_id)
 
     player = PlayerState(
-        name="Jaeho",
+        name=(player_name or "").strip() or "Player",
         location_id="square",
         inventory={"bread": 1},
         money=35,

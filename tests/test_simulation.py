@@ -75,6 +75,12 @@ def test_demo_simulation_boots_with_interactable_square() -> None:
     assert "Neri" in description
 
 
+def test_create_demo_uses_configured_player_name() -> None:
+    simulation = Simulation.create_demo(player_name="Seoha")
+
+    assert simulation.player.name == "Seoha"
+
+
 def test_talking_to_npc_can_surface_a_rumor() -> None:
     simulation = Simulation.create_demo()
 
