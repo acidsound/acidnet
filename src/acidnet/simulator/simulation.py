@@ -129,6 +129,8 @@ DEFAULT_SPOILAGE_TICKS = {
     "bread": 72,
     "wheat": 144,
 }
+RECENT_REQUEST_BUFFER_TICKS = 36
+RECENT_REQUEST_BUFFER_EMERGENCY_HUNGER = 88.0
 TOOL_RELEVANT_LOCATIONS = {"farm", "riverside"}
 TOOL_RELEVANT_PROFESSIONS = {"farmer", "fisher"}
 TOOL_WEAR_INTERVAL = 4
@@ -790,8 +792,11 @@ class Simulation:
             giftable = self._giftable_quantity(npc, item)
             if giftable < qty:
                 return TurnResult(self._events("system", [f"{npc.name} cannot spare that much {item} right now."]))
+            recent_request_buffer = self._recent_request_buffer_active(npc, self.player, item)
             requestable = self._requestable_quantity(npc, self.player, item)
             if requestable < qty:
+                if recent_request_buffer:
+                    return TurnResult(self._events("system", [f"{npc.name} already helped you recently and asks you to make do for now."]))
                 return TurnResult(self._events("system", [f"{npc.name} is not willing to give you that much {item} right now."]))
             self._adjust_item(self.player.inventory, item, qty)
             self._adjust_item(npc.inventory, item, -qty)
@@ -1382,6 +1387,13 @@ class Simulation:
             return None
         self._adjust_item(receiver.inventory, item, quantity)
         self._adjust_item(giver.inventory, item, -quantity)
+        self._record_memory(
+            npc_id=giver.npc_id,
+            event_type="exchange",
+            summary=f"Gave {item} to {receiver.name}.",
+            entities=[receiver.npc_id],
+            importance=0.46,
+        )
         self._record_memory(
             npc_id=receiver.npc_id,
             event_type="trade",
@@ -2334,6 +2346,8 @@ class Simulation:
         giftable = self._giftable_quantity(giver, item)
         if giftable <= 0:
             return 0
+        if self._recent_request_buffer_active(giver, receiver, item):
+            return 0
         relationship = self._relationship_score(giver, self._actor_identifier(receiver))
         urgency = 0.0
         if item in FOOD_ITEMS:
@@ -2362,6 +2376,25 @@ class Simulation:
         if willingness >= threshold + 0.62:
             request_cap += 1
         return min(giftable, request_cap)
+
+    def _recent_request_buffer_active(self, giver: NPCState, receiver: NPCState | PlayerState, item: str) -> bool:
+        if item not in FOOD_ITEMS:
+            return False
+        if receiver.hunger >= RECENT_REQUEST_BUFFER_EMERGENCY_HUNGER:
+            return False
+        receiver_id = self._actor_identifier(receiver)
+        cutoff_tick = self.world.tick - RECENT_REQUEST_BUFFER_TICKS
+        for memory in reversed(self.memories[giver.npc_id]):
+            if memory.timestamp_tick < cutoff_tick:
+                break
+            if memory.event_type != "exchange":
+                continue
+            if receiver_id not in memory.entities:
+                continue
+            if not memory.summary.lower().startswith(f"gave {item} "):
+                continue
+            return True
+        return False
 
     def _relationship_score(self, npc: NPCState, other_npc_id: str) -> float:
         relation = npc.relationships.get(other_npc_id)

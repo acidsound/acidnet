@@ -294,8 +294,6 @@ class SimulationMonkeyRunner:
         return "advance_time", "next 1"
 
     def _choose_exploit_observer_action(self) -> tuple[str, str]:
-        if self.simulation.player.hunger >= 42 and self._best_player_food() is not None:
-            return "maintain_self", "meal"
         if self.simulation.player.fatigue >= 74:
             shelter = self.simulation._shelter_rating(self.simulation.player.location_id)
             return ("recover_sleep", "sleep 1") if shelter >= 0.65 else ("recover_rest", "rest 1")
@@ -303,22 +301,41 @@ class SimulationMonkeyRunner:
         hobb = self.simulation.npcs.get("npc.hobb")
         if hobb is None:
             return self._choose_wanderer_action()
-        if hobb.travel_state.is_traveling:
-            return "wait_for_bakery_vendor", "next 1"
-        if self.simulation.player.location_id != hobb.location_id:
-            next_hop = self._next_hop_toward({hobb.location_id})
-            if next_hop is not None:
-                return "reach_bakery_vendor", next_hop
-        if hobb.location_id != self.simulation.player.location_id:
-            return "wait_for_bakery_vendor", "next 1"
-        if hobb.npc_id not in self.observed_constrained_vendor_ids:
-            return "inspect_bakery_vendor", f"inspect {hobb.name}"
+        hobb_probe_complete = (
+            hobb.npc_id in self.observed_constrained_vendor_ids
+            and self.successful_exchange_modes.get("buy", 0) >= 1
+            and hobb.npc_id in self.reserve_refusal_npc_ids
+        )
+        if not hobb_probe_complete:
+            if hobb.travel_state.is_traveling:
+                return "wait_for_bakery_vendor", "next 1"
+            if self.simulation.player.location_id != hobb.location_id:
+                next_hop = self._next_hop_toward({hobb.location_id})
+                if next_hop is not None:
+                    return "reach_bakery_vendor", next_hop
+            if hobb.location_id != self.simulation.player.location_id:
+                return "wait_for_bakery_vendor", "next 1"
+            if hobb.npc_id not in self.observed_constrained_vendor_ids:
+                return "inspect_bakery_vendor", f"inspect {hobb.name}"
 
-        buy_option = self._best_food_option(hobb.npc_id, "buy")
-        if buy_option is not None and self.successful_exchange_modes.get("buy", 0) < 2:
-            return "probe_vendor_buy_floor", f"trade {hobb.name} buy {buy_option.item} 1"
-        if hobb.npc_id not in self.reserve_refusal_npc_ids:
-            return "force_vendor_buy_refusal", f"trade {hobb.name} buy bread 1"
+            buy_option = self._best_food_option(hobb.npc_id, "buy")
+            if buy_option is not None and self.successful_exchange_modes.get("buy", 0) < 2:
+                return "probe_vendor_buy_floor", f"trade {hobb.name} buy {buy_option.item} 1"
+            if hobb.npc_id not in self.reserve_refusal_npc_ids:
+                return "force_vendor_buy_refusal", f"trade {hobb.name} buy bread 1"
+        if self.simulation.player.hunger >= 70:
+            mara = self.simulation.npcs.get("npc.mara")
+            if mara is not None:
+                if self.simulation.player.location_id != mara.location_id:
+                    next_hop = self._next_hop_toward({mara.location_id})
+                    if next_hop is not None:
+                        return "reach_repeat_request_target", next_hop
+                if self.successful_exchange_modes.get("ask", 0) == 0:
+                    return "probe_repeat_food_request", f"trade {mara.name} ask bread 1"
+                if "request_cooldown_refusal" not in self.observed_exchange_refusal_types:
+                    return "force_repeat_request_refusal", f"trade {mara.name} ask bread 1"
+        if self.simulation.player.hunger >= 42 and self._best_player_food() is not None:
+            return "maintain_self", "meal"
         return "observe_post_probe", "status"
 
     def _choose_regional_observer_action(self) -> tuple[str, str]:
@@ -639,6 +656,8 @@ class SimulationMonkeyRunner:
             return "reserve_floor_refusal"
         if "does not have enough" in normalized:
             return "stock_floor_refusal"
+        if "already helped you recently" in normalized:
+            return "request_cooldown_refusal"
         if "is not willing to give you that much" in normalized:
             return "willingness_refusal"
         return None

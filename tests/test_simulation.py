@@ -394,6 +394,38 @@ def test_player_request_respects_npc_reserve_floor() -> None:
     assert simulation.player.inventory.get("bread", 0) == 1
 
 
+def test_player_repeat_food_request_hits_recent_help_buffer() -> None:
+    simulation = Simulation.create_demo()
+    simulation.player.hunger = 78.0
+    simulation.player.money = 0
+    simulation.player.inventory.clear()
+
+    first = simulation.handle_command("trade mara ask bread 1")
+    second = simulation.handle_command("trade mara ask bread 1")
+
+    assert any("gives you 1 bread" in line.lower() for line in first.lines)
+    assert any("already helped you recently" in line.lower() for line in second.lines)
+    assert simulation.player.inventory.get("bread", 0) == 1
+
+
+def test_recent_help_buffer_expires_after_cooldown_window() -> None:
+    simulation = Simulation.create_demo()
+    simulation.player.hunger = 80.0
+    simulation.player.money = 0
+    simulation.player.inventory.clear()
+
+    first = simulation.handle_command("trade mara ask bread 1")
+
+    assert any("gives you 1 bread" in line.lower() for line in first.lines)
+    assert simulation._requestable_quantity(simulation.npcs["npc.mara"], simulation.player, "bread") == 0
+
+    simulation.player.inventory.clear()
+    simulation.player.hunger = 84.0
+    simulation.world.tick += 36
+
+    assert simulation._requestable_quantity(simulation.npcs["npc.mara"], simulation.player, "bread") >= 1
+
+
 def test_player_can_give_items_without_payment() -> None:
     simulation = Simulation.create_demo()
     simulation.player.inventory["bread"] = 2

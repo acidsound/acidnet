@@ -152,6 +152,25 @@ def test_exploit_observer_monkey_report_observes_reserved_stock_and_buy_probe() 
     assert "exploit_observer_never_probed_vendor" not in report.failure_reasons
 
 
+def test_exploit_observer_monkey_hits_repeat_request_refusal_when_hungry() -> None:
+    simulation = Simulation.create_demo()
+    simulation.player.location_id = "square"
+    simulation.player.hunger = 78.0
+    simulation.player.money = 0
+    simulation.player.inventory.clear()
+    runner = SimulationMonkeyRunner(simulation, seed=5, role="exploit_observer")
+    runner.observed_constrained_vendor_ids.add("npc.hobb")
+    runner.successful_exchange_modes["buy"] = 2
+    runner.reserve_refusal_npc_ids.add("npc.hobb")
+
+    report = runner.run_steps(2)
+
+    assert report.goal_counts.get("probe_repeat_food_request", 0) == 1
+    assert report.goal_counts.get("force_repeat_request_refusal", 0) == 1
+    assert report.successful_exchange_modes.get("ask", 0) == 1
+    assert "request_cooldown_refusal" in report.observed_exchange_refusal_types
+
+
 def test_regional_observer_monkey_tracks_market_shift_from_route_pressure() -> None:
     simulation = Simulation.create_demo()
     simulation.world.weather = "storm_front"

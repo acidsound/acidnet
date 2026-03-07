@@ -76,7 +76,9 @@ The current project baseline is:
 - add internal sinks so inventories and production do not stay perfectly stable forever
 - keep sinks legible and recoverable instead of punitive noise
 - food spoilage, player-side tool wear, storage pressure, and one-turn bakery or tavern production delays are now in place
-- next work is one more economy sink or buffer rule plus stronger monkey validation of exploit resistance before deciding whether any NPC-side sink should be added without breaking circulation
+- repeated food `ask` requests to the same NPC now hit a recent-help buffer before they turn into a zero-cash farm loop
+- `exploit_observer` now probes repeated gift-request refusal as well as reserve-constrained cash buys
+- the current entropy-sink closure path is now covered by simulation, monkey, and circulation regressions
 
 ### Phase 6: Multi-Settlement Scaling
 
@@ -101,12 +103,12 @@ Use `docs/context/current-state.md` when choosing between this track and the par
 
 The current simulation-track queue is:
 
-1. complete `20G` with one more economy sink or buffer rule
-2. extend goal monkeys for deeper downstream-economy scoring after route, transit, stock, and price observation
-3. continue toward `20H` summarized regional scaling
+1. extend goal monkeys for deeper downstream-economy scoring after route, transit, stock, and price observation
+2. continue toward `20H` summarized regional scaling
 
 The backend parity audit is now closed enough to leave the immediate queue.
 Keep parity locked through regression coverage when prompt shaping, output cleanup, runtime parser policy, or fallback behavior changes.
+`20G` is now also closed enough to leave the immediate queue.
 
 Open but not first in this thin-slice queue:
 

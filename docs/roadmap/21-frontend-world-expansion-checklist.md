@@ -102,7 +102,7 @@ Current note:
   - `field_stress` and `active_events` are exposed through simulation status and web state
   - the remaining gap is broader blast radius and longer economic knock-on effects
 
-- [ ] Step 20G: Add entropy sinks to the economy loop.
+- [x] Step 20G: Add entropy sinks to the economy loop.
   Exit criteria:
   - introduce at least two of spoilage, storage pressure, tool wear, reserve floors, or delayed production
   - verify that work and trade are still worth doing
@@ -111,7 +111,9 @@ Current note:
   - first sinks are now in place as food spoilage over time and player-side tool wear on repeated field or riverside work
   - player resource work now loses some yield under storage pressure when the carried load is already near capacity
   - baker and cook output now complete one turn after work starts instead of appearing instantly
-  - the remaining gap is one more economy sink or buffer rule plus stronger monkey validation against exploit loops and any later NPC-side sink expansion
+  - repeated food `ask` requests to the same NPC now hit a recent-help buffer before they turn into a zero-cash farm loop
+  - `exploit_observer` now probes repeated gift-request refusal as well as reserve-constrained cash buys
+  - circulation and monkey regressions now cover the closure path for the current entropy slice
 
 - [ ] Step 20H: Add regional scaling.
   Exit criteria:

@@ -79,6 +79,8 @@ If they compete for the next thin slice, this file decides.
 - the web runtime and runtime-adjacent backend tests now also import through `acidnet.simulator`, shrinking the remaining split-facing direct imports
 - the concrete simulation, shared model definitions, demo world fixture, and SQLite/event-log persistence implementations now live under `src/acidnet/simulator/`, with `engine`, `models`, `world`, and `storage` left as compatibility shims
 - the pure browser asset bundle now lives under `src/acidnet/frontend/client/`, separating static client resources more cleanly from the Python web runtime
+- repeated food `ask` requests to the same NPC now hit a recent-help buffer before they turn into a zero-cash farm loop, while acute hunger still bypasses the buffer
+- `exploit_observer` now probes repeated food requests as well as reserve-constrained cash buys, so zero-cash gift farming is covered by the same monkey regression family
 
 ## Immediate Queue
 
@@ -89,9 +91,8 @@ If they compete for the next thin slice, this file decides.
 
 ### Track B: Live Simulation and World Loop
 
-1. Complete `20G` with one more economy sink or buffer rule plus exploit-oriented validation.
-2. Extend goal-driven monkey evaluation toward richer downstream-economy scoring beyond current route, transit, stock-shift, and price-shift observation.
-3. Continue toward stronger summarized regional scaling and downstream transit effects beyond price/scarcity pressure alone.
+1. Extend goal-driven monkey evaluation toward richer downstream-economy scoring beyond current route, transit, stock-shift, and price-shift observation.
+2. Continue toward stronger summarized regional scaling and downstream transit effects beyond price/scarcity pressure alone.
 
 ### Still Open Milestones, But Not The Current Thin-Slice Queue
 
