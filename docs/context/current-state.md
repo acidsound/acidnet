@@ -86,6 +86,8 @@ If they compete for the next thin slice, this file decides.
 - `exploit_observer` now probes repeated food requests as well as reserve-constrained cash buys, so zero-cash gift farming is covered by the same monkey regression family
 - `share [npc] <item> <qty>` now defaults low-stakes social transfer to `give` when the player has the item and to `ask` otherwise, while staying on the same exchange path
 - `trade [npc] barter <give_item> <give_qty> for <get_item> <get_qty>` now lets item-for-item exchange use the same reserve-floor and acceptance path even with non-vendor NPCs
+- `trade [npc] debt <item> <qty>` now extends credit through the same stock, reserve-floor, relationship, urgency, and debt-ceiling checks, and `repay [npc] [amount]` settles that debt on the live command path
+- web state now exposes player debt summaries and per-NPC `debt_options`, so browser-visible exchange state no longer hides the remaining debt leg of `20C`
 
 ## Immediate Queue
 
@@ -96,13 +98,12 @@ If they compete for the next thin slice, this file decides.
 
 ### Track B: Live Simulation and World Loop
 
-1. Continue exchange unification so `20C` closes before later-phase monkey and regional tuning becomes the main queue again.
-2. Tighten the remaining `20D` frontend state contract gaps around DTO naming, route preview, and fuller action catalogs.
-3. After the earlier checklist closures are tighter, resume richer downstream-economy scoring and stronger summarized regional effects.
+1. Tighten the remaining `20D` frontend state contract gaps around DTO naming, route preview, and fuller action catalogs now that `20C` is closed.
+2. After the earlier checklist closures are tighter, resume richer downstream-economy scoring and stronger summarized regional effects.
 
 ### Still Open Milestones, But Not The Current Thin-Slice Queue
 
-- keep the later downstream-economy monkey tuning and summarized regional-effect expansion behind the earlier `20C` and `20D` checklist closures
+- keep the later downstream-economy monkey tuning and summarized regional-effect expansion behind the earlier `20D` checklist closure
 
 ## Current Risks
 

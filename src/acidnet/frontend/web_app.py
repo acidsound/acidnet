@@ -160,6 +160,10 @@ class WebSimulationRuntime:
                         {"item": option.item, "quantity": option.quantity, "price": option.price}
                         for option in self.simulation.player_trade_options(npc.npc_id, mode="give")
                     ],
+                    "debt_options": [
+                        {"item": option.item, "quantity": option.quantity, "price": option.price}
+                        for option in self.simulation.player_trade_options(npc.npc_id, mode="debt")
+                    ],
                 }
             )
         return people
@@ -401,6 +405,15 @@ class WebSimulationRuntime:
                         {"item": item, "quantity": qty}
                         for item, qty in self.simulation.player.inventory.items()
                         if qty > 0
+                    ],
+                    "debts": [
+                        {
+                            "npc_id": npc_id,
+                            "name": self.simulation.npcs[npc_id].name if npc_id in self.simulation.npcs else npc_id,
+                            "amount": amount,
+                        }
+                        for npc_id, amount in sorted(self.simulation.player.debts.items())
+                        if amount > 0
                     ],
                     "travel_state": self.simulation.player.travel_state.model_dump(mode="json"),
                 },

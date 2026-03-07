@@ -50,7 +50,7 @@ Reference:
   - terminal and web state both expose travel progress through `player.travel_state` and scene text
   - travel now explicitly blocks the old location-bound command surface until arrival, so dead instant-move assumptions stay locked out in regression
 
-- [ ] Step 20C: Unify exchange modes.
+- [x] Step 20C: Unify exchange modes.
   Exit criteria:
   - buy, sell, gift, barter, and debt use one rule path
   - reserve-floor logic prevents self-destructive generosity
@@ -63,7 +63,8 @@ Reference:
   - reserve floors already protect both vendor stock and player-side gifting from self-destructive depletion
   - `share [npc] <item> <qty>` now defaults low-stakes social transfer to `give` when the player has the item and to `ask` otherwise, while staying on the same exchange path
   - `trade [npc] barter <give_item> <give_qty> for <get_item> <get_qty>` now keeps item-for-item exchange on the same reserve-floor and acceptance path, including non-vendor barter
-  - the remaining gap is debt and any final cleanup needed so exchange does not split back into vendor trade vs social transfer
+  - `trade [npc] debt <item> <qty>` now keeps credit exchange on the same stock, reserve-floor, relationship, urgency, and debt-ceiling path
+  - `repay [npc] [amount]` now closes the player-visible debt leg on the same live command surface, and web state exposes `player.debts` plus per-NPC `debt_options`
 
 - [ ] Step 20D: Define the frontend state contract.
   Exit criteria:

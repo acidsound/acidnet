@@ -54,7 +54,8 @@ The current project baseline is:
 - use reserve floors and urgency checks to keep altruism stable
 - cash buys, asks, and gifts now share most of the current rule path, and `share [npc] <item> <qty>` now makes low-stakes social transfer default to give-vs-ask on the same exchange path
 - barter now also runs on the same exchange path through `trade [npc] barter <give_item> <give_qty> for <get_item> <get_qty>`, including non-vendor item-for-item exchange
-- remaining work is debt and any final cleanup needed around gift-default semantics
+- debt now also runs on the same exchange path through `trade [npc] debt <item> <qty>`, with `repay [npc] [amount]` clearing the resulting player-visible ledger
+- Phase 3 is now closed; the next queue item is `20D` frontend state-contract cleanup
 
 ### Phase 4: Goal Monkeys
 
@@ -109,14 +110,14 @@ Use `docs/context/current-state.md` when choosing between this track and the par
 
 The current simulation-track queue is:
 
-1. continue `20C` exchange unification until barter, debt, and clearer gift-default behavior are closed
-2. tighten the remaining `20D` frontend state contract gaps before reopening later-phase tuning as the main slice
-3. after the earlier checklist closures are tighter, resume deeper downstream-economy scoring and `20H` summarized regional scaling
+1. tighten the remaining `20D` frontend state contract gaps before reopening later-phase tuning as the main slice
+2. after the earlier checklist closures are tighter, resume deeper downstream-economy scoring and `20H` summarized regional scaling
 
 The backend parity audit is now closed enough to leave the immediate queue.
 Keep parity locked through regression coverage when prompt shaping, output cleanup, runtime parser policy, or fallback behavior changes.
 `20G` is now also closed enough to leave the immediate queue.
 `20B` is now also closed enough to leave the immediate queue.
+`20C` is now also closed enough to leave the immediate queue.
 
 Open but not first in this thin-slice queue:
 

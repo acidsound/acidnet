@@ -54,7 +54,8 @@
 - reserve floor와 urgency check로 이타적 교환이 안정적으로 유지되게 한다
 - 현재 cash buy, ask, gift는 대부분 같은 rule path를 공유하고 있고, `share [npc] <item> <qty>` 는 같은 exchange path 위에서 저강도 social transfer를 give-vs-ask 기본 동작으로 묶는다
 - barter 도 이제 `trade [npc] barter <give_item> <give_qty> for <get_item> <get_qty>` 를 통해 같은 exchange path 위에 올라왔고 non-vendor item-for-item exchange 도 가능하다
-- 남은 일은 debt 와 gift-default semantics 쪽의 마지막 정리다
+- debt 도 이제 `trade [npc] debt <item> <qty>` 를 통해 같은 exchange path 위에 올라왔고, `repay [npc] [amount]` 가 player-visible ledger 를 정리한다
+- Phase 3 는 이제 닫혔고, 다음 queue 는 `20D` frontend state-contract cleanup 이다
 
 ### Phase 4: Goal Monkeys
 
@@ -109,14 +110,14 @@ parallel structural boundary track과 우선순위가 겹치면 `docs/context/cu
 
 현재 simulation-track queue는 다음과 같다.
 
-1. barter, debt, clearer gift-default behavior가 닫힐 때까지 `20C` exchange unification을 계속한다
-2. later-phase tuning을 다시 main slice로 올리기 전에 남아 있는 `20D` frontend state contract gap을 조인다
-3. 앞 단계 체크리스트가 더 조여진 뒤에 deeper downstream-economy scoring과 `20H` summarized regional scaling으로 다시 돌아간다
+1. later-phase tuning을 다시 main slice로 올리기 전에 남아 있는 `20D` frontend state contract gap을 조인다
+2. 앞 단계 체크리스트가 더 조여진 뒤에 deeper downstream-economy scoring과 `20H` summarized regional scaling으로 다시 돌아간다
 
 backend parity audit는 이제 immediate queue에서 내릴 만큼 닫혔다.
 이후에도 prompt shaping, output cleanup, runtime parser policy, fallback behavior가 바뀌면 regression coverage로 parity를 계속 잠근다.
 `20G`도 이제 immediate queue에서 뺄 만큼 닫혔다.
 `20B`도 이제 immediate queue에서 뺄 만큼 닫혔다.
+`20C`도 이제 immediate queue에서 뺄 만큼 닫혔다.
 
 열려 있지만 현재 thin-slice queue의 맨 앞은 아닌 것:
 

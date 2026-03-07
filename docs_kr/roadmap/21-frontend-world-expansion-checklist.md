@@ -50,7 +50,7 @@
   - terminal과 web state는 `player.travel_state`와 scene text로 travel progress를 노출한다
   - travel은 이제 도착 전까지 예전 location-bound command surface를 명시적으로 막으므로, dead instant-move 가정이 regression으로 잠겨 있다
 
-- [ ] Step 20C: exchange mode 통합
+- [x] Step 20C: exchange mode 통합
   Exit criteria:
   - buy, sell, gift, barter, debt가 하나의 rule path를 사용한다
   - reserve-floor logic이 자기파괴적 관대함을 막는다
@@ -63,7 +63,8 @@
   - reserve floor는 vendor stock과 player-side gifting 양쪽에서 자기파괴적 depletion을 막는다
   - `share [npc] <item> <qty>` 는 player 가 item 을 들고 있으면 `give`, 아니면 `ask` 로 가면서 저강도 social transfer를 같은 exchange path 위에 기본 동작으로 묶는다
   - `trade [npc] barter <give_item> <give_qty> for <get_item> <get_qty>` 는 non-vendor barter 까지 포함해 item-for-item exchange 를 같은 reserve-floor 와 acceptance path 위에 둔다
-  - 남은 gap은 debt 와 exchange가 vendor trade와 social transfer로 다시 갈라지지 않게 하는 마지막 정리다
+  - `trade [npc] debt <item> <qty>` 는 credit exchange 를 같은 stock, reserve-floor, relationship, urgency, debt-ceiling path 위에 둔다
+  - `repay [npc] [amount]` 는 player-visible debt leg 를 같은 live command surface 위에서 닫고, web state 는 `player.debts` 와 per-NPC `debt_options` 를 노출한다
 
 - [ ] Step 20D: frontend state contract 정의
   Exit criteria:

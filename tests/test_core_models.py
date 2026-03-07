@@ -112,11 +112,13 @@ def test_player_state_supports_travel_and_load_fields() -> None:
         fatigue=14.0,
         carried_weight=3.5,
         carry_capacity=14.0,
+        debts={"npc.mara": 6},
         travel_state=TravelState(destination_location_id="bakery", ticks_remaining=18),
     )
 
     assert player.fatigue == 14.0
     assert player.carried_weight == 3.5
+    assert player.debts["npc.mara"] == 6
     assert player.travel_state.destination_location_id == "bakery"
 
 

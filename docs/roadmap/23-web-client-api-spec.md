@@ -90,6 +90,7 @@ Response shape:
     "inventory": [
       {"item": "bread", "quantity": 1}
     ],
+    "debts": [],
     "travel_state": {
       "is_traveling": false,
       "route_id": null,
@@ -257,6 +258,7 @@ Failure response:
 
 - `focused_npc_id`: current interaction target or `null`
 - `inventory`: positive-count visible inventory only
+- `debts`: outstanding player debt entries with `npc_id`, `name`, and `amount`
 - `travel_state`: route progress and travel metadata
 - `money`, `hunger`, `fatigue`, `carried_weight`, `carry_capacity`: player survival and load stats
 
@@ -306,6 +308,9 @@ Per-person shape:
   ],
   "give_options": [
     {"item": "bread", "quantity": 1, "price": null}
+  ],
+  "debt_options": [
+    {"item": "bread", "quantity": 1, "price": 6}
   ]
 }
 ```
@@ -317,6 +322,7 @@ Notes:
 - `sell_options` means what the player can sell to this NPC
 - `ask_options` means what the player can request as a no-cash gift from this NPC
 - `give_options` means what the player can give away without payment while staying above reserve
+- `debt_options` means what the player can take on debt right now, with `price` showing the gold that will be owed per unit
 
 ### `scene.rumors`
 
@@ -492,7 +498,7 @@ Important command groups:
 - observation: `look`, `status`, `inventory`, `rumors`, `npcs`, `map`, `help`
 - targeting: `focus <npc>`, `focus clear`, `inspect [npc]`
 - dialogue: `talk [npc]`, `say <npc> <message>`, `ask [npc] rumor`
-- economy: `trade [npc] buy <item> <qty>`, `trade [npc] sell <item> <qty>`, `trade [npc] ask <item> <qty>`, `trade [npc] give <item> <qty>`, `trade [npc] barter <give_item> <give_qty> for <get_item> <get_qty>`, `share [npc] <item> <qty>`
+- economy: `trade [npc] buy <item> <qty>`, `trade [npc] sell <item> <qty>`, `trade [npc] ask <item> <qty>`, `trade [npc] give <item> <qty>`, `trade [npc] debt <item> <qty>`, `trade [npc] barter <give_item> <give_qty> for <get_item> <get_qty>`, `share [npc] <item> <qty>`, `repay [npc] [amount]`
 - survival: `meal`, `eat [item]`, `work`, `next [turns]`
 - travel and recovery: `go <location>`, `rest [turns]`, `sleep [turns]`
 
@@ -505,6 +511,16 @@ Important command groups:
 
 - it stays on the same reserve-floor and acceptance path as the other exchange modes
 - it is not limited to cash vendors
+
+`trade [npc] debt <item> <qty>` is the credit-transfer form:
+
+- it stays on the same stock, reserve-floor, relationship, urgency, and debt-ceiling path as the rest of exchange
+- the resulting player-visible gold balance owed is exposed through `player.debts`
+
+`repay [npc] [amount]` settles outstanding player debt:
+
+- omitting `amount` repays the full remaining balance
+- repayment is location-bound and still uses the raw command surface
 
 ## Error Contract
 

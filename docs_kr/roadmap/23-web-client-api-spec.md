@@ -90,6 +90,7 @@
     "inventory": [
       {"item": "bread", "quantity": 1}
     ],
+    "debts": [],
     "travel_state": {
       "is_traveling": false,
       "route_id": null,
@@ -260,6 +261,8 @@
 - `travel_state`: route progress 와 travel metadata
 - `money`, `hunger`, `fatigue`, `carried_weight`, `carry_capacity`: 생존과 하중 관련 상태
 
+- `debts`: player debt summary (`npc_id`, `name`, `amount`)
+
 ### `actions`
 
 이건 derived command catalog 이지 두 번째 rules engine 이 아니다.
@@ -306,6 +309,9 @@
   ],
   "give_options": [
     {"item": "bread", "quantity": 1, "price": null}
+  ],
+  "debt_options": [
+    {"item": "bread", "quantity": 1, "price": 6}
   ]
 }
 ```
@@ -317,6 +323,8 @@
 - `sell_options` 는 플레이어가 이 NPC에게 팔 수 있는 것
 - `ask_options` 는 플레이어가 이 NPC에게 무상으로 요청할 수 있는 것
 - `give_options` 는 플레이어가 reserve 를 깨지 않고 무상으로 줄 수 있는 것
+
+- `debt_options` 는 debt 로 받을 수 있는 항목이며 `price` 는 unit 당 owed gold 다
 
 ### `scene.rumors`
 
@@ -492,7 +500,7 @@
 - observation: `look`, `status`, `inventory`, `rumors`, `npcs`, `map`, `help`
 - targeting: `focus <npc>`, `focus clear`, `inspect [npc]`
 - dialogue: `talk [npc]`, `say <npc> <message>`, `ask [npc] rumor`
-- economy: `trade [npc] buy <item> <qty>`, `trade [npc] sell <item> <qty>`, `trade [npc] ask <item> <qty>`, `trade [npc] give <item> <qty>`, `trade [npc] barter <give_item> <give_qty> for <get_item> <get_qty>`, `share [npc] <item> <qty>`
+- economy: `trade [npc] buy <item> <qty>`, `trade [npc] sell <item> <qty>`, `trade [npc] ask <item> <qty>`, `trade [npc] give <item> <qty>`, `trade [npc] debt <item> <qty>`, `trade [npc] barter <give_item> <give_qty> for <get_item> <get_qty>`, `share [npc] <item> <qty>`, `repay [npc] [amount]`
 - survival: `meal`, `eat [item]`, `work`, `next [turns]`
 - travel and recovery: `go <location>`, `rest [turns]`, `sleep [turns]`
 
@@ -505,6 +513,16 @@
 
 - 다른 exchange mode 와 같은 reserve-floor 및 acceptance path 위에 있다
 - cash vendor 에만 묶이지 않는다
+
+`trade [npc] debt <item> <qty>` 는 credit-transfer 형식이다:
+
+- stock, reserve-floor, relationship, urgency, debt ceiling 을 같은 exchange path 에서 검사한다
+- 결과 debt 는 `player.debts` 로 노출된다
+
+`repay [npc] [amount]` 는 outstanding debt 를 갚는 명령이다:
+
+- `amount` 를 생략하면 남은 전액을 갚는다
+- repayment 도 여전히 location-bound raw command surface 를 사용한다
 
 ## Error Contract
 

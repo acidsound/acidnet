@@ -69,7 +69,9 @@ Notes:
 
 - `scarcity_index` and `market_prices` are server-authoritative derived values.
 - `active_events` entries currently expose `event_id`, `event_type`, and `summary`.
+- `player.debts` entries currently expose `npc_id`, `name`, and `amount` for outstanding player-visible debt.
 - `regional_nodes` is summarized regional context, including `stock_signals`; it is not raw offscreen NPC state.
+- `scene.people` cards now also expose `debt_options` alongside `buy_options`, `sell_options`, `ask_options`, and `give_options`.
 - `actions` is the allowed action catalog for the current state, not a hint to rebuild rules in the browser.
 - `recent_events` is the append-only player-visible feed, not a full simulation log.
 
@@ -106,11 +108,13 @@ Frontend responsibility:
 
 The client must not synthesize new command grammar from UI assumptions.
 
-Current exchange shortcut note:
+Current exchange and debt command note:
 
 - `share [npc] <item> <qty>` is now a supported low-stakes social-transfer shortcut.
 - it routes to `give` when the player already holds the item, and otherwise routes to `ask`.
 - `trade [npc] barter <give_item> <give_qty> for <get_item> <get_qty>` is now supported as the raw item-for-item exchange command.
+- `trade [npc] debt <item> <qty>` is now supported as the raw credit-transfer command.
+- `repay [npc] [amount]` repays player debt to a local NPC; omitting `amount` repays the full remaining balance.
 
 ### `POST /api/dialogue-prompt`
 

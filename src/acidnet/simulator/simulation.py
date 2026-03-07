@@ -284,8 +284,10 @@ class Simulation:
                 "  trade [npc] sell <item> <qty>",
                 "  trade [npc] ask <item> <qty>",
                 "  trade [npc] give <item> <qty>",
+                "  trade [npc] debt <item> <qty>",
                 "  trade [npc] barter <give_item> <give_qty> for <get_item> <get_qty>",
                 "  share [npc] <item> <qty> Default social transfer: give if you have it, otherwise ask.",
+                "  repay [npc] [amount]     Repay all or part of an outstanding debt in gold.",
                 "  inventory                Show your inventory and gold.",
                 "  status                   Show player and world status.",
                 "  rumors                   Show rumors you know.",
@@ -372,6 +374,7 @@ class Simulation:
             f"Field stress: {self.world.field_stress:.2f}",
             f"Load: {self.player.carried_weight:.1f}/{self.player.carry_capacity:.1f}",
             f"Money: {self.player.money} gold",
+            f"Debts: {self._format_player_debts()}",
             f"Inventory: {self._format_inventory(self.player.inventory)}",
             f"Known rumors: {len(self.player.known_rumor_ids)}",
         ]
@@ -442,6 +445,19 @@ class Simulation:
                 if quantity > 0:
                     options.append(TradeOption(item=item, quantity=quantity))
             return options
+        elif mode == "debt":
+            options = []
+            for item in ITEM_VALUES:
+                quantity = self._debt_offer_quantity(npc, self.player, item)
+                if quantity > 0:
+                    options.append(
+                        TradeOption(
+                            item=item,
+                            quantity=quantity,
+                            price=self._debt_unit_price(npc, item),
+                        )
+                    )
+            return options
         else:
             return []
 
@@ -470,6 +486,8 @@ class Simulation:
         sell_options = self.player_trade_options(npc.npc_id, mode="sell")
         ask_options = self.player_trade_options(npc.npc_id, mode="ask")
         give_options = self.player_trade_options(npc.npc_id, mode="give")
+        debt_options = self.player_trade_options(npc.npc_id, mode="debt")
+        outstanding_debt = self.player.debts.get(npc.npc_id, 0)
         lines = [
             f"Target: {npc.name} ({npc.profession})",
             f"Location: {location}",
@@ -480,7 +498,15 @@ class Simulation:
             + (", ".join(f"{option.item} x{option.quantity} ({option.price}g)" for option in buy_options) if buy_options else "nothing available."),
             "Ask (gift): " + (", ".join(f"{option.item} x{option.quantity}" for option in ask_options) if ask_options else "nothing they can spare right now."),
             "Give (gift): " + (", ".join(f"{option.item} x{option.quantity}" for option in give_options) if give_options else "nothing you can spare right now."),
+            "Debt (credit): "
+            + (
+                ", ".join(f"{option.item} x{option.quantity} ({option.price}g owed each)" for option in debt_options)
+                if debt_options
+                else "nothing they will extend on debt right now."
+            ),
         ]
+        if outstanding_debt > 0:
+            lines.append(f"Outstanding debt: you owe {npc.name} {outstanding_debt} gold.")
         if npc.is_vendor:
             sell_line = (
                 ", ".join(f"{option.item} x{option.quantity} ({option.price}g)" for option in sell_options)
@@ -777,8 +803,8 @@ class Simulation:
             return TurnResult(self._events("system", ["Quantity must be greater than zero."]))
 
         mode = self._normalize_trade_mode(mode)
-        if mode not in {"buy", "sell", "ask", "give"}:
-            return TurnResult(self._events("system", ['Trade mode must be "buy", "sell", "ask", or "give".']))
+        if mode not in {"buy", "sell", "ask", "give", "debt"}:
+            return TurnResult(self._events("system", ['Trade mode must be "buy", "sell", "ask", "give", or "debt".']))
         candidates = self._trade_candidates(mode, item, qty)
         action = f"{mode} {item}"
         npc, error = self._resolve_interaction_npc(npc_query, action=action, candidates=candidates)
@@ -825,6 +851,20 @@ class Simulation:
             self._adjust_item(self.player.inventory, item, qty)
             self._adjust_item(npc.inventory, item, -qty)
             lines.append(f"{npc.name} gives you {qty} {item}.")
+        elif mode == "debt":
+            if self._sellable_quantity(npc, item) < qty:
+                return TurnResult(self._events("system", [f"{npc.name} cannot spare that much {item} right now."]))
+            debt_qty = self._debt_offer_quantity(npc, self.player, item)
+            if debt_qty < qty:
+                outstanding = self.player.debts.get(npc.npc_id, 0)
+                if outstanding > 0:
+                    return TurnResult(self._events("system", [f"{npc.name} says you already owe {outstanding} gold and will not extend more debt right now."]))
+                return TurnResult(self._events("system", [f"{npc.name} will not extend that much {item} on debt right now."]))
+            total = self._debt_unit_price(npc, item) * qty
+            self._adjust_item(self.player.inventory, item, qty)
+            self._adjust_item(npc.inventory, item, -qty)
+            self.player.debts[npc.npc_id] = self.player.debts.get(npc.npc_id, 0) + total
+            lines.append(f"{npc.name} lets you take {qty} {item} on debt for {total} gold.")
         else:
             giftable = self._giftable_quantity(self.player, item)
             if self.player.inventory.get(item, 0) < qty:
@@ -840,24 +880,26 @@ class Simulation:
             "sell": f"Sold {item} to {self.player.name}.",
             "ask": f"Gave {item} to {self.player.name}.",
             "give": f"Received {item} from {self.player.name}.",
+            "debt": f"Extended debt for {item} to {self.player.name}.",
         }[mode]
         player_summary = {
             "buy": f"Bought {item} from {npc.name}.",
             "sell": f"Sold {item} to {npc.name}.",
             "ask": f"Received {item} from {npc.name}.",
             "give": f"Gave {item} to {npc.name}.",
+            "debt": f"Took {item} on debt from {npc.name}.",
         }[mode]
 
         self._record_memory(
             npc_id=npc.npc_id,
-            event_type="exchange" if mode in {"ask", "give"} else "trade",
+            event_type="exchange" if mode in {"ask", "give"} else "debt" if mode == "debt" else "trade",
             summary=memory_summary,
             entities=[self.player.player_id],
             importance=0.65,
         )
         self._record_memory(
             npc_id=self.player.player_id,
-            event_type="exchange" if mode in {"ask", "give"} else "trade",
+            event_type="exchange" if mode in {"ask", "give"} else "debt" if mode == "debt" else "trade",
             summary=player_summary,
             entities=[npc.npc_id],
             importance=0.65,
@@ -866,9 +908,60 @@ class Simulation:
             self._change_relationship(npc, self.player.player_id, trust_delta=0.08, closeness_delta=0.06)
         elif mode == "ask":
             self._change_relationship(npc, self.player.player_id, trust_delta=0.05, closeness_delta=0.05)
+        elif mode == "debt":
+            self._change_relationship(npc, self.player.player_id, trust_delta=0.02, closeness_delta=0.01)
         else:
             self._change_relationship(npc, self.player.player_id, trust_delta=0.03, closeness_delta=0.02)
         self._refresh_market_snapshot()
+        entries = self._events("system", lines)
+        entries.extend(self.advance_turn(1).entries)
+        return TurnResult(entries)
+
+    def repay_npc_debt(self, npc_query: str | None, amount: int | None) -> TurnResult:
+        candidates = [npc for npc in self._npcs_at(self.player.location_id) if self.player.debts.get(npc.npc_id, 0) > 0]
+        npc, error = self._resolve_interaction_npc(npc_query, action="repay debt", candidates=candidates)
+        if npc is None:
+            return TurnResult(self._events("system", [error]))
+
+        owed = self.player.debts.get(npc.npc_id, 0)
+        if owed <= 0:
+            return TurnResult(self._events("system", [f"You do not owe {npc.name} anything right now."]))
+        if amount is None:
+            amount = owed
+        if amount <= 0:
+            return TurnResult(self._events("system", ["Repayment amount must be greater than zero."]))
+        if amount > owed:
+            return TurnResult(self._events("system", [f"You only owe {npc.name} {owed} gold right now."]))
+        if self.player.money < amount:
+            return TurnResult(self._events("system", [f"You need {amount} gold to repay {npc.name}, but you only have {self.player.money}."]))
+
+        self.player.money -= amount
+        npc.money += amount
+        remaining = owed - amount
+        if remaining > 0:
+            self.player.debts[npc.npc_id] = remaining
+        else:
+            self.player.debts.pop(npc.npc_id, None)
+        self._record_memory(
+            npc_id=npc.npc_id,
+            event_type="debt",
+            summary=f"Received {amount} gold in debt repayment from {self.player.name}.",
+            entities=[self.player.player_id],
+            importance=0.66,
+        )
+        self._record_memory(
+            npc_id=self.player.player_id,
+            event_type="debt",
+            summary=f"Repaid {amount} gold to {npc.name}.",
+            entities=[npc.npc_id],
+            importance=0.66,
+        )
+        if remaining > 0:
+            self._change_relationship(npc, self.player.player_id, trust_delta=0.04, closeness_delta=0.02)
+            lines = [f"You repay {amount} gold to {npc.name}. {remaining} gold remains outstanding."]
+        else:
+            self._change_relationship(npc, self.player.player_id, trust_delta=0.08, closeness_delta=0.04)
+            lines = [f"You repay {amount} gold to {npc.name}. Your debt is cleared."]
         entries = self._events("system", lines)
         entries.extend(self.advance_turn(1).entries)
         return TurnResult(entries)
@@ -960,7 +1053,7 @@ class Simulation:
         if not parts:
             return TurnResult([])
         command = parts[0].lower()
-        if self.player.travel_state.is_traveling and command in {"go", "focus", "target", "inspect", "talk", "say", "tell", "ask", "trade", "share", "work"}:
+        if self.player.travel_state.is_traveling and command in {"go", "focus", "target", "inspect", "talk", "say", "tell", "ask", "trade", "share", "repay", "work"}:
             return TurnResult(self._events("system", [self._travel_command_block_message()]))
         if command == "help":
             return TurnResult(self._events("system", [self.help_text()]))
@@ -1053,6 +1146,16 @@ class Simulation:
             except ValueError:
                 return TurnResult(self._events("system", ["Share quantity must be an integer."]))
             return self.share_with_npc(" ".join(parts[1:-2]) if len(parts) > 3 else None, parts[-2], qty)
+        if command == "repay":
+            amount: int | None = None
+            npc_query: str | None = None
+            if len(parts) >= 2:
+                try:
+                    amount = int(parts[-1])
+                    npc_query = " ".join(parts[1:-1]) if len(parts) > 2 else None
+                except ValueError:
+                    npc_query = " ".join(parts[1:])
+            return self.repay_npc_debt(npc_query, amount)
         if command == "next":
             turns = 1
             if len(parts) >= 2:
@@ -2435,6 +2538,9 @@ class Simulation:
         modifier = 1.0 + max(0.0, persona.trade_bias) * 0.25 if buy_from_vendor else 0.55 + max(0.0, persona.trade_bias) * 0.1
         return max(1, round(base_price * modifier))
 
+    def _debt_unit_price(self, lender: NPCState, item: str) -> int:
+        return self._price_for(lender, item, buy_from_vendor=True) if lender.is_vendor else self._exchange_value(item, 1)
+
     def _actor_identifier(self, actor: NPCState | PlayerState) -> str:
         return actor.npc_id if isinstance(actor, NPCState) else actor.player_id
 
@@ -2517,6 +2623,49 @@ class Simulation:
         if willingness >= threshold + 0.62:
             request_cap += 1
         return min(giftable, request_cap)
+
+    def _debt_limit(self, lender: NPCState, borrower: PlayerState, item: str) -> int:
+        relationship = self._relationship_score(lender, self._actor_identifier(borrower))
+        urgency = 0.0
+        if item in FOOD_ITEMS:
+            if borrower.hunger >= 75:
+                urgency += 0.55
+            elif borrower.hunger >= 60:
+                urgency += 0.32
+            if sum(borrower.inventory.get(food, 0) for food in FOOD_ITEMS) == 0:
+                urgency += 0.15
+        willingness = relationship + urgency
+        if lender.is_vendor:
+            willingness += 0.22
+        if lender.profession == "priest" and item in FOOD_ITEMS:
+            willingness += 0.18
+        threshold = 0.34 if item in FOOD_ITEMS else 0.52
+        if willingness < threshold:
+            return 0
+        unit_price = self._debt_unit_price(lender, item)
+        ceiling = unit_price
+        if lender.is_vendor:
+            ceiling += unit_price
+        if relationship >= 0.3:
+            ceiling += unit_price
+        if relationship >= 0.65:
+            ceiling += unit_price
+        if item in FOOD_ITEMS and borrower.hunger >= 75:
+            ceiling += unit_price
+        if lender.profession == "priest" and item in FOOD_ITEMS:
+            ceiling += unit_price
+        return ceiling
+
+    def _debt_offer_quantity(self, lender: NPCState, borrower: PlayerState, item: str) -> int:
+        sellable = self._sellable_quantity(lender, item)
+        if sellable <= 0:
+            return 0
+        outstanding = borrower.debts.get(lender.npc_id, 0)
+        remaining_credit = self._debt_limit(lender, borrower, item) - outstanding
+        unit_price = self._debt_unit_price(lender, item)
+        if remaining_credit < unit_price:
+            return 0
+        return min(sellable, remaining_credit // unit_price)
 
     def _recent_request_buffer_active(self, giver: NPCState, receiver: NPCState | PlayerState, item: str) -> bool:
         if item not in FOOD_ITEMS:
@@ -2940,6 +3089,8 @@ class Simulation:
             return [npc for npc in npcs_here if npc.is_vendor]
         if mode == "ask":
             return [npc for npc in npcs_here if self._requestable_quantity(npc, self.player, item) >= qty]
+        if mode == "debt":
+            return [npc for npc in npcs_here if self._sellable_quantity(npc, item) >= qty]
         if mode == "give" and self._giftable_quantity(self.player, item) >= qty:
             return list(npcs_here)
         return []
@@ -2951,7 +3102,7 @@ class Simulation:
 
     def _normalize_trade_mode(self, mode: str) -> str:
         normalized = mode.lower()
-        aliases = {"gift": "give", "request": "ask"}
+        aliases = {"gift": "give", "request": "ask", "credit": "debt"}
         return aliases.get(normalized, normalized)
 
     def _resolve_npc_here(self, query: str) -> NPCState | None:
@@ -3029,6 +3180,15 @@ class Simulation:
     def _format_inventory(self, inventory: dict[str, int]) -> str:
         goods = [f"{item} x{qty}" for item, qty in inventory.items() if qty > 0]
         return ", ".join(goods) if goods else "empty"
+
+    def _format_player_debts(self) -> str:
+        debts = []
+        for npc_id, amount in sorted(self.player.debts.items(), key=lambda item: item[0]):
+            if amount <= 0:
+                continue
+            npc = self.npcs.get(npc_id)
+            debts.append(f"{npc.name if npc is not None else npc_id} {amount}g")
+        return ", ".join(debts) if debts else "none"
 
     def _inventory_weight(self, inventory: dict[str, int]) -> float:
         return round(sum(ITEM_WEIGHTS.get(item, 1.0) * qty for item, qty in inventory.items()), 2)

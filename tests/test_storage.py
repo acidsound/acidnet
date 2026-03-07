@@ -11,6 +11,7 @@ def test_sqlite_store_persists_world_snapshot() -> None:
     if db_path.exists():
         db_path.unlink()
     simulation = Simulation.create_demo()
+    simulation.player.debts["npc.mara"] = 6
     store = SQLiteWorldStore(db_path)
 
     store.save_simulation(simulation, kind="test_save", message="saved in test", payload={"source": "pytest"})
@@ -19,6 +20,7 @@ def test_sqlite_store_persists_world_snapshot() -> None:
     assert latest is not None
     assert latest["player"]["location_id"] == "square"
     assert "fatigue" in latest["player"]
+    assert latest["player"]["debts"]["npc.mara"] == 6
     assert "travel_state" in latest["player"]
     assert latest["world"]["weather"] == "dry_wind"
 

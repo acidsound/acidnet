@@ -510,6 +510,51 @@ def test_barter_respects_player_reserve_floor() -> None:
     assert simulation.player.inventory.get("bread", 0) == 1
 
 
+def test_player_can_take_food_on_debt_when_vendor_willing() -> None:
+    simulation = Simulation.create_demo()
+    simulation.player.hunger = 78.0
+    simulation.player.money = 0
+    simulation.player.inventory.clear()
+
+    result = simulation.handle_command("trade mara debt bread 1")
+
+    assert any("take 1 bread on debt for 6 gold" in line.lower() for line in result.lines)
+    assert simulation.player.inventory.get("bread", 0) == 1
+    assert simulation.player.debts["npc.mara"] == 6
+
+
+def test_debt_credit_ceiling_blocks_additional_borrowing_until_repaid() -> None:
+    simulation = Simulation.create_demo()
+    simulation.player.hunger = 78.0
+    simulation.player.money = 0
+    simulation.player.inventory.clear()
+
+    for _ in range(3):
+        simulation.handle_command("trade mara debt bread 1")
+
+    result = simulation.handle_command("trade mara debt bread 1")
+
+    assert any("already owe 18 gold" in line.lower() for line in result.lines)
+    assert simulation.player.debts["npc.mara"] == 18
+
+
+def test_player_can_repay_debt_partially_and_then_clear_it() -> None:
+    simulation = Simulation.create_demo()
+    simulation.player.hunger = 78.0
+    simulation.player.money = 0
+    simulation.player.inventory.clear()
+    simulation.handle_command("trade mara debt bread 1")
+    simulation.player.money = 10
+
+    partial = simulation.handle_command("repay mara 3")
+    cleared = simulation.handle_command("repay mara")
+
+    assert any("3 gold remains outstanding" in line.lower() for line in partial.lines)
+    assert any("debt is cleared" in line.lower() for line in cleared.lines)
+    assert "npc.mara" not in simulation.player.debts
+    assert simulation.player.money == 4
+
+
 def test_food_spoilage_reduces_player_inventory_over_time() -> None:
     simulation = Simulation.create_demo()
     simulation.world.market.items["fish"].spoilage_ticks = 24
@@ -767,7 +812,9 @@ def test_traveling_blocks_location_bound_commands_across_the_old_instant_move_su
         "ask neri rumor",
         "trade neri ask bread 1",
         "share mara bread 1",
+        "trade mara debt bread 1",
         "trade mara barter bread 1 for fish 1",
+        "repay mara 1",
         "work",
     ]
 

@@ -271,6 +271,42 @@ def test_api_command_accepts_barter_on_shared_exchange_path() -> None:
     )
 
 
+def test_api_command_accepts_debt_and_returns_player_debt_summary() -> None:
+    runtime = build_runtime("web_frontend_debt_command_test")
+    server, thread, base_url = start_test_server(runtime)
+    try:
+        runtime.simulation.player.hunger = 78.0
+        runtime.simulation.player.money = 0
+        runtime.simulation.player.inventory.clear()
+        result = post_json(base_url, "/api/command", {"command": "trade mara debt bread 1"})
+    finally:
+        stop_test_server(server, thread, runtime)
+
+    assert result["ok"] is True
+    assert any("take 1 bread on debt for 6 gold" in entry["text"].lower() for entry in result["entries"])
+    assert any(
+        debt["npc_id"] == "npc.mara" and debt["amount"] == 6
+        for debt in result["state"]["player"]["debts"]
+    )
+
+
+def test_scene_payload_exposes_debt_options_when_credit_is_available() -> None:
+    runtime = build_runtime("web_frontend_debt_options_test")
+    try:
+        runtime.simulation.player.hunger = 78.0
+        runtime.simulation.player.money = 0
+        runtime.simulation.player.inventory.clear()
+        state = runtime.scene_payload()
+    finally:
+        runtime.close()
+
+    mara = next(person for person in state["scene"]["people"] if person["npc_id"] == "npc.mara")
+    assert any(
+        option["item"] == "bread" and option["quantity"] >= 1 and option["price"] == 6
+        for option in mara["debt_options"]
+    )
+
+
 def test_scene_payload_hides_people_during_travel() -> None:
     runtime = build_runtime("web_frontend_travel_state_test")
     try:

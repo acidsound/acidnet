@@ -243,6 +243,7 @@ class PlayerState(BaseModel):
     carried_weight: float = Field(default=0.0, ge=0.0)
     carry_capacity: float = Field(default=14.0, gt=0.0)
     money: int = Field(default=40, ge=0)
+    debts: dict[str, int] = Field(default_factory=dict)
     travel_state: TravelState = Field(default_factory=TravelState)
     known_rumor_ids: list[str] = Field(default_factory=list)
 
