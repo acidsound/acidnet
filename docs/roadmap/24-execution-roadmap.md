@@ -62,8 +62,8 @@ The current project baseline is:
 - `exploit_observer` now probes reserve-constrained vendor exposure and buy-floor refusals from the player side
 - `regional_observer` now fast-forwards long route completion during deterministic runs and verifies actual cross-settlement observation instead of stalling mid-route
 - `downstream_observer` now records summarized regional stock shifts together with downstream market-price reactions from the player side
-- `downstream_observer` scoring now also distinguishes a coarse route-delay -> transit -> regional-stock -> market-pressure response chain instead of only counting separate downstream signals
-- next work is richer downstream-economy scoring beyond the current summarized response-chain checks
+- `downstream_observer` scoring now also distinguishes a coarse route-delay -> transit -> regional-stock -> market-pressure response chain and item overlap instead of only counting separate downstream signals
+- next work is richer downstream-economy scoring beyond the current summarized response-chain and item-overlap checks
 
 ### Phase 5: External Shocks and Recovery Loops
 
@@ -104,7 +104,7 @@ Use `docs/context/current-state.md` when choosing between this track and the par
 
 The current simulation-track queue is:
 
-1. extend goal monkeys for deeper downstream-economy scoring beyond the current route-delay -> transit -> stock -> market-pressure response-chain checks
+1. extend goal monkeys for deeper downstream-economy scoring beyond the current route-delay -> transit -> stock -> market-pressure response-chain and item-overlap checks
 2. continue toward `20H` summarized regional scaling
 
 The backend parity audit is now closed enough to leave the immediate queue.

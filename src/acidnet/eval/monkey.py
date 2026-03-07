@@ -50,6 +50,7 @@ class MonkeyReport:
     regional_stock_shift_after_transit: bool
     market_pressure_after_stock_shift: bool
     downstream_response_chain_complete: bool
+    downstream_response_items: list[str]
     observed_constrained_vendor_ids: list[str]
     observed_exchange_refusal_types: list[str]
     reserve_refusal_events: int
@@ -195,6 +196,7 @@ class SimulationMonkeyRunner:
             regional_stock_shift_after_transit=self.regional_stock_shift_after_transit,
             market_pressure_after_stock_shift=self.market_pressure_after_stock_shift,
             downstream_response_chain_complete=self.downstream_response_chain_complete,
+            downstream_response_items=self.downstream_response_items,
             observed_constrained_vendor_ids=sorted(self.observed_constrained_vendor_ids),
             observed_exchange_refusal_types=sorted(self.observed_exchange_refusal_types),
             reserve_refusal_events=self.reserve_refusal_events,
@@ -658,6 +660,10 @@ class SimulationMonkeyRunner:
             and self.market_pressure_after_stock_shift
         )
 
+    @property
+    def downstream_response_items(self) -> list[str]:
+        return sorted(self.observed_regional_stock_items & self.observed_market_price_items)
+
     def _record_downstream_response_chain(
         self,
         *,
@@ -797,6 +803,11 @@ class SimulationMonkeyRunner:
                 and not self.downstream_response_chain_complete
             ):
                 failures.append("downstream_observer_missed_response_chain")
+            if (
+                not failures
+                and not self.downstream_response_items
+            ):
+                failures.append("downstream_observer_missing_item_overlap")
         elif self.role == "altruist":
             if self._exchange_count(history, {"give"}) == 0:
                 failures.append("altruist_never_shared_resources")
@@ -841,6 +852,7 @@ class SimulationMonkeyRunner:
             "downstream_observer_missed_regional_stock_shift": 0.22,
             "downstream_observer_missed_market_shift": 0.2,
             "downstream_observer_missed_response_chain": 0.18,
+            "downstream_observer_missing_item_overlap": 0.14,
             "altruist_never_shared_resources": 0.28,
             "altruist_overextended_self": 0.2,
             "trader_never_completed_cash_exchange": 0.28,
