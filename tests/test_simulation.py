@@ -475,6 +475,41 @@ def test_share_respects_player_reserve_floor_when_it_defaults_to_give() -> None:
     assert simulation.player.inventory.get("bread", 0) == 1
 
 
+def test_player_can_barter_with_non_vendor_on_same_exchange_path() -> None:
+    simulation = Simulation.create_demo()
+    simulation.player.location_id = "riverside"
+    simulation.player.inventory = {"bread": 2}
+    starting_fish = simulation.player.inventory.get("fish", 0)
+
+    result = simulation.handle_command("trade toma barter bread 1 for fish 1")
+
+    assert any("barter 1 bread with Toma for 1 fish".lower() in line.lower() for line in result.lines)
+    assert simulation.player.inventory.get("bread", 0) == 1
+    assert simulation.player.inventory.get("fish", 0) == starting_fish + 1
+
+
+def test_barter_rejects_underpaying_offer() -> None:
+    simulation = Simulation.create_demo()
+    simulation.player.inventory = {"wheat": 2}
+
+    result = simulation.handle_command("trade mara barter wheat 1 for stew 1")
+
+    assert any("does not think 1 wheat is enough for 1 stew" in line.lower() for line in result.lines)
+    assert simulation.player.inventory.get("wheat", 0) == 2
+    assert simulation.player.inventory.get("stew", 0) == 0
+
+
+def test_barter_respects_player_reserve_floor() -> None:
+    simulation = Simulation.create_demo()
+    simulation.player.location_id = "riverside"
+    simulation.player.inventory = {"bread": 1}
+
+    result = simulation.handle_command("trade toma barter bread 1 for fish 1")
+
+    assert any("cannot spare that much bread" in line.lower() for line in result.lines)
+    assert simulation.player.inventory.get("bread", 0) == 1
+
+
 def test_food_spoilage_reduces_player_inventory_over_time() -> None:
     simulation = Simulation.create_demo()
     simulation.world.market.items["fish"].spoilage_ticks = 24
@@ -731,6 +766,8 @@ def test_traveling_blocks_location_bound_commands_across_the_old_instant_move_su
         "say neri hello",
         "ask neri rumor",
         "trade neri ask bread 1",
+        "share mara bread 1",
+        "trade mara barter bread 1 for fish 1",
         "work",
     ]
 

@@ -492,7 +492,7 @@ Important command groups:
 - observation: `look`, `status`, `inventory`, `rumors`, `npcs`, `map`, `help`
 - targeting: `focus <npc>`, `focus clear`, `inspect [npc]`
 - dialogue: `talk [npc]`, `say <npc> <message>`, `ask [npc] rumor`
-- economy: `trade [npc] buy <item> <qty>`, `trade [npc] sell <item> <qty>`, `trade [npc] ask <item> <qty>`, `trade [npc] give <item> <qty>`, `share [npc] <item> <qty>`
+- economy: `trade [npc] buy <item> <qty>`, `trade [npc] sell <item> <qty>`, `trade [npc] ask <item> <qty>`, `trade [npc] give <item> <qty>`, `trade [npc] barter <give_item> <give_qty> for <get_item> <get_qty>`, `share [npc] <item> <qty>`
 - survival: `meal`, `eat [item]`, `work`, `next [turns]`
 - travel and recovery: `go <location>`, `rest [turns]`, `sleep [turns]`
 
@@ -500,6 +500,11 @@ Important command groups:
 
 - if the player already has the item, it routes to `trade ... give ...`
 - otherwise it routes to `trade ... ask ...`
+
+`trade [npc] barter <give_item> <give_qty> for <get_item> <get_qty>` is the item-for-item exchange form:
+
+- it stays on the same reserve-floor and acceptance path as the other exchange modes
+- it is not limited to cash vendors
 
 ## Error Contract
 

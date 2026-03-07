@@ -53,7 +53,8 @@ The current project baseline is:
 - support gift, barter, debt, and cash without fragmenting the rules
 - use reserve floors and urgency checks to keep altruism stable
 - cash buys, asks, and gifts now share most of the current rule path, and `share [npc] <item> <qty>` now makes low-stakes social transfer default to give-vs-ask on the same exchange path
-- remaining work is barter, debt, and any final cleanup needed around gift-default semantics
+- barter now also runs on the same exchange path through `trade [npc] barter <give_item> <give_qty> for <get_item> <get_qty>`, including non-vendor item-for-item exchange
+- remaining work is debt and any final cleanup needed around gift-default semantics
 
 ### Phase 4: Goal Monkeys
 

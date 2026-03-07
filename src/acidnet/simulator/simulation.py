@@ -284,6 +284,7 @@ class Simulation:
                 "  trade [npc] sell <item> <qty>",
                 "  trade [npc] ask <item> <qty>",
                 "  trade [npc] give <item> <qty>",
+                "  trade [npc] barter <give_item> <give_qty> for <get_item> <get_qty>",
                 "  share [npc] <item> <qty> Default social transfer: give if you have it, otherwise ask.",
                 "  inventory                Show your inventory and gold.",
                 "  status                   Show player and world status.",
@@ -881,6 +882,72 @@ class Simulation:
         mode = "give" if self.player.inventory.get(item, 0) > 0 else "ask"
         return self.trade_with_npc(npc_query, mode, item, qty)
 
+    def barter_with_npc(
+        self,
+        npc_query: str | None,
+        give_item_query: str,
+        give_qty: int,
+        get_item_query: str,
+        get_qty: int,
+    ) -> TurnResult:
+        give_item = self._resolve_item(give_item_query)
+        get_item = self._resolve_item(get_item_query)
+        if give_item is None:
+            return TurnResult(self._events("system", [f'Unknown item "{give_item_query}".']))
+        if get_item is None:
+            return TurnResult(self._events("system", [f'Unknown item "{get_item_query}".']))
+        if give_item == get_item:
+            return TurnResult(self._events("system", ["Barter needs different offered and requested items."]))
+        if give_qty <= 0 or get_qty <= 0:
+            return TurnResult(self._events("system", ["Barter quantities must be greater than zero."]))
+
+        candidates = self._barter_candidates(give_item, give_qty, get_item, get_qty)
+        action = f"barter {give_item} for {get_item}"
+        npc, error = self._resolve_interaction_npc(npc_query, action=action, candidates=candidates)
+        if npc is None:
+            return TurnResult(self._events("system", [error]))
+
+        if self.player.inventory.get(give_item, 0) < give_qty:
+            return TurnResult(self._events("system", [f"You do not have enough {give_item}."]))
+        if self._giftable_quantity(self.player, give_item) < give_qty:
+            return TurnResult(self._events("system", [f"You cannot spare that much {give_item} without cutting into your reserve."]))
+        if self._sellable_quantity(npc, get_item) < get_qty:
+            return TurnResult(self._events("system", [f"{npc.name} cannot spare that much {get_item} right now."]))
+
+        offered_value = self._exchange_value(give_item, give_qty)
+        requested_value = self._exchange_value(get_item, get_qty)
+        if offered_value < self._barter_required_value(npc, offered_item=give_item, requested_item=get_item, requested_value=requested_value):
+            return TurnResult(
+                self._events(
+                    "system",
+                    [f"{npc.name} does not think {give_qty} {give_item} is enough for {get_qty} {get_item}."],
+                )
+            )
+
+        self._adjust_item(self.player.inventory, give_item, -give_qty)
+        self._adjust_item(npc.inventory, give_item, give_qty)
+        self._adjust_item(self.player.inventory, get_item, get_qty)
+        self._adjust_item(npc.inventory, get_item, -get_qty)
+        self._record_memory(
+            npc_id=npc.npc_id,
+            event_type="trade",
+            summary=f"Bartered {get_item} for {give_item} with {self.player.name}.",
+            entities=[self.player.player_id],
+            importance=0.67,
+        )
+        self._record_memory(
+            npc_id=self.player.player_id,
+            event_type="trade",
+            summary=f"Bartered {give_item} for {get_item} with {npc.name}.",
+            entities=[npc.npc_id],
+            importance=0.67,
+        )
+        self._change_relationship(npc, self.player.player_id, trust_delta=0.04, closeness_delta=0.03)
+        self._refresh_market_snapshot()
+        entries = self._events("system", [f"You barter {give_qty} {give_item} with {npc.name} for {get_qty} {get_item}."])
+        entries.extend(self.advance_turn(1).entries)
+        return TurnResult(entries)
+
     def advance_turn(self, turns: int) -> TurnResult:
         turns = max(1, turns)
         lines: list[str] = []
@@ -893,7 +960,7 @@ class Simulation:
         if not parts:
             return TurnResult([])
         command = parts[0].lower()
-        if self.player.travel_state.is_traveling and command in {"go", "focus", "target", "inspect", "talk", "say", "tell", "ask", "trade", "work"}:
+        if self.player.travel_state.is_traveling and command in {"go", "focus", "target", "inspect", "talk", "say", "tell", "ask", "trade", "share", "work"}:
             return TurnResult(self._events("system", [self._travel_command_block_message()]))
         if command == "help":
             return TurnResult(self._events("system", [self.help_text()]))
@@ -958,6 +1025,23 @@ class Simulation:
         if command == "ask" and len(parts) >= 2:
             return self.ask_npc(" ".join(parts[1:-1]) if len(parts) >= 3 else None, parts[-1])
         if command == "trade" and len(parts) >= 4:
+            lowered_parts = [part.lower() for part in parts]
+            if "barter" in lowered_parts[1:]:
+                barter_index = lowered_parts.index("barter")
+                if len(parts) - barter_index != 6 or lowered_parts[barter_index + 3] != "for":
+                    return TurnResult(
+                        self._events(
+                            "system",
+                            ['Barter usage is `trade [npc] barter <give_item> <give_qty> for <get_item> <get_qty>`.'],
+                        )
+                    )
+                try:
+                    give_qty = int(parts[barter_index + 2])
+                    get_qty = int(parts[barter_index + 5])
+                except ValueError:
+                    return TurnResult(self._events("system", ["Barter quantities must be integers."]))
+                npc_query = " ".join(parts[1:barter_index]) if barter_index > 1 else None
+                return self.barter_with_npc(npc_query, parts[barter_index + 1], give_qty, parts[barter_index + 4], get_qty)
             try:
                 qty = int(parts[-1])
             except ValueError:
@@ -2380,6 +2464,25 @@ class Simulation:
     def _giftable_quantity(self, giver: NPCState | PlayerState, item: str) -> int:
         return self._sellable_quantity(giver, item)
 
+    def _exchange_value(self, item: str, qty: int) -> int:
+        market_item = self.world.market.items.get(item)
+        unit_value = market_item.current_price if market_item is not None else ITEM_VALUES[item]
+        return max(1, unit_value * qty)
+
+    def _barter_required_value(self, npc: NPCState, *, offered_item: str, requested_item: str, requested_value: int) -> float:
+        relationship = max(0.0, self._relationship_score(npc, self.player.player_id))
+        discount = min(0.18, relationship * 0.12)
+        urgency_discount = 0.0
+        if offered_item in FOOD_ITEMS and npc.hunger >= 55:
+            urgency_discount += 0.08
+        if offered_item == "wheat" and npc.profession == "baker":
+            urgency_discount += 0.12
+        if offered_item == "fish" and npc.profession == "cook":
+            urgency_discount += 0.12
+        if requested_item in FOOD_ITEMS and npc.hunger >= 45:
+            urgency_discount = max(0.0, urgency_discount - 0.05)
+        return max(1.0, requested_value * max(0.7, 1.0 - discount - urgency_discount))
+
     def _requestable_quantity(self, giver: NPCState, receiver: NPCState | PlayerState, item: str) -> int:
         giftable = self._giftable_quantity(giver, item)
         if giftable <= 0:
@@ -2840,6 +2943,11 @@ class Simulation:
         if mode == "give" and self._giftable_quantity(self.player, item) >= qty:
             return list(npcs_here)
         return []
+
+    def _barter_candidates(self, give_item: str, give_qty: int, get_item: str, get_qty: int) -> list[NPCState]:
+        if self._giftable_quantity(self.player, give_item) < give_qty:
+            return []
+        return [npc for npc in self._npcs_at(self.player.location_id) if self._sellable_quantity(npc, get_item) >= get_qty]
 
     def _normalize_trade_mode(self, mode: str) -> str:
         normalized = mode.lower()

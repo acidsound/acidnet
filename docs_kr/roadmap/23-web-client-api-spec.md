@@ -492,7 +492,7 @@
 - observation: `look`, `status`, `inventory`, `rumors`, `npcs`, `map`, `help`
 - targeting: `focus <npc>`, `focus clear`, `inspect [npc]`
 - dialogue: `talk [npc]`, `say <npc> <message>`, `ask [npc] rumor`
-- economy: `trade [npc] buy <item> <qty>`, `trade [npc] sell <item> <qty>`, `trade [npc] ask <item> <qty>`, `trade [npc] give <item> <qty>`, `share [npc] <item> <qty>`
+- economy: `trade [npc] buy <item> <qty>`, `trade [npc] sell <item> <qty>`, `trade [npc] ask <item> <qty>`, `trade [npc] give <item> <qty>`, `trade [npc] barter <give_item> <give_qty> for <get_item> <get_qty>`, `share [npc] <item> <qty>`
 - survival: `meal`, `eat [item]`, `work`, `next [turns]`
 - travel and recovery: `go <location>`, `rest [turns]`, `sleep [turns]`
 
@@ -500,6 +500,11 @@
 
 - player 가 이미 그 item 을 들고 있으면 `trade ... give ...` 로 간다
 - 그렇지 않으면 `trade ... ask ...` 로 간다
+
+`trade [npc] barter <give_item> <give_qty> for <get_item> <get_qty>` 는 item-for-item exchange 형식이다:
+
+- 다른 exchange mode 와 같은 reserve-floor 및 acceptance path 위에 있다
+- cash vendor 에만 묶이지 않는다
 
 ## Error Contract
 

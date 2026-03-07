@@ -62,7 +62,8 @@
   - 현재 cash buy, ask, gift는 대부분 같은 rule path와 reserve-floor logic을 공유한다
   - reserve floor는 vendor stock과 player-side gifting 양쪽에서 자기파괴적 depletion을 막는다
   - `share [npc] <item> <qty>` 는 player 가 item 을 들고 있으면 `give`, 아니면 `ask` 로 가면서 저강도 social transfer를 같은 exchange path 위에 기본 동작으로 묶는다
-  - 남은 gap은 barter, debt, 그리고 exchange가 vendor trade와 social transfer로 다시 갈라지지 않게 하는 마지막 정리다
+  - `trade [npc] barter <give_item> <give_qty> for <get_item> <get_qty>` 는 non-vendor barter 까지 포함해 item-for-item exchange 를 같은 reserve-floor 와 acceptance path 위에 둔다
+  - 남은 gap은 debt 와 exchange가 vendor trade와 social transfer로 다시 갈라지지 않게 하는 마지막 정리다
 
 - [ ] Step 20D: frontend state contract 정의
   Exit criteria:

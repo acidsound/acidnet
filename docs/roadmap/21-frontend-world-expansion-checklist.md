@@ -62,7 +62,8 @@ Reference:
   - cash buys, asks, and gifts now share most of the current rule path and reserve-floor logic
   - reserve floors already protect both vendor stock and player-side gifting from self-destructive depletion
   - `share [npc] <item> <qty>` now defaults low-stakes social transfer to `give` when the player has the item and to `ask` otherwise, while staying on the same exchange path
-  - the remaining gap is barter, debt, and any final cleanup needed so exchange does not split back into vendor trade vs social transfer
+  - `trade [npc] barter <give_item> <give_qty> for <get_item> <get_qty>` now keeps item-for-item exchange on the same reserve-floor and acceptance path, including non-vendor barter
+  - the remaining gap is debt and any final cleanup needed so exchange does not split back into vendor trade vs social transfer
 
 - [ ] Step 20D: Define the frontend state contract.
   Exit criteria:

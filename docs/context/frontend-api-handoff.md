@@ -110,6 +110,7 @@ Current exchange shortcut note:
 
 - `share [npc] <item> <qty>` is now a supported low-stakes social-transfer shortcut.
 - it routes to `give` when the player already holds the item, and otherwise routes to `ask`.
+- `trade [npc] barter <give_item> <give_qty> for <get_item> <get_qty>` is now supported as the raw item-for-item exchange command.
 
 ### `POST /api/dialogue-prompt`
 

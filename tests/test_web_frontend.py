@@ -254,6 +254,23 @@ def test_api_command_accepts_share_shortcut_for_social_transfer() -> None:
     )
 
 
+def test_api_command_accepts_barter_on_shared_exchange_path() -> None:
+    runtime = build_runtime("web_frontend_barter_command_test")
+    server, thread, base_url = start_test_server(runtime)
+    try:
+        runtime.simulation.player.inventory["bread"] = 2
+        result = post_json(base_url, "/api/command", {"command": "trade mara barter bread 1 for fish 1"})
+    finally:
+        stop_test_server(server, thread, runtime)
+
+    assert result["ok"] is True
+    assert any("barter 1 bread with Mara for 1 fish".lower() in entry["text"].lower() for entry in result["entries"])
+    assert any(
+        item["item"] == "fish" and item["quantity"] >= 1
+        for item in result["state"]["player"]["inventory"]
+    )
+
+
 def test_scene_payload_hides_people_during_travel() -> None:
     runtime = build_runtime("web_frontend_travel_state_test")
     try:

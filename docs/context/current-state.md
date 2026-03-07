@@ -85,6 +85,7 @@ If they compete for the next thin slice, this file decides.
 - repeated food `ask` requests to the same NPC now hit a recent-help buffer before they turn into a zero-cash farm loop, while acute hunger still bypasses the buffer
 - `exploit_observer` now probes repeated food requests as well as reserve-constrained cash buys, so zero-cash gift farming is covered by the same monkey regression family
 - `share [npc] <item> <qty>` now defaults low-stakes social transfer to `give` when the player has the item and to `ask` otherwise, while staying on the same exchange path
+- `trade [npc] barter <give_item> <give_qty> for <get_item> <get_qty>` now lets item-for-item exchange use the same reserve-floor and acceptance path even with non-vendor NPCs
 
 ## Immediate Queue
 
