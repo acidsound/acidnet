@@ -46,6 +46,10 @@ class MonkeyReport:
     peak_market_scarcity: float
     observed_market_price_items: list[str]
     market_price_shift_events: int
+    transit_after_route_delay: bool
+    regional_stock_shift_after_transit: bool
+    market_pressure_after_stock_shift: bool
+    downstream_response_chain_complete: bool
     observed_constrained_vendor_ids: list[str]
     observed_exchange_refusal_types: list[str]
     reserve_refusal_events: int
@@ -93,6 +97,12 @@ class SimulationMonkeyRunner:
         self.last_market_prices = {
             item_id: state.current_price for item_id, state in simulation.world.market.items.items()
         }
+        self.initial_market_prices = dict(self.last_market_prices)
+        self.initial_market_scarcity = simulation.world.market.scarcity_index
+        self.route_delay_seen_for_downstream_chain = bool(self.observed_route_delay_ids)
+        self.transit_after_route_delay = self.route_delay_seen_for_downstream_chain and self.peak_regional_transits > 0
+        self.regional_stock_shift_after_transit = False
+        self.market_pressure_after_stock_shift = False
         self.observed_constrained_vendor_ids: set[str] = set()
         self.observed_exchange_refusal_types: set[str] = set()
         self.reserve_refusal_events = 0
@@ -108,11 +118,13 @@ class SimulationMonkeyRunner:
         result = self.simulation.handle_command(command)
         self.peak_field_stress = max(self.peak_field_stress, self.simulation.world.field_stress)
         self.observed_event_types.update(event.event_type for event in self.simulation.world.active_events)
-        self.observed_route_delay_ids.update(
-            event.route_id
-            for event in self.simulation._visible_world_events_for_player()
-            if event.event_type == "route_delay" and event.route_id is not None
-        )
+        visible_events = self.simulation._visible_world_events_for_player()
+        route_delay_visible = False
+        for event in visible_events:
+            if event.event_type != "route_delay" or event.route_id is None:
+                continue
+            route_delay_visible = True
+            self.observed_route_delay_ids.add(event.route_id)
         current_region = self.simulation.current_region()
         if current_region is not None:
             self.visited_regions.add(current_region.region_id)
@@ -128,8 +140,13 @@ class SimulationMonkeyRunner:
         if command.startswith("ask ") and command.endswith(" rumor") and targeted_npc_id is not None:
             self.asked_rumor_npc_ids.add(targeted_npc_id)
         self._record_exchange_outcome(result.lines, trade_mode=trade_mode, targeted_trade_npc_id=targeted_trade_npc_id)
-        self._record_regional_stock_shifts()
+        regional_stock_shifts = self._record_regional_stock_shifts()
         self._record_market_price_shifts()
+        self._record_downstream_response_chain(
+            route_delay_visible=route_delay_visible,
+            transit_visible=bool(self.simulation.world.regional_transits),
+            regional_stock_shifts=regional_stock_shifts,
+        )
         self._record_visible_exchange_constraints()
         self._assert_invariants()
         step = MonkeyStep(
@@ -174,6 +191,10 @@ class SimulationMonkeyRunner:
             peak_market_scarcity=round(self.peak_market_scarcity, 3),
             observed_market_price_items=sorted(self.observed_market_price_items),
             market_price_shift_events=self.market_price_shift_events,
+            transit_after_route_delay=self.transit_after_route_delay,
+            regional_stock_shift_after_transit=self.regional_stock_shift_after_transit,
+            market_pressure_after_stock_shift=self.market_pressure_after_stock_shift,
+            downstream_response_chain_complete=self.downstream_response_chain_complete,
             observed_constrained_vendor_ids=sorted(self.observed_constrained_vendor_ids),
             observed_exchange_refusal_types=sorted(self.observed_exchange_refusal_types),
             reserve_refusal_events=self.reserve_refusal_events,
@@ -604,15 +625,19 @@ class SimulationMonkeyRunner:
                 if targeted_trade_npc_id is not None:
                     self.reserve_refusal_npc_ids.add(targeted_trade_npc_id)
 
-    def _record_market_price_shifts(self) -> None:
+    def _record_market_price_shifts(self) -> int:
+        shift_count = 0
         for item_id, state in self.simulation.world.market.items.items():
             previous_price = self.last_market_prices.get(item_id, state.current_price)
             if state.current_price != previous_price:
                 self.observed_market_price_items.add(item_id)
                 self.market_price_shift_events += 1
+                shift_count += 1
             self.last_market_prices[item_id] = state.current_price
+        return shift_count
 
-    def _record_regional_stock_shifts(self) -> None:
+    def _record_regional_stock_shifts(self) -> int:
+        shift_count = 0
         for region_id, region in self.simulation.world.regions.items():
             previous_signals = self.last_regional_stock_signals.get(region_id, {})
             for item_id, quantity in region.stock_signals.items():
@@ -621,7 +646,41 @@ class SimulationMonkeyRunner:
                 self.observed_regional_stock_regions.add(region_id)
                 self.observed_regional_stock_items.add(item_id)
                 self.regional_stock_shift_events += 1
+                shift_count += 1
             self.last_regional_stock_signals[region_id] = dict(region.stock_signals)
+        return shift_count
+
+    @property
+    def downstream_response_chain_complete(self) -> bool:
+        return (
+            self.transit_after_route_delay
+            and self.regional_stock_shift_after_transit
+            and self.market_pressure_after_stock_shift
+        )
+
+    def _record_downstream_response_chain(
+        self,
+        *,
+        route_delay_visible: bool,
+        transit_visible: bool,
+        regional_stock_shifts: int,
+    ) -> None:
+        if route_delay_visible:
+            self.route_delay_seen_for_downstream_chain = True
+        if transit_visible and self.route_delay_seen_for_downstream_chain:
+            self.transit_after_route_delay = True
+        if regional_stock_shifts > 0 and self.transit_after_route_delay:
+            self.regional_stock_shift_after_transit = True
+        if self.regional_stock_shift_after_transit and self._market_pressure_differs_from_baseline():
+            self.market_pressure_after_stock_shift = True
+
+    def _market_pressure_differs_from_baseline(self) -> bool:
+        if self.simulation.world.market.scarcity_index > self.initial_market_scarcity:
+            return True
+        for item_id, state in self.simulation.world.market.items.items():
+            if state.current_price != self.initial_market_prices.get(item_id, state.current_price):
+                return True
+        return False
 
     def _record_visible_exchange_constraints(self) -> None:
         if self.simulation.player.travel_state.is_traveling:
@@ -733,6 +792,11 @@ class SimulationMonkeyRunner:
                 failures.append("downstream_observer_missed_regional_stock_shift")
             if self.market_price_shift_events == 0:
                 failures.append("downstream_observer_missed_market_shift")
+            if (
+                not failures
+                and not self.downstream_response_chain_complete
+            ):
+                failures.append("downstream_observer_missed_response_chain")
         elif self.role == "altruist":
             if self._exchange_count(history, {"give"}) == 0:
                 failures.append("altruist_never_shared_resources")
@@ -776,6 +840,7 @@ class SimulationMonkeyRunner:
             "downstream_observer_never_saw_transit_flow": 0.24,
             "downstream_observer_missed_regional_stock_shift": 0.22,
             "downstream_observer_missed_market_shift": 0.2,
+            "downstream_observer_missed_response_chain": 0.18,
             "altruist_never_shared_resources": 0.28,
             "altruist_overextended_self": 0.2,
             "trader_never_completed_cash_exchange": 0.28,

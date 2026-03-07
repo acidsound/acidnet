@@ -88,7 +88,8 @@
   - observation role은 이제 `shock_observer`, `hoarder`, `exploit_observer`, `regional_observer`, `downstream_observer`까지 확장됐다
   - 각 step은 선택한 command와 함께 goal label을 기록한다
   - rule-based scoring과 actionable failure summary가 monkey report에 들어간다
-  - Remaining gap: 현재 route, transit, stock-shift, price-shift 관찰을 넘는 richer downstream-economy scoring
+  - `downstream_observer`는 이제 분리된 downstream signal 나열만이 아니라 대략적인 route-delay -> transit -> stock-shift -> market-pressure response chain도 구분한다
+  - Remaining gap: 현재 summarized response-chain 체크를 넘는 richer downstream-economy scoring
 
 - [ ] Step 20F: 첫 controllable external shock 추가
   Exit criteria:
