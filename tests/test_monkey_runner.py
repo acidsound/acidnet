@@ -1,5 +1,5 @@
-from acidnet.engine import Simulation
 from acidnet.eval import SimulationMonkeyRunner
+from acidnet.simulator import Simulation
 
 
 def test_monkey_runner_executes_deterministic_steps_without_breaking_invariants() -> None:
@@ -21,6 +21,21 @@ def test_monkey_runner_executes_deterministic_steps_without_breaking_invariants(
     assert all(step.goal for step in report.steps)
     assert all(step.command for step in report.steps)
     assert all(step.entries for step in report.steps)
+
+
+def test_monkey_runner_replays_same_seed_and_role_deterministically() -> None:
+    first_simulation = Simulation.create_demo()
+    second_simulation = Simulation.create_demo()
+
+    first_report = SimulationMonkeyRunner(first_simulation, seed=13, role="wanderer").run_steps(10)
+    second_report = SimulationMonkeyRunner(second_simulation, seed=13, role="wanderer").run_steps(10)
+
+    assert [step.goal for step in first_report.steps] == [step.goal for step in second_report.steps]
+    assert [step.command for step in first_report.steps] == [step.command for step in second_report.steps]
+    assert first_report.final_player_location == second_report.final_player_location
+    assert first_report.final_player_hunger == second_report.final_player_hunger
+    assert first_report.final_player_fatigue == second_report.final_player_fatigue
+    assert first_report.failure_reasons == second_report.failure_reasons
 
 
 def test_survivor_monkey_prefers_food_when_hungry() -> None:
@@ -98,3 +113,80 @@ def test_hoarder_monkey_triggers_storage_pressure_when_capacity_is_low() -> None
     assert report.storage_pressure_events >= 1
     assert report.peak_load_ratio >= 0.85
     assert "hoarder_never_triggered_storage_pressure" not in report.failure_reasons
+
+
+def test_exploit_observer_monkey_heads_to_bakery_before_probe() -> None:
+    simulation = Simulation.create_demo()
+    runner = SimulationMonkeyRunner(simulation, seed=5, role="exploit_observer")
+
+    goal, command = runner.choose_action()
+
+    assert goal == "reach_bakery_vendor"
+    assert command == "go bakery"
+
+
+def test_exploit_observer_monkey_forces_buy_refusal_at_bakery_reserve_floor() -> None:
+    simulation = Simulation.create_demo()
+    simulation.player.location_id = "bakery"
+    hobb = simulation.npcs["npc.hobb"]
+    hobb.inventory = {"bread": 4}
+    runner = SimulationMonkeyRunner(simulation, seed=5, role="exploit_observer")
+    runner.observed_constrained_vendor_ids.add("npc.hobb")
+
+    goal, command = runner.choose_action()
+
+    assert goal == "force_vendor_buy_refusal"
+    assert command == "trade Hobb buy bread 1"
+
+
+def test_exploit_observer_monkey_report_observes_reserved_stock_and_buy_probe() -> None:
+    simulation = Simulation.create_demo()
+    simulation.player.location_id = "bakery"
+    runner = SimulationMonkeyRunner(simulation, seed=5, role="exploit_observer")
+
+    report = runner.run_steps(2)
+
+    assert "npc.hobb" in report.observed_constrained_vendor_ids
+    assert report.successful_exchange_modes.get("buy", 0) >= 1
+    assert "exploit_observer_never_observed_reserved_stock" not in report.failure_reasons
+    assert "exploit_observer_never_probed_vendor" not in report.failure_reasons
+
+
+def test_regional_observer_monkey_tracks_market_shift_from_route_pressure() -> None:
+    simulation = Simulation.create_demo()
+    simulation.world.weather = "storm_front"
+    runner = SimulationMonkeyRunner(simulation, seed=5, role="regional_observer")
+
+    report = runner.run_steps(12)
+
+    assert len(report.visited_regions) >= 2
+    assert report.observed_route_delay_ids
+    assert report.peak_regional_transits >= 1
+    assert report.market_price_shift_events >= 1
+    assert report.observed_market_price_items
+    assert "regional_observer_never_left_home_region" not in report.failure_reasons
+    assert "regional_observer_missed_route_delay" not in report.failure_reasons
+    assert "regional_observer_never_saw_transit_flow" not in report.failure_reasons
+    assert "regional_observer_missed_market_shift" not in report.failure_reasons
+
+
+def test_downstream_observer_monkey_tracks_regional_stock_and_market_shift() -> None:
+    simulation = Simulation.create_demo()
+    simulation.world.weather = "storm_front"
+    runner = SimulationMonkeyRunner(simulation, seed=5, role="downstream_observer")
+
+    report = runner.run_steps(10)
+
+    assert report.goal_counts.get("inspect_supply_chain", 0) >= 1
+    assert report.command_counts.get("regions", 0) >= 1
+    assert report.observed_route_delay_ids
+    assert report.peak_regional_transits >= 1
+    assert report.regional_stock_shift_events >= 1
+    assert report.observed_regional_stock_regions
+    assert report.observed_regional_stock_items
+    assert report.market_price_shift_events >= 1
+    assert "downstream_observer_never_inspected_supply_chain" not in report.failure_reasons
+    assert "downstream_observer_missed_route_delay" not in report.failure_reasons
+    assert "downstream_observer_never_saw_transit_flow" not in report.failure_reasons
+    assert "downstream_observer_missed_regional_stock_shift" not in report.failure_reasons
+    assert "downstream_observer_missed_market_shift" not in report.failure_reasons

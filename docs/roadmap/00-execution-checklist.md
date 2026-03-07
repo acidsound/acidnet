@@ -30,6 +30,14 @@ Build a simulation-first village RPG where the player can move through the world
 - Keep SQLite as the default persistence layer on Windows; treat `zvec` as an optional Linux/macOS deployment path.
 - Treat bootstrap teacher generation as the default dataset path. External teacher completions are optional refinement, not a prerequisite.
 
+## Priority Interpretation
+
+- This document owns the durable product priorities and model-promotion baseline.
+- For the live next-slice queue, use `docs/context/current-state.md`.
+- For the active simulation and world-expansion track order, use `docs/roadmap/24-execution-roadmap.md`.
+- For step exit criteria and remaining gaps, use `docs/roadmap/21-frontend-world-expansion-checklist.md`.
+- Promotion quality and simulation/world-loop hardening are parallel concerns; neither should be read as permission to ignore the other.
+
 ## Step Checklist
 
 - [x] Step 00: Write architecture and implementation planning docs.
@@ -53,7 +61,7 @@ Build a simulation-first village RPG where the player can move through the world
 
 ## Current Focus
 
-Current implementation focus is promotion quality:
+Current product-level focus remains promotion quality:
 
 - improve the bootstrap-teacher dataset so the first real 4B run clears the model gate
 - keep thinking disabled across runtime and training so small-model dialogue stays terse and game-usable
@@ -76,9 +84,13 @@ In practical terms, this means:
 - keep Tk removed; do not reintroduce it as a parity target for new simulation systems
 - use the shareable web probe as the main feedback surface for frontend-facing iteration
 
+This section is not the live per-slice queue.
+It sets the durable bar the current simulation work still has to serve.
+
 Current measured status:
 
-- the `local_peft` runtime path now runs the latest `Qwen/Qwen3.5-4B` LoRA adapter directly without an HTTP bridge
+- the in-process `local_peft` dev/eval path now runs the latest `Qwen/Qwen3.5-4B` LoRA adapter directly without an HTTP bridge
+- the promoted simulator runtime path is `openai_compat` against `llama-server` serving the `Q4_K_M` GGUF base model plus optional GGUF LoRA adapter
 - the latest runtime-dialogue smoke adapter clears the combined model gate
 - current gate result: `prompt_avg=1.000`, `prompt_fail_rows=0`, `prompt_latency_ms=1672.6`, `circulation=0.925`
 - the WSL2 + Unsloth smoke path is now validated with fast-path kernels installed
@@ -110,8 +122,8 @@ There is now a playable prototype in the repo with:
 - SQLite persistence path: `data/acidnet.sqlite`
 - bootstrap teacher data path: `run_bootstrap_qwen4b_pipeline.py`
 - baseline launcher: `run_qwen4b_baseline_train.py`
-- local adapter runtime path: `run_local_adapter_server.py`
-- direct local adapter runtime path: `--dialogue-backend local_peft --dialogue-adapter-path ...`
+- local adapter dev/eval server path: `run_local_adapter_server.py`
+- direct in-process local adapter dev/eval path: `run_model_gate.py --dialogue-backend local_peft --dialogue-adapter-path ...`
 
 Implemented systems:
 

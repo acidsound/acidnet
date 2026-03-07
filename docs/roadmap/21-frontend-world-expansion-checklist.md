@@ -18,6 +18,14 @@ Reference:
 - keep offscreen simulation summarized
 - do not let frontend needs redefine simulation truth
 
+## How To Read This Checklist
+
+- use `docs/context/current-state.md` for the live next-slice queue
+- use `docs/roadmap/24-execution-roadmap.md` for the active simulation-track order
+- use this file for exit criteria, landed progress, and remaining gaps
+- `[x]` means the step's exit criteria are complete enough to close the phase
+- `[ ]` means the step is still open even if substantial slices under it have already landed
+
 ## Checklist
 
 - [x] Step 20A: Add actor cost schema for travel.
@@ -34,6 +42,12 @@ Reference:
   - `rest` and `sleep` exist as the recovery side of movement cost
   - fatigue matters because sleep quality and shelter quality matter
   - the raw-command client and the web frontend both show travel progress
+  Progress:
+  - `go <location>` now starts multi-turn travel with ETA instead of immediate teleport
+  - travel already consumes time, hunger, fatigue, load, and weather-sensitive route cost before arrival
+  - `rest` and `sleep` are already live in the command surface and browser action catalog
+  - terminal and web state both expose travel progress through `player.travel_state` and scene text
+  - Remaining gap: tighten shelter and recovery semantics so fatigue stays meaningfully distinct from hunger, and keep auditing for dead instant-move paths
 
 - [ ] Step 20C: Unify exchange modes.
   Exit criteria:
@@ -43,6 +57,10 @@ Reference:
   - the survival loop still works without a money-first economy
   - relationship and urgency influence acceptance
   - tests cover free transfer, refusal, and asymmetric exchange
+  Progress:
+  - cash buys, asks, and gifts now share most of the current rule path and reserve-floor logic
+  - reserve floors already protect both vendor stock and player-side gifting from self-destructive depletion
+  - the remaining gap is barter, debt, and clearer gift-default behavior so exchange does not split back into vendor trade vs social transfer
 
 - [ ] Step 20D: Define the frontend state contract.
   Exit criteria:
@@ -53,8 +71,9 @@ Reference:
 
 Current note:
 
-- a provisional web probe now exists in `src/acidnet/frontend/web_app.py` and `src/acidnet/frontend/web/index.html`
-- it already uses derived player-view state plus command POSTs
+- the web probe now lives in `src/acidnet/frontend/web_app.py` and `src/acidnet/frontend/client/index.html`
+- the browser already consumes derived player-view state plus command POSTs instead of raw persistence snapshots
+- the HTTP contract is now documented in `docs/context/frontend-api-handoff.md` and `docs/roadmap/23-web-client-api-spec.md`
 - formal DTO naming, route preview, and fuller action catalogs still remain before `20D` is complete
 
 - [ ] Step 20E: Replace random monkeying with goal monkeys.
@@ -66,8 +85,10 @@ Current note:
   - emit failure reasons that are actionable during tuning
   Progress:
   - initial role-driven runner landed with `wanderer`, `survivor`, `trader`, `rumor_verifier`, and `altruist`
+  - observation roles now also include `shock_observer`, `hoarder`, `exploit_observer`, `regional_observer`, and `downstream_observer`
   - each step now records a goal label alongside the chosen command
   - rule-based scoring and actionable failure summaries now land in the monkey report
+  - Remaining gap: richer downstream-economy scoring beyond the current route, transit, stock-shift, and price-shift observation checks
 
 - [ ] Step 20F: Add the first controllable external shock.
   Exit criteria:
@@ -90,7 +111,7 @@ Current note:
   - first sinks are now in place as food spoilage over time and player-side tool wear on repeated field or riverside work
   - player resource work now loses some yield under storage pressure when the carried load is already near capacity
   - baker and cook output now complete one turn after work starts instead of appearing instantly
-  - the remaining gap is monkey validation against exploit loops and any later NPC-side sink expansion
+  - the remaining gap is one more economy sink or buffer rule plus stronger monkey validation against exploit loops and any later NPC-side sink expansion
 
 - [ ] Step 20H: Add regional scaling.
   Exit criteria:
@@ -109,9 +130,10 @@ Current note:
   - offscreen regional shortages and route delays now seed local regional rumors
   - summarized `regional_transits` now move goods between settlements without spawning full offscreen NPC loops
   - web regional route payloads now expose summarized `transit_count`
-  - the remaining gap is stronger multi-settlement observation runs and deciding how much downstream economy impact transit should have
+  - `regional_observer` and `downstream_observer` now cover cross-settlement route, transit, stock-shift, and market-shift observation from the player side
+  - the remaining gap is deciding how much richer downstream economy impact summarized transit should have and how to score it in observation runs
 
-## Recommended Order After This
+## Dependency Order Of Steps
 
 1. `20A`
 2. `20B`
@@ -121,6 +143,8 @@ Current note:
 6. `20F`
 7. `20G`
 8. `20H`
+
+This is the original dependency order, not the live next-slice queue once later steps have partially landed.
 
 ## What Not To Do Yet
 

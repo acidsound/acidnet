@@ -10,14 +10,28 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from acidnet.engine import Simulation
 from acidnet.eval.monkey import SimulationMonkeyRunner, export_monkey_report_json
+from acidnet.simulator import Simulation
+
+ROLE_CHOICES = (
+    "wanderer",
+    "survivor",
+    "rumor_verifier",
+    "altruist",
+    "trader",
+    "shock_observer",
+    "hoarder",
+    "exploit_observer",
+    "regional_observer",
+    "downstream_observer",
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run a headless monkey test over the village simulation.")
     parser.add_argument("--steps", type=int, default=120, help="Number of monkey steps to execute.")
     parser.add_argument("--seed", type=int, default=7, help="Random seed.")
+    parser.add_argument("--role", choices=ROLE_CHOICES, default="wanderer", help="Goal-driven monkey role to execute.")
     parser.add_argument(
         "--dialogue-backend",
         choices=("heuristic", "openai_compat"),
@@ -41,7 +55,7 @@ def main() -> None:
         dialogue_model=args.dialogue_model,
         dialogue_endpoint=args.dialogue_endpoint,
     )
-    runner = SimulationMonkeyRunner(simulation, seed=args.seed)
+    runner = SimulationMonkeyRunner(simulation, seed=args.seed, role=args.role)
     report = runner.run_steps(args.steps)
     output_path = export_monkey_report_json(args.output, report)
     print(

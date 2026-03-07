@@ -30,6 +30,14 @@
 - Windows 기본 영속화는 SQLite로 유지하고, `zvec`는 선택적 Linux/macOS 경로로 본다.
 - bootstrap teacher 생성 경로를 기본 dataset 경로로 삼는다. 외부 teacher completion은 선택적 보정이지 필수 전제가 아니다.
 
+## 우선순위 해석
+
+- 이 문서는 장기 제품 우선순위와 model-promotion baseline 을 담당한다.
+- live next-slice queue 는 `docs/context/current-state.md` 를 기준으로 본다.
+- active simulation/world-expansion track 순서는 `docs/roadmap/24-execution-roadmap.md` 를 기준으로 본다.
+- step 의 exit criteria 와 remaining gap 은 `docs/roadmap/21-frontend-world-expansion-checklist.md` 를 기준으로 본다.
+- promotion quality 와 simulation/world-loop hardening 은 병렬 관심사이며, 어느 한쪽이 다른 쪽을 무시해도 된다는 뜻이 아니다.
+
 ## 단계 체크리스트
 
 - [x] Step 00: 아키텍처 및 구현 계획 문서 작성
@@ -53,7 +61,7 @@
 
 ## 현재 초점
 
-현재 구현 초점은 승격 품질이다.
+현재 제품 수준 초점은 여전히 승격 품질이다.
 
 - bootstrap-teacher dataset을 다듬어 첫 실전 4B run이 model gate를 넘게 한다
 - 작은 모델 대사가 장황해지지 않도록 runtime과 training 모두에서 thinking을 끈다
@@ -70,12 +78,19 @@
 - player-facing NPC speech에서는 teacher JSON fidelity보다 runtime-aligned dialogue SFT가 중요하다
 - 월드 순환성과 entropy 안정성이 UI 확장보다 중요하다
 - player의 생존과 돈벌이 루프는 계속 같은 rule-based economy 안에 있어야 한다
+- 더 큰 프런트엔드 확장 전에 graph-based travel time, actor movement cost, unified exchange 를 core simulation rule 로 먼저 고정한다
+- 프런트엔드는 raw persistence snapshot 이 아니라 derived player-view scene state 를 소비하게 둔다
+- world scale 을 키우기 전에는 bounded goal-monkey evaluation 으로 travel, exchange, shock handling 을 먼저 스트레스 테스트한다
 - Tk 는 제거된 상태로 유지하고, 새 시뮬레이션 시스템의 parity 목표로 다시 들이지 않는다
 - 프런트엔드 반복은 공유 가능한 웹 프로브를 주 관찰면으로 삼는다
 
+이 섹션은 live per-slice queue 가 아니다.
+현재 시뮬레이션 작업이 계속 만족해야 하는 장기 기준을 정리한 것이다.
+
 ## 현재 측정 상태
 
-- `local_peft` runtime 경로가 HTTP bridge 없이 최신 `Qwen/Qwen3.5-4B` LoRA adapter를 직접 실행한다
+- in-process `local_peft` dev/eval 경로가 HTTP bridge 없이 최신 `Qwen/Qwen3.5-4B` LoRA adapter를 직접 실행한다
+- 승격된 simulator runtime 경로는 `Q4_K_M` GGUF base model과 optional GGUF LoRA adapter를 `llama-server`로 서빙하고 `openai_compat`로 붙는 방식이다
 - 최신 runtime-dialogue smoke adapter가 combined model gate를 통과했다
 - 현재 gate 결과: `prompt_avg=1.000`, `prompt_fail_rows=0`, `prompt_latency_ms=1672.6`, `circulation=0.925`
 - WSL2 + Unsloth smoke 경로는 fast-path kernel 설치까지 포함해 검증됐다
@@ -107,8 +122,8 @@
 - SQLite persistence path: `data/acidnet.sqlite`
 - bootstrap teacher data path: `run_bootstrap_qwen4b_pipeline.py`
 - baseline launcher: `run_qwen4b_baseline_train.py`
-- local adapter runtime path: `run_local_adapter_server.py`
-- direct local adapter runtime path: `--dialogue-backend local_peft --dialogue-adapter-path ...`
+- local adapter dev/eval server path: `run_local_adapter_server.py`
+- direct in-process local adapter dev/eval path: `run_model_gate.py --dialogue-backend local_peft --dialogue-adapter-path ...`
 
 구현된 시스템:
 

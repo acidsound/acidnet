@@ -4,7 +4,14 @@
 
 Turn the current design convergence into an implementation sequence that can be executed without drifting back into ad hoc UI work.
 
-This roadmap assumes `docs/roadmap/00-execution-checklist.md` remains the top-level priority document.
+This roadmap assumes `docs/roadmap/00-execution-checklist.md` remains the durable product-priority document.
+
+## Priority Interpretation
+
+- Use `docs/context/current-state.md` as the live next-slice queue when documents disagree.
+- Use this file for the ordered sequence inside the active simulation and world-expansion track.
+- Use `docs/roadmap/21-frontend-world-expansion-checklist.md` for step exit criteria and remaining gaps, not for live queue order.
+- Structural repo-split work and the later realtime-transition refactor are tracked from `docs/context/current-state.md` as a parallel boundary-hardening track.
 
 ## Baseline
 
@@ -33,12 +40,14 @@ The current project baseline is:
 - add `rest` and `sleep`
 - make shelter quality affect sleep quality
 - expose route progress in terminal and web
+- baseline travel, ETA, fatigue, and recovery behavior are now in place; remaining work is tighter recovery coupling and cleanup of any dead instant-move assumptions
 
 ### Phase 3: Exchange Unification
 
 - replace vendor-only trade assumptions with one exchange path
 - support gift, barter, debt, and cash without fragmenting the rules
 - use reserve floors and urgency checks to keep altruism stable
+- cash buys, asks, and gifts now share most of the current rule path; remaining work is barter, debt, and clearer gift-default semantics
 
 ### Phase 4: Goal Monkeys
 
@@ -48,7 +57,10 @@ The current project baseline is:
 - role-driven runner, scoring, and failure reporting are now in place
 - `shock_observer` now tracks field stress and active shock events from the player side
 - `hoarder` now probes storage-pressure behavior from the player side
-- next work is multi-settlement observation roles and summarized regional scaling
+- `exploit_observer` now probes reserve-constrained vendor exposure and buy-floor refusals from the player side
+- `regional_observer` now fast-forwards long route completion during deterministic runs and verifies actual cross-settlement observation instead of stalling mid-route
+- `downstream_observer` now records summarized regional stock shifts together with downstream market-price reactions from the player side
+- next work is richer downstream-economy scoring beyond current route, transit, stock, and price observation
 
 ### Phase 5: External Shocks and Recovery Loops
 
@@ -62,7 +74,7 @@ The current project baseline is:
 - add internal sinks so inventories and production do not stay perfectly stable forever
 - keep sinks legible and recoverable instead of punitive noise
 - food spoilage, player-side tool wear, storage pressure, and one-turn bakery or tavern production delays are now in place
-- next work is monkey validation of exploit resistance and deciding whether any NPC-side sink should be added without breaking circulation
+- next work is one more economy sink or buffer rule plus stronger monkey validation of exploit resistance before deciding whether any NPC-side sink should be added without breaking circulation
 
 ### Phase 6: Multi-Settlement Scaling
 
@@ -77,16 +89,25 @@ The current project baseline is:
 - regional shortage or delay rumors now propagate into the local rumor layer from offscreen summaries
 - summarized regional transit pulses now move goods across routes without instantiating full offscreen NPCs
 - web route payloads now surface player-visible route transit counts
-- next work is stronger cross-settlement observation roles and deciding whether summarized transit should produce richer downstream economy effects
+- `regional_observer` and `downstream_observer` now cover route, transit, stock-shift, and market-shift observation from the player side
+- next work is deciding whether summarized transit should produce richer downstream economy effects and how to score those effects in observation runs
 
 ## Immediate Next Work
 
-The current immediate queue is:
+This section is the immediate queue for the active simulation and world-expansion track only.
+Use `docs/context/current-state.md` when choosing between this track and the parallel structural boundary track.
+
+The current simulation-track queue is:
 
 1. backend parity audit: heuristic vs openai-compatible vs local-peft
 2. complete `20G` with one more economy sink or buffer rule
-3. extend goal monkeys for shock and exploit observation
+3. extend goal monkeys for deeper downstream-economy scoring after route, transit, stock, and price observation
 4. continue toward `20H` summarized regional scaling
+
+Open but not first in this thin-slice queue:
+
+- finish the remaining `20B` travel and recovery hardening work
+- finish the remaining `20C` exchange unification work
 
 ## Removal Work
 
