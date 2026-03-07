@@ -104,6 +104,7 @@ SHELTER_RATINGS = {
     "workshop": 0.62,
     "market": 0.55,
     "resource": 0.34,
+    "route": 0.28,
 }
 FIELD_STRESS_WEATHER_DELTA = {
     "cool_rain": -0.26,
@@ -349,11 +350,15 @@ class Simulation:
         focused_npc = self._focused_npc_here()
         current_region = self.current_region()
         location_line = f"{self.player.name} is at {self.world.locations[self.player.location_id].name}."
+        shelter_line = "Shelter: none while traveling"
         if self.player.travel_state.is_traveling:
             origin_name = self.world.locations[self.player.travel_state.origin_location_id or self.player.location_id].name
             destination_id = self.player.travel_state.destination_location_id or self.player.location_id
             destination_name = self.world.locations[destination_id].name
             location_line = f"{self.player.name} is traveling from {origin_name} to {destination_name}."
+        else:
+            shelter = self._shelter_rating(self.player.location_id)
+            shelter_line = f"Shelter: {self._shelter_label(shelter)} ({shelter:.2f})"
         lines = [
             f"Day {self.world.day}, tick {self.world.tick}, weather: {self.world.weather}",
             location_line,
@@ -361,6 +366,7 @@ class Simulation:
             f"Target: {focused_npc.name if focused_npc is not None else 'none'}",
             f"Hunger: {self.player.hunger:.1f}/100",
             f"Fatigue: {self.player.fatigue:.1f}/100",
+            shelter_line,
             f"Field stress: {self.world.field_stress:.2f}",
             f"Load: {self.player.carried_weight:.1f}/{self.player.carry_capacity:.1f}",
             f"Money: {self.player.money} gold",
@@ -667,12 +673,28 @@ class Simulation:
         turns = max(1, turns)
         shelter = self._shelter_rating(self.player.location_id)
         quality = self._shelter_label(shelter)
+        sleep_floor = self._sleep_recovery_floor(shelter) if sleep else None
         intro = (
             f"You settle in for sleep at {self.world.locations[self.player.location_id].name}. Shelter is {quality} ({shelter:.2f})."
             if sleep
             else f"You stop to rest at {self.world.locations[self.player.location_id].name}. Shelter is {quality} ({shelter:.2f})."
         )
         entries = self._events("system", [intro])
+        if sleep_floor is not None and sleep_floor > 0.0:
+            if shelter >= 0.45:
+                entries.extend(
+                    self._events(
+                        "system",
+                        [f"The shelter here only supports light sleep, so fatigue will not settle much below {sleep_floor:.1f}."],
+                    )
+                )
+            else:
+                entries.extend(
+                    self._events(
+                        "system",
+                        [f"This spot is too exposed for deep sleep, so fatigue will not settle much below {sleep_floor:.1f}."],
+                    )
+                )
         for _ in range(turns):
             entries.extend(self.advance_turn(1).entries)
             self._apply_recovery(self.player, location_id=self.player.location_id, sleep=sleep)
@@ -2719,12 +2741,24 @@ class Simulation:
             return "thin"
         return "poor"
 
+    def _sleep_recovery_floor(self, shelter: float) -> float:
+        if shelter >= 0.85:
+            return 8.0
+        if shelter >= 0.65:
+            return 14.0
+        if shelter >= 0.45:
+            return 24.0
+        return 38.0
+
     def _apply_recovery(self, actor: NPCState | PlayerState, *, location_id: str, sleep: bool) -> None:
         shelter = self._shelter_rating(location_id)
         base_recovery = (12.0 if sleep else 5.0) * shelter
         if sleep:
             base_recovery += 2.0
-        actor.fatigue = max(0.0, actor.fatigue - base_recovery)
+        recovered_fatigue = actor.fatigue - base_recovery
+        if sleep:
+            recovered_fatigue = max(self._sleep_recovery_floor(shelter), recovered_fatigue)
+        actor.fatigue = max(0.0, recovered_fatigue)
 
     def _recover_npc(self, npc: NPCState) -> str | None:
         sleep = npc.fatigue >= 72 and (

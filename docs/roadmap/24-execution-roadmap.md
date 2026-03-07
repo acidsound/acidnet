@@ -42,7 +42,9 @@ The current project baseline is:
 - add `rest` and `sleep`
 - make shelter quality affect sleep quality
 - expose route progress in terminal and web
-- baseline travel, ETA, fatigue, and recovery behavior are now in place; remaining work is tighter recovery coupling and cleanup of any dead instant-move assumptions
+- baseline travel, ETA, fatigue, and recovery behavior are now in place
+- sleep now bottoms out at a shelter-sensitive fatigue floor, so poor cover only gives shallow recovery while shrine or tavern shelter supports deeper recovery
+- remaining work is cleanup of any dead instant-move assumptions plus any final recovery tuning needed to close the phase cleanly
 
 ### Phase 3: Exchange Unification
 
@@ -104,8 +106,9 @@ Use `docs/context/current-state.md` when choosing between this track and the par
 
 The current simulation-track queue is:
 
-1. extend goal monkeys for deeper downstream-economy scoring beyond the current route-delay -> transit -> stock -> market-pressure response-chain and item-overlap checks
-2. continue toward `20H` summarized regional scaling
+1. continue `20B` travel and recovery hardening until the remaining shelter/recovery and dead-path gaps are closed
+2. continue `20C` exchange unification before reopening later-phase tuning as the main slice
+3. after the earlier checklist closures are tighter, resume deeper downstream-economy scoring and `20H` summarized regional scaling
 
 The backend parity audit is now closed enough to leave the immediate queue.
 Keep parity locked through regression coverage when prompt shaping, output cleanup, runtime parser policy, or fallback behavior changes.
@@ -113,8 +116,8 @@ Keep parity locked through regression coverage when prompt shaping, output clean
 
 Open but not first in this thin-slice queue:
 
-- finish the remaining `20B` travel and recovery hardening work
-- finish the remaining `20C` exchange unification work
+- extend the later `20E` downstream-economy monkey scoring beyond the current response-chain and item-overlap checks
+- continue the later `20H` summarized regional scaling work
 
 ## Removal Work
 

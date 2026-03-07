@@ -697,6 +697,23 @@ def test_sleep_recovers_more_fatigue_than_rest_when_shelter_is_better() -> None:
     assert shrine_simulation.player.fatigue < square_simulation.player.fatigue
 
 
+def test_poor_shelter_sleep_stays_shallow_until_better_cover_is_found() -> None:
+    farm_simulation = Simulation.create_demo()
+    farm_simulation.player.fatigue = 84.0
+    farm_simulation.player.location_id = "farm"
+
+    shrine_simulation = Simulation.create_demo()
+    shrine_simulation.player.fatigue = 84.0
+    shrine_simulation.player.location_id = "shrine"
+
+    farm_result = farm_simulation.handle_command("sleep 6")
+    shrine_simulation.handle_command("sleep 6")
+
+    assert any("too exposed for deep sleep" in line.lower() for line in farm_result.lines)
+    assert farm_simulation.player.fatigue >= 38.0
+    assert shrine_simulation.player.fatigue < farm_simulation.player.fatigue
+
+
 def test_field_stress_reduces_player_farm_work_yield() -> None:
     simulation = Simulation.create_demo()
     simulation.player.location_id = "farm"
@@ -756,6 +773,7 @@ def test_player_status_surfaces_fatigue_and_load() -> None:
     status = simulation.player_status()
 
     assert "Fatigue:" in status
+    assert "Shelter:" in status
     assert "Load:" in status
     assert "Region:" in status
 

@@ -46,8 +46,9 @@ Reference:
   - `go <location>` now starts multi-turn travel with ETA instead of immediate teleport
   - travel already consumes time, hunger, fatigue, load, and weather-sensitive route cost before arrival
   - `rest` and `sleep` are already live in the command surface and browser action catalog
+  - player `status` now surfaces current shelter quality, and sleep now bottoms out at a shelter-sensitive fatigue floor so poor cover only gives shallow recovery
   - terminal and web state both expose travel progress through `player.travel_state` and scene text
-  - Remaining gap: tighten shelter and recovery semantics so fatigue stays meaningfully distinct from hunger, and keep auditing for dead instant-move paths
+  - Remaining gap: keep auditing for dead instant-move paths and finish any last recovery tuning needed to call the phase closed
 
 - [ ] Step 20C: Unify exchange modes.
   Exit criteria:

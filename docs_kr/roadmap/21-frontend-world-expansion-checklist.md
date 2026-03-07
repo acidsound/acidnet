@@ -46,8 +46,9 @@
   - `go <location>`은 이제 즉시 teleport가 아니라 ETA가 붙은 multi-turn travel을 시작한다
   - travel은 이미 도착 전까지 시간, hunger, fatigue, load, weather-sensitive route cost를 소모한다
   - `rest`와 `sleep`은 이미 command surface와 browser action catalog에 들어가 있다
+  - player `status`는 이제 현재 shelter quality를 보여주고, sleep은 shelter-sensitive fatigue floor 아래로는 바로 떨어지지 않으므로 poor cover에서는 얕은 회복만 가능하다
   - terminal과 web state는 `player.travel_state`와 scene text로 travel progress를 노출한다
-  - Remaining gap: shelter/recovery semantics를 더 조여 fatigue가 hunger와 다른 축으로 남게 하고, dead instant-move path를 계속 감사한다
+  - Remaining gap: dead instant-move path를 계속 감사하고, phase를 닫기 위한 마지막 recovery tuning을 마무리한다
 
 - [ ] Step 20C: exchange mode 통합
   Exit criteria:

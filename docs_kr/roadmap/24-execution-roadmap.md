@@ -42,7 +42,9 @@
 - `rest`와 `sleep`을 추가한다
 - shelter quality가 sleep quality에 영향을 주게 만든다
 - terminal과 web에서 route progress를 보여준다
-- baseline travel, ETA, fatigue, recovery 동작은 이미 들어가 있으며, 남은 일은 recovery coupling 보강과 dead instant-move 가정 정리다
+- baseline travel, ETA, fatigue, recovery 동작은 이미 들어가 있다
+- sleep은 이제 shelter-sensitive fatigue floor 아래로는 바로 떨어지지 않으므로, poor cover에서는 얕은 회복만 가능하고 shrine이나 tavern shelter에서는 더 깊은 회복이 가능하다
+- 남은 일은 dead instant-move 가정 정리와 phase를 닫기 위한 마지막 recovery tuning이다
 
 ### Phase 3: Exchange Unification
 
@@ -104,8 +106,9 @@ parallel structural boundary track과 우선순위가 겹치면 `docs/context/cu
 
 현재 simulation-track queue는 다음과 같다.
 
-1. 현재 route-delay -> transit -> stock -> market-pressure response-chain과 item-overlap 체크를 넘어 deeper downstream-economy monkey scoring으로 확장한다
-2. `20H` summarized regional scaling을 계속 진행한다
+1. 남아 있는 shelter/recovery와 dead-path gap이 닫힐 때까지 `20B` travel/recovery hardening을 계속한다
+2. later-phase tuning을 다시 main slice로 올리기 전에 `20C` exchange unification을 계속한다
+3. 앞 단계 체크리스트가 더 조여진 뒤에 deeper downstream-economy scoring과 `20H` summarized regional scaling으로 다시 돌아간다
 
 backend parity audit는 이제 immediate queue에서 내릴 만큼 닫혔다.
 이후에도 prompt shaping, output cleanup, runtime parser policy, fallback behavior가 바뀌면 regression coverage로 parity를 계속 잠근다.
@@ -113,8 +116,8 @@ backend parity audit는 이제 immediate queue에서 내릴 만큼 닫혔다.
 
 열려 있지만 현재 thin-slice queue의 맨 앞은 아닌 것:
 
-- 남은 `20B` travel/recovery hardening 마무리
-- 남은 `20C` exchange unification 마무리
+- 현재 response-chain과 item-overlap 체크를 넘는 later `20E` downstream-economy monkey scoring 확장
+- later `20H` summarized regional scaling 작업 계속
 
 ## 제거 작업
 
