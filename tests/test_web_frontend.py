@@ -237,6 +237,23 @@ def test_api_command_forwards_system_prompt_and_player_prompt_for_ask_rumor() ->
     assert adapter.contexts[-1].player_prompt == "Have you heard any useful rumors?"
 
 
+def test_api_command_accepts_share_shortcut_for_social_transfer() -> None:
+    runtime = build_runtime("web_frontend_share_command_test")
+    server, thread, base_url = start_test_server(runtime)
+    try:
+        runtime.simulation.player.inventory["bread"] = 2
+        result = post_json(base_url, "/api/command", {"command": "share mara bread 1"})
+    finally:
+        stop_test_server(server, thread, runtime)
+
+    assert result["ok"] is True
+    assert any("give 1 bread to Mara".lower() in entry["text"].lower() for entry in result["entries"])
+    assert any(
+        item["item"] == "bread" and item["quantity"] == 1
+        for item in result["state"]["player"]["inventory"]
+    )
+
+
 def test_scene_payload_hides_people_during_travel() -> None:
     runtime = build_runtime("web_frontend_travel_state_test")
     try:

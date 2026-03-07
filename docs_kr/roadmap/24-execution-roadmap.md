@@ -52,7 +52,8 @@
 - vendor-only trade 가정을 하나의 exchange path로 통합한다
 - rule을 쪼개지 않고 gift, barter, debt, cash를 지원한다
 - reserve floor와 urgency check로 이타적 교환이 안정적으로 유지되게 한다
-- 현재 cash buy, ask, gift는 대부분 같은 rule path를 공유하고 있으며, 남은 일은 barter, debt, clearer gift-default semantics다
+- 현재 cash buy, ask, gift는 대부분 같은 rule path를 공유하고 있고, `share [npc] <item> <qty>` 는 같은 exchange path 위에서 저강도 social transfer를 give-vs-ask 기본 동작으로 묶는다
+- 남은 일은 barter, debt, 그리고 gift-default semantics 쪽의 마지막 정리다
 
 ### Phase 4: Goal Monkeys
 

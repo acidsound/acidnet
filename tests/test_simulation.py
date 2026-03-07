@@ -440,6 +440,41 @@ def test_player_can_give_items_without_payment() -> None:
     assert simulation.npcs["npc.mara"].inventory.get("bread", 0) == starting_bread + 1
 
 
+def test_share_defaults_to_give_when_player_has_item_to_spare() -> None:
+    simulation = Simulation.create_demo()
+    simulation.player.inventory["bread"] = 2
+    starting_bread = simulation.npcs["npc.mara"].inventory.get("bread", 0)
+
+    result = simulation.handle_command("share mara bread 1")
+
+    assert any("give 1 bread to Mara".lower() in line.lower() for line in result.lines)
+    assert simulation.player.inventory.get("bread", 0) == 1
+    assert simulation.npcs["npc.mara"].inventory.get("bread", 0) == starting_bread + 1
+
+
+def test_share_defaults_to_ask_when_player_needs_help() -> None:
+    simulation = Simulation.create_demo()
+    simulation.player.hunger = 78.0
+    simulation.player.money = 0
+    simulation.player.inventory.clear()
+    starting_bread = simulation.player.inventory.get("bread", 0)
+
+    result = simulation.handle_command("share mara bread 1")
+
+    assert any("gives you 1 bread" in line.lower() for line in result.lines)
+    assert simulation.player.inventory.get("bread", 0) == starting_bread + 1
+
+
+def test_share_respects_player_reserve_floor_when_it_defaults_to_give() -> None:
+    simulation = Simulation.create_demo()
+    simulation.player.inventory["bread"] = 1
+
+    result = simulation.handle_command("share mara bread 1")
+
+    assert any("cannot spare that much bread" in line.lower() for line in result.lines)
+    assert simulation.player.inventory.get("bread", 0) == 1
+
+
 def test_food_spoilage_reduces_player_inventory_over_time() -> None:
     simulation = Simulation.create_demo()
     simulation.world.market.items["fish"].spoilage_ticks = 24

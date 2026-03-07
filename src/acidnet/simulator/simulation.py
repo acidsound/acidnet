@@ -284,6 +284,7 @@ class Simulation:
                 "  trade [npc] sell <item> <qty>",
                 "  trade [npc] ask <item> <qty>",
                 "  trade [npc] give <item> <qty>",
+                "  share [npc] <item> <qty> Default social transfer: give if you have it, otherwise ask.",
                 "  inventory                Show your inventory and gold.",
                 "  status                   Show player and world status.",
                 "  rumors                   Show rumors you know.",
@@ -871,6 +872,15 @@ class Simulation:
         entries.extend(self.advance_turn(1).entries)
         return TurnResult(entries)
 
+    def share_with_npc(self, npc_query: str | None, item_query: str, qty: int) -> TurnResult:
+        item = self._resolve_item(item_query)
+        if item is None:
+            return TurnResult(self._events("system", [f'Unknown item "{item_query}".']))
+        if qty <= 0:
+            return TurnResult(self._events("system", ["Quantity must be greater than zero."]))
+        mode = "give" if self.player.inventory.get(item, 0) > 0 else "ask"
+        return self.trade_with_npc(npc_query, mode, item, qty)
+
     def advance_turn(self, turns: int) -> TurnResult:
         turns = max(1, turns)
         lines: list[str] = []
@@ -953,6 +963,12 @@ class Simulation:
             except ValueError:
                 return TurnResult(self._events("system", ["Trade quantity must be an integer."]))
             return self.trade_with_npc(" ".join(parts[1:-3]) if len(parts) > 4 else None, parts[-3], parts[-2], qty)
+        if command == "share" and len(parts) >= 3:
+            try:
+                qty = int(parts[-1])
+            except ValueError:
+                return TurnResult(self._events("system", ["Share quantity must be an integer."]))
+            return self.share_with_npc(" ".join(parts[1:-2]) if len(parts) > 3 else None, parts[-2], qty)
         if command == "next":
             turns = 1
             if len(parts) >= 2:

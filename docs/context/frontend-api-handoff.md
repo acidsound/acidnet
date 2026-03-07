@@ -106,6 +106,11 @@ Frontend responsibility:
 
 The client must not synthesize new command grammar from UI assumptions.
 
+Current exchange shortcut note:
+
+- `share [npc] <item> <qty>` is now a supported low-stakes social-transfer shortcut.
+- it routes to `give` when the player already holds the item, and otherwise routes to `ask`.
+
 ### `POST /api/dialogue-prompt`
 
 Prompt editor write surface.
