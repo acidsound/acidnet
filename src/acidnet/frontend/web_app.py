@@ -9,9 +9,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from acidnet.engine import Simulation
-from acidnet.engine.simulation import CONSUMPTION_VALUE, TurnEvent
-from acidnet.storage import EventLogFile, SQLiteWorldStore
+from acidnet.llm import DEFAULT_OPENAI_COMPAT_MODEL, RUNTIME_DIALOGUE_BACKENDS
+from acidnet.simulator import EventLogFile, SQLiteWorldStore, Simulation
+from acidnet.simulator.runtime import CONSUMPTION_VALUE, TurnEvent
 
 
 class WebSimulationRuntime:
@@ -24,11 +24,13 @@ class WebSimulationRuntime:
         dialogue_model: str | None = None,
         dialogue_endpoint: str | None = None,
         dialogue_adapter_path: str | None = None,
+        simulation: Simulation | None = None,
         event_log_path: str | Path | None = Path("data") / "logs" / "acidnet-web-events.log",
         prepare_dialogue: bool = True,
     ) -> None:
         self.lock = threading.RLock()
-        self.simulation = Simulation.create_demo(
+        provided_simulation = simulation is not None
+        self.simulation = simulation or Simulation.create_demo(
             dialogue_backend=dialogue_backend,
             dialogue_model=dialogue_model,
             dialogue_endpoint=dialogue_endpoint,
@@ -37,12 +39,13 @@ class WebSimulationRuntime:
         self.config_store = SQLiteWorldStore(db_path)
         self.store = self.config_store if persist else None
         self.event_log = EventLogFile(event_log_path) if event_log_path is not None else None
-        self.simulation.set_dialogue_system_prompt(self.config_store.get_dialogue_system_prompt())
+        if not provided_simulation:
+            self.simulation.set_dialogue_system_prompt(self.config_store.get_dialogue_system_prompt())
         self.dialogue_ready = False
         self.dialogue_loading = False
         self.dialogue_message = f"Loading {dialogue_backend} dialogue model..."
         self.recent_events: deque[dict[str, Any]] = deque(maxlen=96)
-        self._asset_root = Path(__file__).resolve().parent / "web"
+        self._asset_root = Path(__file__).resolve().parent / "client"
 
         self._record_system(
             "session_start",
@@ -348,6 +351,7 @@ class WebSimulationRuntime:
     def scene_payload(self) -> dict[str, Any]:
         with self.lock:
             self.simulation._refresh_actor_loads()
+            self.simulation._refresh_market_snapshot()
             focused_npc = self.simulation._focused_npc_here()
             location = self.simulation.world.locations[self.simulation.player.location_id]
             region = self.simulation.current_region()
@@ -367,6 +371,10 @@ class WebSimulationRuntime:
                     "tick": self.simulation.world.tick,
                     "weather": self.simulation.world.weather,
                     "field_stress": round(self.simulation.world.field_stress, 2),
+                    "scarcity_index": round(self.simulation.world.market.scarcity_index, 2),
+                    "market_prices": {
+                        item_id: state.current_price for item_id, state in sorted(self.simulation.world.market.items.items())
+                    },
                     "location_id": location.location_id,
                     "location_name": location_name,
                     "region_id": location.region_id,
@@ -600,20 +608,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--dialogue-backend",
-        choices=("heuristic", "openai_compat", "local_peft"),
+        choices=RUNTIME_DIALOGUE_BACKENDS,
         default="heuristic",
-        help="Dialogue backend to use for NPC interactions.",
+        help="Dialogue backend to use for NPC interactions. Runtime entrypoints promote the OpenAI-compatible GGUF path.",
     )
-    parser.add_argument("--dialogue-model", default=None, help="Model identifier for the dialogue backend.")
+    parser.add_argument(
+        "--dialogue-model",
+        default=None,
+        help=f"Model alias for the dialogue backend. For openai_compat, this should match the llama-server alias (default: {DEFAULT_OPENAI_COMPAT_MODEL}).",
+    )
     parser.add_argument(
         "--dialogue-endpoint",
         default=None,
-        help="OpenAI-compatible endpoint for runtime dialogue generation.",
-    )
-    parser.add_argument(
-        "--dialogue-adapter-path",
-        default=None,
-        help="Local LoRA adapter path for the local_peft backend.",
+        help="OpenAI-compatible endpoint for runtime dialogue generation, typically llama-server serving the Q4 GGUF runtime.",
     )
     parser.add_argument(
         "--event-log",
@@ -636,7 +643,6 @@ def main() -> None:
         dialogue_backend=args.dialogue_backend,
         dialogue_model=args.dialogue_model,
         dialogue_endpoint=args.dialogue_endpoint,
-        dialogue_adapter_path=args.dialogue_adapter_path,
         event_log_path=None if args.no_event_log else args.event_log,
     )
     server = AcidNetWebServer((args.host, args.port), runtime)

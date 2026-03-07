@@ -3,8 +3,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from acidnet.engine import Simulation
-from acidnet.storage import EventLogFile, SQLiteWorldStore
+from acidnet.llm import DEFAULT_OPENAI_COMPAT_MODEL, RUNTIME_DIALOGUE_BACKENDS
+from acidnet.simulator import EventLogFile, SQLiteWorldStore, Simulation
 
 INTRO = """acidnet playable village MVP
 
@@ -37,24 +37,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--dialogue-backend",
-        choices=("heuristic", "openai_compat", "local_peft"),
+        choices=RUNTIME_DIALOGUE_BACKENDS,
         default="heuristic",
-        help="Dialogue backend to use for NPC talk interactions.",
+        help="Dialogue backend to use for NPC talk interactions. Runtime entrypoints promote the OpenAI-compatible GGUF path.",
     )
     parser.add_argument(
         "--dialogue-model",
         default=None,
-        help="Model identifier for the dialogue backend.",
+        help=f"Model alias for the dialogue backend. For openai_compat, this should match the llama-server alias (default: {DEFAULT_OPENAI_COMPAT_MODEL}).",
     )
     parser.add_argument(
         "--dialogue-endpoint",
         default=None,
-        help="OpenAI-compatible endpoint for runtime dialogue generation.",
-    )
-    parser.add_argument(
-        "--dialogue-adapter-path",
-        default=None,
-        help="Local LoRA adapter path for the local_peft backend.",
+        help="OpenAI-compatible endpoint for runtime dialogue generation, typically llama-server serving the Q4 GGUF runtime.",
     )
     return parser
 
@@ -65,7 +60,6 @@ def main() -> None:
         dialogue_backend=args.dialogue_backend,
         dialogue_model=args.dialogue_model,
         dialogue_endpoint=args.dialogue_endpoint,
-        dialogue_adapter_path=args.dialogue_adapter_path,
     )
     store = None if args.no_persist else SQLiteWorldStore(args.db)
     event_log = None if args.no_event_log else EventLogFile(args.event_log)

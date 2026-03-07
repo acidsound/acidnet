@@ -448,6 +448,12 @@
         </section>
 
         <section class="panel">
+          <h2>Market</h2>
+          <div class="detail-text" id="market-text"></div>
+          <div class="inventory-list" id="market-chips" style="margin-top: 10px;"></div>
+        </section>
+
+        <section class="panel">
           <h2>People Here</h2>
           <div class="subtle">Click a person card to focus them. Click the focused card again to clear the target.</div>
           <div class="people" id="people-list" style="margin-top: 10px;"></div>
@@ -878,6 +884,27 @@
       }
     }
 
+    function renderMarket(state) {
+      const marketText = document.getElementById('market-text');
+      const marketChips = document.getElementById('market-chips');
+      const prices = state.world.market_prices || {};
+      marketText.textContent =
+        `scarcity: ${Number(state.world.scarcity_index || 0).toFixed(2)}\n` +
+        `region: ${state.world.region_name || 'unknown'}`;
+      marketChips.innerHTML = '';
+      const entries = Object.entries(prices);
+      if (!entries.length) {
+        appendEmpty(marketChips, 'market prices unavailable');
+        return;
+      }
+      for (const [item, price] of entries) {
+        const chip = document.createElement('span');
+        chip.className = 'chip';
+        chip.textContent = `${item} ${price}g`;
+        marketChips.appendChild(chip);
+      }
+    }
+
     function renderFeed(state) {
       const feedList = document.getElementById('feed-list');
       feedList.innerHTML = '';
@@ -912,6 +939,7 @@
         state.world.weather,
         `location ${state.world.location_name}`,
         `field stress ${Number(state.world.field_stress || 0).toFixed(2)}`,
+        `scarcity ${Number(state.world.scarcity_index || 0).toFixed(2)}`,
       ];
       for (const event of state.world.active_events || []) {
         statusPills.push(`event ${event.event_type}`);
@@ -930,6 +958,7 @@
 
       renderCommonActions(state);
       renderPlayer(state);
+      renderMarket(state);
       renderPeople(state);
       renderTargetActions(state);
       renderMap(state);

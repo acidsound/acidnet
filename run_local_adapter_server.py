@@ -37,7 +37,9 @@ class ServerState:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Serve a fine-tuned Qwen LoRA adapter behind an OpenAI-compatible chat endpoint.")
+    parser = argparse.ArgumentParser(
+        description="Serve a fine-tuned Qwen LoRA adapter behind an OpenAI-compatible chat endpoint for development and evaluation."
+    )
     parser.add_argument("--adapter-path", required=True, help="Path to the fine-tuned LoRA adapter directory.")
     parser.add_argument("--base-model", default="Qwen/Qwen3.5-4B", help="Base model used for the adapter.")
     parser.add_argument("--model-alias", default="acidnet-qwen3.5-4b-lora", help="Model id exposed over the HTTP API.")
@@ -57,6 +59,7 @@ def main() -> None:
     print(f"Adapter server ready at http://{args.host}:{args.port}/v1/chat/completions")
     print(f"Model alias: {state.model_alias}")
     print(f"Adapter path: {args.adapter_path}")
+    print("Use llama-server with the promoted Q4 GGUF runtime for deployment-facing simulator runs.")
     server.serve_forever()
 
 

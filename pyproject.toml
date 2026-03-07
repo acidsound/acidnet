@@ -21,7 +21,7 @@ acidnet = "acidnet.cli:main"
 acidnet-web = "acidnet.frontend.web_app:main"
 
 [tool.setuptools.package-data]
-"acidnet.frontend" = ["web/*.html"]
+"acidnet.frontend" = ["client/*.html"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

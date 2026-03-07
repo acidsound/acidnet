@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from acidnet.llm.backend_catalog import DEFAULT_OPENAI_COMPAT_ENDPOINT, DEFAULT_OPENAI_COMPAT_MODEL
+from acidnet.llm.prompt_builder import finalize_dialogue_text
 from acidnet.llm.protocols import DialogueContext, DialogueModelAdapter, DialogueResult
-from acidnet.models import Rumor
+from acidnet.simulator.models import Rumor
 
 _OPENERS = {
     "merchant": "Prices move faster than patience here.",
@@ -22,11 +24,18 @@ _FIRST_MEETING_TOKENS = (
     "first time",
     "new here",
     "never met",
+    "we have met",
 )
 _ORIGIN_TOKENS = (
     "where are you from",
     "where did you come from",
     "where do you stay",
+)
+_HUNGER_TOKENS = (
+    "hungry",
+    "starving",
+    "need food",
+    "something to eat",
 )
 _GREETING_TOKENS = (
     "hello",
@@ -39,6 +48,17 @@ _RUMOR_TOKENS = (
     "news",
     "gossip",
 )
+_FOOD_REQUEST_TOKENS = (
+    "food",
+    "hungry",
+    "eat",
+    "meal",
+    "bread",
+    "fish",
+    "stew",
+    "wheat",
+)
+_EDIBLE_ITEMS = {"bread", "fish", "stew", "wheat"}
 
 
 class RuleBasedDialogueAdapter(DialogueModelAdapter):
@@ -50,26 +70,23 @@ class RuleBasedDialogueAdapter(DialogueModelAdapter):
         trade_line = _trade_line(context)
         direct_line = _direct_response_line(context)
 
+        opener = _profession_opener(context)
+        memory_line = _memory_line(context)
+        pressure_line = _pressure_line(context)
+
         if direct_line:
             parts = [direct_line]
+        elif context.interaction_mode == "trade_request":
+            parts = [_first_non_empty(trade_line, pressure_line, opener)]
+        elif context.interaction_mode == "rumor_request":
+            parts = [_first_non_empty(rumor_line, pressure_line, opener)]
         else:
-            opener = _profession_opener(context)
-            memory_line = _memory_line(context)
-            pressure_line = _pressure_line(context)
-            parts = [opener]
-            for optional in (memory_line, pressure_line):
-                if optional:
-                    parts.append(optional)
+            parts = [_first_non_empty(memory_line, rumor_line, pressure_line, opener)]
 
-        if context.interaction_mode == "trade_request" and trade_line:
-            parts.append(trade_line)
-        elif context.interaction_mode in {"talk", "rumor_request"} and rumor_line:
-            parts.append(rumor_line)
-        elif rumor_line and context.relationship_score > 0.45 and not direct_line:
-            parts.append(rumor_line)
+        text = finalize_dialogue_text(" ".join(part for part in parts if part).strip(), context)
 
         return DialogueResult(
-            text=" ".join(parts).strip(),
+            text=text,
             adapter_name="rule_based",
             latency_ms=0.0,
             used_memory_ids=[memory.memory_id for memory in context.salient_memories[:2]],
@@ -95,6 +112,29 @@ class FallbackDialogueAdapter(DialogueModelAdapter):
         except Exception:
             return self.fallback.generate(context)
 
+    @property
+    def temperature(self) -> float:
+        return self._get_forwarded_attr("temperature")
+
+    @temperature.setter
+    def temperature(self, value: float) -> None:
+        self._set_forwarded_attr("temperature", value)
+
+    def _get_forwarded_attr(self, name: str):
+        for adapter in (self.primary, self.fallback):
+            if hasattr(adapter, name):
+                return getattr(adapter, name)
+        raise AttributeError(name)
+
+    def _set_forwarded_attr(self, name: str, value: object) -> None:
+        forwarded = False
+        for adapter in (self.primary, self.fallback):
+            if hasattr(adapter, name):
+                setattr(adapter, name, value)
+                forwarded = True
+        if not forwarded:
+            raise AttributeError(name)
+
 
 def build_dialogue_adapter(
     backend: str,
@@ -111,8 +151,8 @@ def build_dialogue_adapter(
         from acidnet.llm.openai_compat import OpenAICompatDialogueAdapter
 
         primary = OpenAICompatDialogueAdapter(
-            model=model or "local-npc-model",
-            endpoint=endpoint or "http://127.0.0.1:8000/v1/chat/completions",
+            model=model or DEFAULT_OPENAI_COMPAT_MODEL,
+            endpoint=endpoint or DEFAULT_OPENAI_COMPAT_ENDPOINT,
             api_key_env=api_key_env,
         )
         return FallbackDialogueAdapter(primary=primary, fallback=RuleBasedDialogueAdapter())
@@ -176,9 +216,16 @@ def _rumor_line(context: DialogueContext) -> tuple[str, list[str]]:
 def _trade_line(context: DialogueContext) -> str:
     if not context.npc.is_vendor:
         return "I am not selling anything worth your time."
+    normalized_prompt = " ".join(context.player_prompt.lower().split())
+    asks_for_food = any(token in normalized_prompt for token in _FOOD_REQUEST_TOKENS)
     goods = [f"{item} x{qty}" for item, qty in context.npc.inventory.items() if qty > 0]
+    edible_goods = [f"{item} x{qty}" for item, qty in context.npc.inventory.items() if qty > 0 and item in _EDIBLE_ITEMS]
     if not goods:
         return "Stock is thin right now."
+    if asks_for_food and edible_goods:
+        return f"I can sell {', '.join(edible_goods[:3])} if your coin is ready."
+    if asks_for_food:
+        return "I do not have food to sell right now. Try the bakery or the tavern before it gets worse."
     return f"I can move {', '.join(goods[:3])} if your coin is ready."
 
 
@@ -186,27 +233,36 @@ def _direct_response_line(context: DialogueContext) -> str:
     if context.interaction_mode != "direct_say":
         return ""
     normalized_prompt = " ".join(context.player_prompt.lower().split())
-    prompt_excerpt = _prompt_excerpt(context.player_prompt)
     location_name = context.location.name
 
     if any(token in normalized_prompt for token in _FIRST_MEETING_TOKENS):
-        return f'{context.npc.name} shrugs. "I am {context.npc.name}, one of the village {context.npc.profession}s."'
+        return f"I am {context.npc.name}, one of the village {context.npc.profession}s."
 
     if any(token in normalized_prompt for token in _ORIGIN_TOKENS):
-        return f'{context.npc.name} answers plainly. "Nowhere far. Most days I stay around {location_name}."'
+        return f"I keep close to {location_name}; nowhere far from here."
+
+    if any(token in normalized_prompt for token in _HUNGER_TOKENS):
+        stocked_items = [item for item, qty in context.npc.inventory.items() if qty > 0 and item in _EDIBLE_ITEMS]
+        if stocked_items and context.npc.is_vendor:
+            item_name = stocked_items[0]
+            return f"If you need food now, I can spare {item_name} if we settle the exchange."
+        if stocked_items:
+            item_name = stocked_items[0]
+            return f"I can spare a little {item_name}, but not much more than that."
+        return "I do not have food to hand; try the bakery or the square before it gets worse."
 
     if any(token in normalized_prompt for token in _RUMOR_TOKENS):
         rumor_line, _ = _rumor_line(context)
         if rumor_line:
-            return f'{context.npc.name} says, "{rumor_line}"'
+            return rumor_line
 
     if any(token in normalized_prompt for token in _GREETING_TOKENS):
-        return f'{context.npc.name} nods. "Hello. What do you need?"'
+        return "Hello, what do you need?"
 
     if _looks_like_question(context.player_prompt):
-        return f'{context.npc.name} answers after a short pause. "About {prompt_excerpt}? I only know what I have seen around {location_name}."'
+        return f"I only know what I have seen around {location_name}."
 
-    return f'{context.npc.name} considers your words. "You said {prompt_excerpt}. I will keep that in mind."'
+    return "I will keep that in mind."
 
 
 def _prompt_excerpt(text: str, *, limit: int = 48) -> str:
@@ -238,3 +294,10 @@ def _best_rumor(rumors: list[Rumor], *, known_rumor_ids: list[str] | None = None
         if rumor.rumor_id not in known_rumor_ids:
             return rumor
     return ranked[0]
+
+
+def _first_non_empty(*parts: str) -> str:
+    for part in parts:
+        if part:
+            return part
+    return ""

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
 from typing import Any
 
 from acidnet.llm.protocols import DialogueContext
@@ -32,9 +31,6 @@ RUMOR_KEYWORDS = (
     "hear",
     "gossip",
     "news",
-    "소문",
-    "풍문",
-    "이야기",
 )
 TRADE_KEYWORDS = (
     "buy",
@@ -48,11 +44,6 @@ TRADE_KEYWORDS = (
     "stew",
     "food",
     "stock",
-    "사다",
-    "팔다",
-    "거래",
-    "값",
-    "가격",
 )
 TALK_KEYWORDS = (
     "hello",
@@ -62,79 +53,46 @@ TALK_KEYWORDS = (
     "what's going on",
     "how are things",
     "what happened",
-    "안녕",
-    "무슨 일",
-    "어때",
 )
 DEFAULT_SYSTEM_PROMPT = """You are a small NPC dialogue model inside a village simulation.
 
 Respond as exactly one NPC.
 Stay grounded in the supplied state.
 Do not invent inventory, map facts, rumors, or relationships not present in context.
+Answer the player's latest words directly before adding any extra detail.
+If the player asks a concrete question, answer that question in the first sentence.
+If the answer is unknown from the supplied state, say so plainly instead of improvising.
+If the player asks for food or says they are hungry, never present non-food goods as edible help.
+Treat edible help as the edible subset of available_goods only.
+If the NPC has no edible food in the supplied state, say that plainly and redirect toward likely food help instead of offering unrelated stock.
+If available_goods lists no edible items, never claim bread, fish, stew, wheat, meals, or food are on hand.
+If the player asks to buy or sell food and available_goods has no edible items, say that plainly and redirect instead of substituting unrelated stock.
+When mentioning what the NPC has on hand, can spare, or can sell, only name exact items that appear in available_goods.
+Do not default to generic village mood, rumors, or trade chatter unless they are relevant to the player's latest words.
+Do not repeat or translate the player's message unless a short echo is the most natural in-character reply.
 Never output analysis, hidden reasoning, "Thinking Process", JSON, bullet lists, or tags.
 Reply with one or two short in-character sentences only.
 Keep the answer compact and game-usable.
 Do not explain your reasoning.
 """
 
-_SINGLE_LANGUAGE_PATTERNS = (
-    re.compile(r"\bexactly one language\b", re.IGNORECASE),
-    re.compile(r"\bone language only\b", re.IGNORECASE),
-    re.compile(r"\bsingle language\b", re.IGNORECASE),
-)
-_LANGUAGE_DIRECTIVE_PATTERNS = (
-    re.compile(r"\bthat language must be\s+(?P<language>[a-z][a-z -]{1,40})", re.IGNORECASE),
-    re.compile(r"\b(?:reply|respond)\s+only\s+in\s+(?P<language>[a-z][a-z -]{1,40})", re.IGNORECASE),
-    re.compile(r"\b(?:reply|respond)\s+in\s+(?P<language>[a-z][a-z -]{1,40})\s+only\b", re.IGNORECASE),
-    re.compile(r"\buse\s+only\s+(?P<language>[a-z][a-z -]{1,40})", re.IGNORECASE),
-)
-_SUPPORTED_TEMPLATE_LANGUAGES = {
-    "english": "en",
-    "korean": "ko",
-}
-
-
-@dataclass(frozen=True, slots=True)
-class PromptContract:
-    response_language: str | None = None
-    single_language_only: bool = False
-
-
-def parse_prompt_contract(system_prompt: str | None) -> PromptContract:
-    prompt = _normalize_prompt_text(system_prompt)
-    single_language_only = any(pattern.search(prompt) for pattern in _SINGLE_LANGUAGE_PATTERNS)
-    response_language = None
-    for pattern in _LANGUAGE_DIRECTIVE_PATTERNS:
-        match = pattern.search(prompt)
-        if match:
-            response_language = _normalize_language_label(match.group("language"))
-            break
-    return PromptContract(
-        response_language=response_language,
-        single_language_only=single_language_only,
-    )
-
-
-def select_heuristic_language(
-    system_prompt: str | None,
-    *,
-    player_prompt: str | None = None,
-    default: str = "en",
-) -> str:
-    contract = parse_prompt_contract(system_prompt)
-    if contract.response_language:
-        supported = _SUPPORTED_TEMPLATE_LANGUAGES.get(contract.response_language)
-        if supported is not None:
-            return supported
-    if not contract.single_language_only and _contains_hangul(player_prompt):
-        return "ko"
-    return default
-
 
 def build_system_prompt(context: DialogueContext | None = None) -> str:
     if context is not None and context.system_prompt:
         return context.system_prompt
     return DEFAULT_SYSTEM_PROMPT
+
+
+def finalize_dialogue_text(text: str, context: DialogueContext) -> str:
+    cleaned = _strip_hidden_reasoning(text)
+    cleaned = " ".join(cleaned.split()).strip()
+    sentence_limit = _sentence_limit(context)
+    if not cleaned or sentence_limit is None or sentence_limit <= 0:
+        return cleaned
+    sentences = _split_sentences(cleaned)
+    if len(sentences) <= sentence_limit:
+        return cleaned
+    return " ".join(sentences[:sentence_limit]).strip()
 
 
 def build_user_prompt(context: DialogueContext) -> str:
@@ -305,21 +263,49 @@ def _format_rumors(rumors: list[Any]) -> list[str]:
     return lines or ["none"]
 
 
-def _normalize_prompt_text(system_prompt: str | None) -> str:
-    return re.sub(r"\s+", " ", str(system_prompt or "")).strip().lower()
+def _strip_hidden_reasoning(text: str) -> str:
+    cleaned = str(text or "").strip()
+    if not cleaned:
+        return ""
+    cleaned = re.sub(r"<think>.*?</think>", "", cleaned, flags=re.IGNORECASE | re.DOTALL).strip()
+    cleaned = re.sub(r"^(assistant|response)\s*:\s*", "", cleaned, flags=re.IGNORECASE).strip()
+    lowered = cleaned.lower()
+    if lowered.startswith(("thinking process:", "reasoning:", "analysis:")):
+        parts = re.split(r"\n\s*\n", cleaned, maxsplit=1)
+        cleaned = parts[-1].strip() if parts else ""
+    if cleaned.startswith("1.") and "\n\n" in cleaned:
+        cleaned = cleaned.split("\n\n")[-1].strip()
+    return cleaned
 
 
-def _normalize_language_label(value: str) -> str:
-    normalized = re.sub(r"[^a-z -]", "", value.strip().lower()).strip(" -")
-    normalized = re.sub(r"\s+", " ", normalized)
-    if normalized.startswith("the "):
-        normalized = normalized[4:].strip()
-    if normalized.endswith(" language"):
-        normalized = normalized[: -len(" language")].strip()
-    return normalized
+def _sentence_limit(context: DialogueContext) -> int | None:
+    prompt = " ".join(build_system_prompt(context).lower().split())
+    if any(marker in prompt for marker in _TWO_SENTENCE_MARKERS):
+        return 2
+    if any(marker in prompt for marker in _ONE_SENTENCE_MARKERS):
+        return 1
+    return None
 
 
-def _contains_hangul(text: str | None) -> bool:
-    if not text:
-        return False
-    return any("\uac00" <= char <= "\ud7a3" for char in text)
+def _split_sentences(text: str) -> list[str]:
+    return [match.group(0).strip() for match in re.finditer(r'[^.!?]+[.!?]["\')\]]*|[^.!?]+$', text) if match.group(0).strip()]
+
+
+_TWO_SENTENCE_MARKERS = (
+    "one or two short in-character sentences",
+    "one or two short sentences",
+    "one or two sentences",
+)
+
+_ONE_SENTENCE_MARKERS = (
+    "reply with one short in-character sentence",
+    "reply with one short sentence",
+    "respond with one short in-character sentence",
+    "respond with one short sentence",
+    "reply with one short in-character answer",
+    "reply with one short answer",
+    "respond with one short in-character answer",
+    "respond with one short answer",
+    "exactly one sentence",
+    "one sentence only",
+)

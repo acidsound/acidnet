@@ -8,6 +8,7 @@ The project now supports two GGUF runtime shapes:
 2. fully merged checkpoint converted to GGUF when llama.cpp quantization tools are available
 
 The first path is the default promotion path on Windows because it avoids a large merged export step.
+This is also the promoted simulator runtime path for `run_acidnet.py` and `run_acidnet_web.py`; keep `local_peft` for dev/eval parity only.
 
 ## Entry Points
 
@@ -15,7 +16,8 @@ The first path is the default promotion path on Windows because it avoids a larg
 - `run_merge_lora_adapter.py`
 - `run_llama_server.ps1`
 - `run_local_qwen_dev_loop.ps1`
-- `run_dev_world.ps1`
+- `run_acidnet.py`
+- `run_acidnet_web.py`
 
 ## Adapter GGUF Export
 
@@ -83,6 +85,22 @@ powershell -ExecutionPolicy Bypass -File run_local_qwen_dev_loop.ps1 `
   -LoraPath data/gguf/qwen3_5_4b_bootstrap_smoke_adapter-f16.gguf `
   -Port 8000 `
   -ModelGateTurns 120
+```
+
+Point the playable runtimes at the same local endpoint:
+
+```powershell
+python run_acidnet.py `
+  --dialogue-backend openai_compat `
+  --dialogue-model qwen3.5-4b `
+  --dialogue-endpoint http://127.0.0.1:8000/v1/chat/completions
+```
+
+```powershell
+python run_acidnet_web.py `
+  --dialogue-backend openai_compat `
+  --dialogue-model qwen3.5-4b `
+  --dialogue-endpoint http://127.0.0.1:8000/v1/chat/completions
 ```
 
 ## Notes

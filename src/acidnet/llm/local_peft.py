@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import importlib
 import json
-import time
 import os
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from acidnet.llm.prompt_builder import build_system_prompt, build_user_prompt
+from acidnet.llm.prompt_builder import build_system_prompt, build_user_prompt, finalize_dialogue_text
 from acidnet.llm.protocols import DialogueContext, DialogueModelAdapter, DialogueResult
 
 
@@ -88,7 +88,7 @@ class LocalPeftDialogueAdapter(DialogueModelAdapter):
         with torch.inference_mode():
             output = model.generate(**encoded, **generation_kwargs)
         generated_tokens = output[0][encoded["input_ids"].shape[1] :]
-        text = _sanitize_generated_text(tokenizer.decode(generated_tokens, skip_special_tokens=True))
+        text = finalize_dialogue_text(tokenizer.decode(generated_tokens, skip_special_tokens=True), context)
         if not text:
             raise RuntimeError("The local PEFT adapter generated an empty dialogue response.")
         latency_ms = (time.perf_counter() - started_at) * 1000.0
@@ -174,16 +174,3 @@ def _build_prompt(tokenizer: Any, messages: list[dict[str, str]]) -> str:
         except Exception:
             pass
     return "\n".join(f"{item['role']}: {item['content']}" for item in messages) + "\nassistant:"
-
-
-def _sanitize_generated_text(text: str) -> str:
-    cleaned = text.strip()
-    if "<think>" in cleaned and "</think>" in cleaned:
-        _, cleaned = cleaned.split("</think>", 1)
-        cleaned = cleaned.strip()
-    if cleaned.lower().startswith("thinking process:"):
-        parts = cleaned.split("\n\n")
-        cleaned = parts[-1].strip() if parts else ""
-    if cleaned.startswith("1.") and "\n\n" in cleaned:
-        cleaned = cleaned.split("\n\n")[-1].strip()
-    return cleaned

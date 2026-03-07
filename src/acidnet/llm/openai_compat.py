@@ -6,7 +6,7 @@ import time
 from dataclasses import dataclass
 from urllib import request
 
-from acidnet.llm.prompt_builder import build_system_prompt, build_user_prompt
+from acidnet.llm.prompt_builder import build_system_prompt, build_user_prompt, finalize_dialogue_text
 from acidnet.llm.protocols import DialogueContext, DialogueModelAdapter, DialogueResult
 
 
@@ -49,6 +49,7 @@ class OpenAICompatDialogueAdapter(DialogueModelAdapter):
             .get("content", "")
             .strip()
         )
+        text = finalize_dialogue_text(text, context)
         if not text:
             raise RuntimeError("OpenAI-compatible server returned an empty dialogue response.")
         latency_ms = (time.perf_counter() - started_at) * 1000.0
