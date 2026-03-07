@@ -138,6 +138,7 @@ Current note:
   - offscreen regional shortages and route delays now seed local regional rumors
   - summarized `regional_transits` now move goods between settlements without spawning full offscreen NPC loops
   - web regional route payloads now expose summarized `transit_count`
+  - summarized regional `risk_level` now drifts with offscreen stock pressure, route throughput, and local scarcity instead of staying a static fixture
   - `regional_observer` and `downstream_observer` now cover cross-settlement route, transit, stock-shift, and market-shift observation from the player side
   - the remaining gap is deciding how much richer downstream economy impact summarized transit should have and how to score it in observation runs
 

@@ -462,6 +462,7 @@
 주의:
 
 - `stock_signals` 는 player-facing regional summary 이지 raw offscreen actor inventory 가 아니다
+- `risk_level` 은 offscreen stock, route throughput, local scarcity 압력을 합친 dynamic summarized pressure signal 이다
 - `known_local_locations` 는 map 과 route presentation 을 돕는 region-summary 힌트이지 두 번째 navigation rules engine 이 아니다
 - `is_current_region` 은 summarized graph 에서 플레이어의 현재 region 을 표시한다
 

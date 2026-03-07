@@ -100,6 +100,7 @@ The current project baseline is:
 - regional shortage or delay rumors now propagate into the local rumor layer from offscreen summaries
 - summarized regional transit pulses now move goods across routes without instantiating full offscreen NPCs
 - web route payloads now surface player-visible route transit counts
+- summarized regional `risk_level` now drifts with offscreen stock pressure, route throughput, and local scarcity instead of staying fixed at seed values
 - `regional_observer` and `downstream_observer` now cover route, transit, stock-shift, and market-shift observation from the player side
 - next work is deciding whether summarized transit should produce richer downstream economy effects and how to score those effects in observation runs
 

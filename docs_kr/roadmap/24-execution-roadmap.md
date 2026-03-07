@@ -100,6 +100,7 @@
 - offscreen regional shortage와 route delay rumor는 local rumor layer로 흘러든다
 - summarized regional transit pulse는 full offscreen NPC를 만들지 않고 goods를 이동시킨다
 - web route payload는 player-visible `transit_count`를 노출한다
+- summarized regional `risk_level`은 이제 offscreen stock pressure, route throughput, local scarcity에 따라 drift한다
 - `regional_observer`와 `downstream_observer`는 player side에서 route, transit, stock-shift, market-shift 관찰을 수행한다
 - 다음 작업은 summarized transit가 더 풍부한 downstream economy effect를 만들어야 하는지, 그리고 그 효과를 observation run에서 어떻게 score할지 결정하는 것이다
 

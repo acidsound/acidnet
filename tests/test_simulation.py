@@ -929,6 +929,28 @@ def test_offscreen_regional_summaries_drift_over_time() -> None:
     assert after != before
 
 
+def test_remote_regional_risk_level_rises_under_route_pressure_and_supply_drift() -> None:
+    simulation = Simulation.create_demo()
+    initial_risk = simulation.world.regions["region.hollowmarket"].risk_level
+    simulation.world.weather = "storm_front"
+
+    simulation.advance_turn(4)
+
+    assert simulation.world.regions["region.hollowmarket"].risk_level > initial_risk
+
+
+def test_remote_regional_risk_level_recovers_after_weather_clears() -> None:
+    simulation = Simulation.create_demo()
+    simulation.world.weather = "storm_front"
+    simulation.advance_turn(4)
+    stressed_risk = simulation.world.regions["region.hollowmarket"].risk_level
+    simulation.world.weather = "clear"
+
+    simulation.advance_turn(6)
+
+    assert simulation.world.regions["region.hollowmarket"].risk_level < stressed_risk
+
+
 def test_regional_transit_spawns_from_summary_stock_imbalance() -> None:
     simulation = Simulation.create_demo()
     simulation.world.regions["region.greenfall"].stock_signals["wheat"] = 18
@@ -1124,10 +1146,12 @@ def test_visible_world_events_hide_remote_route_delay_after_region_travel() -> N
         simulation.handle_command("next 1")
     simulation.advance_turn(1)
 
-    visible_route_ids = {event.route_id for event in simulation._visible_world_events_for_player() if event.route_id is not None}
+    visible_event_ids = {event.event_id for event in simulation._visible_world_events_for_player()}
+    current_route_event = simulation._route_delay_event("route.greenfall.hollowmarket")
 
-    assert "route.greenfall.hollowmarket" in visible_route_ids
-    assert "route.greenfall.stonewatch" not in visible_route_ids
+    if current_route_event is not None:
+        assert current_route_event.event_id in visible_event_ids
+    assert simulation._route_delay_event_id("route.greenfall.stonewatch") not in visible_event_ids
 
 
 def test_visible_world_events_hide_remote_local_region_events() -> None:

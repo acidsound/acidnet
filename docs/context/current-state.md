@@ -89,6 +89,7 @@ If they compete for the next thin slice, this file decides.
 - `trade [npc] debt <item> <qty>` now extends credit through the same stock, reserve-floor, relationship, urgency, and debt-ceiling checks, and `repay [npc] [amount]` settles that debt on the live command path
 - web state now exposes player debt summaries and per-NPC `debt_options`, so browser-visible exchange state no longer hides the remaining debt leg of `20C`
 - web state now also exposes `scene.route_preview` plus `actions.travel`, so browser-visible route preview no longer has to be reconstructed from map topology or ad hoc client rules
+- summarized regional `risk_level` now drifts with offscreen stock pressure, route throughput, and local scarcity, so regional nodes surface broader pressure than price alone
 
 ## Immediate Queue
 

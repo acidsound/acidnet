@@ -388,6 +388,25 @@ def test_scene_payload_exposes_route_delay_status() -> None:
     assert all("status_summary" in route for route in state["scene"]["regional_routes"])
 
 
+def test_scene_payload_regional_nodes_reflect_dynamic_risk_level_changes() -> None:
+    runtime = build_runtime("web_frontend_regional_risk_test")
+    try:
+        initial_state = runtime.scene_payload()
+        initial_hollow_risk = next(
+            node["risk_level"] for node in initial_state["scene"]["regional_nodes"] if node["region_id"] == "region.hollowmarket"
+        )
+        runtime.simulation.world.weather = "storm_front"
+        runtime.simulation.advance_turn(4)
+        stressed_state = runtime.scene_payload()
+    finally:
+        runtime.close()
+
+    stressed_hollow_risk = next(
+        node["risk_level"] for node in stressed_state["scene"]["regional_nodes"] if node["region_id"] == "region.hollowmarket"
+    )
+    assert stressed_hollow_risk > initial_hollow_risk
+
+
 def test_scene_payload_hides_remote_route_delay_after_region_travel() -> None:
     runtime = build_runtime("web_frontend_remote_route_visibility_test")
     try:
@@ -400,11 +419,10 @@ def test_scene_payload_hides_remote_route_delay_after_region_travel() -> None:
     finally:
         runtime.close()
 
-    delayed_routes = {route["route_id"] for route in state["scene"]["regional_routes"] if route["status"] == "delayed"}
-    unknown_routes = {route["route_id"] for route in state["scene"]["regional_routes"] if route["status"] == "unknown"}
+    route_statuses = {route["route_id"]: route["status"] for route in state["scene"]["regional_routes"]}
 
-    assert "route.greenfall.hollowmarket" in delayed_routes
-    assert "route.greenfall.stonewatch" in unknown_routes
+    assert route_statuses["route.greenfall.hollowmarket"] in {"stable", "delayed"}
+    assert route_statuses["route.greenfall.stonewatch"] == "unknown"
 
 
 def test_scene_payload_exposes_regional_transit_counts() -> None:

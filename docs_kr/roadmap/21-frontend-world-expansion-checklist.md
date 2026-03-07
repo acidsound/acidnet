@@ -136,6 +136,7 @@
   - offscreen regional shortage와 route delay는 local regional rumor를 밀어 넣는다
   - summarized `regional_transits`는 full offscreen NPC loop 없이 settlement 사이 goods를 이동시킨다
   - web regional route payload는 summarized `transit_count`를 노출한다
+  - summarized regional `risk_level`은 이제 offscreen stock pressure, route throughput, local scarcity에 따라 drift하며 static fixture로 남지 않는다
   - `regional_observer`와 `downstream_observer`는 player side에서 cross-settlement route, transit, stock-shift, market-shift 관찰을 수행한다
   - 남은 gap은 summarized transit의 downstream economy impact를 얼마나 더 키울지, 그리고 그 효과를 observation run에서 어떻게 score할지 정하는 것이다
 

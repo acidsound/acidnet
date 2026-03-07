@@ -1253,6 +1253,30 @@ class Simulation:
                 region.stock_signals["fish"] = max(0, min(18, region.stock_signals["fish"] + fish_delta))
             if "tool" in region.stock_signals:
                 region.stock_signals["tool"] = max(0, min(18, region.stock_signals["tool"] + tool_delta))
+        self._refresh_regional_risk_levels(route_capacity, current_region_id=current_region_id, weather_pressure=weather_pressure)
+
+    def _refresh_regional_risk_levels(
+        self,
+        route_capacity: dict[str, float],
+        *,
+        current_region_id: str | None,
+        weather_pressure: int,
+    ) -> None:
+        weather_risk = max(0.0, -weather_pressure) * 0.08
+        for region in self.world.regions.values():
+            throughput = min(1.2, route_capacity.get(region.region_id, 0.0))
+            food_total = sum(region.stock_signals.get(item, 0) for item in ("bread", "wheat", "fish"))
+            food_pressure = min(1.0, max(0, 16 - food_total) / 16.0)
+            tool_pressure = min(1.0, max(0, 3 - region.stock_signals.get("tool", 0)) / 3.0)
+            route_pressure = min(1.0, max(0.0, 0.85 - throughput) / 0.85)
+            local_pressure = 0.0
+            if region.region_id == current_region_id:
+                local_pressure = min(0.4, self.world.market.scarcity_index * 0.18 + self.world.field_stress * 0.24)
+            target_risk = min(
+                1.0,
+                0.08 + food_pressure * 0.45 + tool_pressure * 0.08 + route_pressure * 0.22 + weather_risk + local_pressure,
+            )
+            region.risk_level = max(0.0, min(1.0, region.risk_level * 0.6 + target_risk * 0.4))
 
     def _advance_regional_route_events(self) -> list[str]:
         events: list[str] = []

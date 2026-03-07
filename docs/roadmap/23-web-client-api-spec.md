@@ -462,6 +462,7 @@ Per-node shape:
 Notes:
 
 - `stock_signals` is a summarized regional stock view for player-facing context, not raw offscreen actor inventory
+- `risk_level` is now a dynamic summarized pressure signal driven by offscreen stock, route throughput, and local scarcity context
 - `known_local_locations` is a region-summary hint for map and route presentation, not a second navigation rules engine
 - `is_current_region` marks the player's present region in the summarized graph
 

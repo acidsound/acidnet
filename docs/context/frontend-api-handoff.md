@@ -73,6 +73,7 @@ Notes:
 - `player.debts` entries currently expose `npc_id`, `name`, and `amount` for outstanding player-visible debt.
 - `scene.route_preview` is the server-authored route preview DTO for local and regional travel options.
 - `regional_nodes` is summarized regional context, including `stock_signals`; it is not raw offscreen NPC state.
+- `regional_nodes[].risk_level` is now a dynamic summarized pressure signal driven by offscreen stock, route throughput, and local scarcity context.
 - `scene.people` cards now also expose `debt_options` alongside `buy_options`, `sell_options`, `ask_options`, and `give_options`.
 - `actions.travel` is the server-authored travel action catalog aligned with `scene.route_preview`.
 - `actions` is the allowed action catalog for the current state, not a hint to rebuild rules in the browser.
