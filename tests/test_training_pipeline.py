@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from run_qwen4b_baseline_train import _apply_hf_peft_overrides, _apply_unsloth_overrides
 
+from acidnet.training.teacher_prompts import TeacherConfig, dialogue_user_prompt, teacher_system_prompt
 from acidnet.training import (
     baseline_pipeline_artifacts_to_dict,
     build_bootstrap_rejected_outputs,
@@ -51,6 +52,32 @@ def test_demo_prompt_pack_contains_planner_and_dialogue_rows() -> None:
     assert rows
     assert task_names == {"planner", "dialogue"}
     assert all("World sample:" in row.user_prompt for row in rows)
+
+
+def test_demo_prompt_pack_contains_hard_direct_say_rows() -> None:
+    rows = generate_demo_prompt_pack(num_turns=1)
+    dialogue_rows = [row for row in rows if row.task == "dialogue"]
+
+    assert any(row.metadata.get("interaction_case") == "base" for row in dialogue_rows)
+    assert any(row.metadata.get("interaction_case") != "base" for row in dialogue_rows)
+    assert any(row.metadata.get("interaction_mode") == "direct_say" for row in dialogue_rows)
+
+
+def test_demo_prompt_pack_always_includes_hunger_direct_rows() -> None:
+    rows = generate_demo_prompt_pack(num_turns=1)
+    dialogue_rows = [row for row in rows if row.task == "dialogue"]
+
+    assert any(row.metadata.get("interaction_case") == "hunger_direct" for row in dialogue_rows)
+
+
+def test_demo_prompt_pack_includes_extra_no_food_hunger_rows_for_no_food_vendor() -> None:
+    rows = generate_demo_prompt_pack(num_turns=1)
+    doran_rows = [row for row in rows if row.task == "dialogue" and row.metadata.get("npc_id") == "npc.doran"]
+    interaction_cases = {row.metadata.get("interaction_case") for row in doran_rows}
+
+    assert "hunger_direct" in interaction_cases
+    assert "no_food_hunger_spare_direct" in interaction_cases
+    assert "no_food_hunger_redirect_direct" in interaction_cases
 
 
 def test_synthetic_prompt_pack_generates_scenario_metadata_and_exports_jsonl() -> None:
@@ -203,6 +230,136 @@ def test_bootstrap_teacher_outputs_can_be_generated_from_prompt_rows() -> None:
     assert len(rows) == 2
     assert rows[0].assistant_json["task"] == "dialogue"
     assert rows[0].assistant_json["response"]
+
+
+def test_bootstrap_teacher_answers_origin_question_directly() -> None:
+    sample = {
+        "world": {"day": 1, "tick": 0, "weather": "clear", "scarcity_index": 0.4, "market_prices": {"bread": 4}},
+        "location": {"name": "Warm Crust Bakery"},
+        "player": {"hunger": 12.0},
+        "npc": {
+            "npc_id": "npc.hobb",
+            "name": "Hobb",
+            "profession": "baker",
+            "traits": ["warm"],
+            "hunger": 20.0,
+            "inventory": {"bread": 3},
+            "known_rumors": [],
+            "is_vendor": True,
+        },
+        "persona": {"speech_style": ["plain"], "values": ["craft"]},
+        "interaction_context": {
+            "player_prompt": "Where did you come from?",
+            "player_goal": "direct_say",
+            "expected_focus": "Answer directly.",
+        },
+        "beliefs": [],
+        "recent_memories": [],
+        "visible_rumors": [],
+        "relationship_score": 0.0,
+    }
+    prompt_rows = [
+        {
+            "custom_id": "dialogue.demo.0.npc.hobb.origin_direct",
+            "task": "dialogue",
+            "system_prompt": teacher_system_prompt(TeacherConfig()),
+            "user_prompt": dialogue_user_prompt(sample),
+            "metadata": {"npc_id": "npc.hobb", "scenario_id": "scenario_0000"},
+        }
+    ]
+
+    rows = build_bootstrap_teacher_outputs(prompt_rows, tasks=("dialogue",))
+
+    assert len(rows) == 1
+    response = rows[0].assistant_json["response"].lower()
+    assert "warm crust bakery" in response or "keep close" in response or "nothing farther" in response
+
+
+def test_bootstrap_teacher_redirects_hunger_when_npc_has_no_food() -> None:
+    sample = {
+        "world": {"day": 1, "tick": 0, "weather": "clear", "scarcity_index": 0.4, "market_prices": {"bread": 4, "tool": 15}},
+        "location": {"name": "Red Anvil Smithy"},
+        "player": {"hunger": 68.0},
+        "npc": {
+            "npc_id": "npc.doran",
+            "name": "Doran",
+            "profession": "blacksmith",
+            "traits": ["gruff"],
+            "hunger": 20.0,
+            "inventory": {"tool": 2},
+            "known_rumors": ["Bread is getting harder to find by dusk."],
+            "is_vendor": True,
+        },
+        "persona": {"speech_style": ["plain"], "values": ["work"]},
+        "interaction_context": {
+            "player_prompt": "I am hungry.",
+            "player_goal": "direct_say",
+            "expected_focus": "Answer directly.",
+        },
+        "beliefs": [],
+        "recent_memories": [],
+        "visible_rumors": ["Bread is getting harder to find by dusk."],
+        "relationship_score": 0.0,
+    }
+    prompt_rows = [
+        {
+            "custom_id": "dialogue.demo.0.npc.doran.hunger_direct",
+            "task": "dialogue",
+            "system_prompt": teacher_system_prompt(TeacherConfig()),
+            "user_prompt": dialogue_user_prompt(sample),
+            "metadata": {"npc_id": "npc.doran", "scenario_id": "scenario_0001"},
+        }
+    ]
+
+    rows = build_bootstrap_teacher_outputs(prompt_rows, tasks=("dialogue",))
+
+    assert len(rows) == 1
+    assert rows[0].assistant_json["response"] == "I do not have food to spare. Try the bakery or the shrine before the square runs thin."
+
+
+def test_bootstrap_teacher_redirects_food_trade_when_vendor_has_no_edible_goods() -> None:
+    sample = {
+        "world": {"day": 1, "tick": 0, "weather": "clear", "scarcity_index": 0.4, "market_prices": {"bread": 4, "tool": 15}},
+        "location": {"name": "Red Anvil Smithy"},
+        "player": {"hunger": 22.0},
+        "npc": {
+            "npc_id": "npc.doran",
+            "name": "Doran",
+            "profession": "blacksmith",
+            "traits": ["gruff"],
+            "hunger": 20.0,
+            "inventory": {"tool": 2},
+            "known_rumors": [],
+            "is_vendor": True,
+        },
+        "persona": {"speech_style": ["plain"], "values": ["work"]},
+        "interaction_context": {
+            "player_prompt": "I need food. What can you sell me right now?",
+            "player_goal": "trade_request",
+            "expected_focus": "Answer directly.",
+        },
+        "beliefs": [],
+        "recent_memories": [],
+        "visible_rumors": [],
+        "relationship_score": 0.0,
+    }
+    prompt_rows = [
+        {
+            "custom_id": "dialogue.demo.0.npc.doran.trade_request",
+            "task": "dialogue",
+            "system_prompt": teacher_system_prompt(TeacherConfig()),
+            "user_prompt": dialogue_user_prompt(sample),
+            "metadata": {"npc_id": "npc.doran", "scenario_id": "scenario_0002"},
+        }
+    ]
+
+    rows = build_bootstrap_teacher_outputs(prompt_rows, tasks=("dialogue",))
+
+    assert len(rows) == 1
+    assert rows[0].assistant_json["response"] == (
+        "If it matters, keep it plain. I do not have food to sell from Red Anvil Smithy right now. "
+        "Try the bakery or the tavern before the shelves thin further."
+    )
 
 
 def test_qwen4b_baseline_run_spec_can_render_unsloth_script() -> None:

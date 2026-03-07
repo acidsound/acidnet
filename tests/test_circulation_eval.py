@@ -1,5 +1,5 @@
-from acidnet.engine import Simulation
 from acidnet.eval import run_circulation_eval
+from acidnet.simulator import Simulation
 
 
 def test_circulation_eval_reports_active_world_without_mass_starvation() -> None:

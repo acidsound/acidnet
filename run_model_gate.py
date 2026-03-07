@@ -11,19 +11,32 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from acidnet.eval import export_model_gate_json, run_model_gate, summarize_model_gate
+from acidnet.llm import DEFAULT_OPENAI_COMPAT_MODEL, EVAL_DIALOGUE_BACKENDS
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run a combined dialogue and world-circulation gate for a backend.")
     parser.add_argument(
         "--dialogue-backend",
-        choices=("heuristic", "openai_compat", "local_peft"),
+        choices=EVAL_DIALOGUE_BACKENDS,
         default="heuristic",
-        help="Dialogue backend to evaluate.",
+        help="Dialogue backend to evaluate. local_peft stays available here for in-process dev/eval parity.",
     )
-    parser.add_argument("--dialogue-model", default=None, help="Model identifier for the dialogue backend.")
-    parser.add_argument("--dialogue-endpoint", default=None, help="OpenAI-compatible endpoint for dialogue generation.")
-    parser.add_argument("--dialogue-adapter-path", default=None, help="Local LoRA adapter path for the local_peft backend.")
+    parser.add_argument(
+        "--dialogue-model",
+        default=None,
+        help=f"Model identifier for the dialogue backend. openai_compat usually targets the llama-server alias (default: {DEFAULT_OPENAI_COMPAT_MODEL}).",
+    )
+    parser.add_argument(
+        "--dialogue-endpoint",
+        default=None,
+        help="OpenAI-compatible endpoint for dialogue generation, typically llama-server for the promoted GGUF runtime.",
+    )
+    parser.add_argument(
+        "--dialogue-adapter-path",
+        default=None,
+        help="Local LoRA adapter path for the local_peft dev/eval backend.",
+    )
     parser.add_argument("--turns", type=int, default=120, help="Number of circulation turns to simulate.")
     parser.add_argument(
         "--output",

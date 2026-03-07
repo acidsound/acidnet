@@ -8,6 +8,13 @@ from acidnet.llm.prompt_builder import normalize_interaction_mode
 from acidnet.training.openai_batch import TeacherOutputRow, export_teacher_output_jsonl
 
 FOOD_VALUES = {"stew": 34.0, "bread": 26.0, "fish": 21.0, "wheat": 10.0}
+ORIGIN_TOKENS = ("where did you come from", "where are you from", "where do you stay")
+IDENTITY_TOKENS = ("who are you", "we have met", "we've met", "first time")
+HUNGER_TOKENS = ("i am hungry", "i'm hungry", "hungry")
+STOCK_TOKENS = ("what do you have", "on hand", "spare", "sell", "stock", "bread right now", "tool")
+FOOD_REQUEST_TOKENS = ("food", "hungry", "eat", "meal", "bread", "stew", "fish", "wheat")
+SAFETY_TOKENS = ("avoid", "trouble", "unsafe", "safe")
+RECOVERY_TOKENS = ("recover", "fields", "weather turns")
 
 
 @dataclass(frozen=True, slots=True)
@@ -197,8 +204,11 @@ def _dialogue_response(sample: dict) -> str:
     )
     world = sample["world"]
     location = sample["location"]
+    player_prompt = str(interaction.get("player_prompt", "")).strip()
+    normalized_prompt = " ".join(player_prompt.lower().split())
     rumors = npc.get("known_rumors", [])
     goods = [f"{item} x{qty}" for item, qty in npc["inventory"].items() if qty > 0]
+    edible_goods = [f"{item} x{qty}" for item, qty in npc["inventory"].items() if qty > 0 and item in FOOD_VALUES]
     opening = {
         "merchant": "The square moves on coin and timing.",
         "farmer": "The field answers to weather before it answers to people.",
@@ -211,9 +221,23 @@ def _dialogue_response(sample: dict) -> str:
         "tailor": "Stories and status travel together in this place.",
     }.get(npc["profession"], f"{npc['name']} watches the room before answering.")
 
+    direct_response = _direct_dialogue_response(
+        sample,
+        interaction_mode=interaction_mode,
+        normalized_prompt=normalized_prompt,
+        goods=goods,
+    )
+    if direct_response:
+        return direct_response
+
     if interaction_mode == "rumor_request" and rumors:
         return f"{opening} The clearest thing going around is this: {rumors[0]}"
     if interaction_mode == "trade_request":
+        asks_for_food = any(token in normalized_prompt for token in FOOD_REQUEST_TOKENS)
+        if asks_for_food and edible_goods:
+            return f"{opening} Right now I can move {', '.join(edible_goods[:3])}, and the weather is already pushing the food line thin."
+        if asks_for_food and not edible_goods:
+            return f"{opening} I do not have food to sell from {location['name']} right now. Try the bakery or the tavern before the shelves thin further."
         if goods:
             return f"{opening} Right now I can move {', '.join(goods[:3])}, and the weather is already pushing the market."
         return f"{opening} Stock is thin right now, so I would not promise more than I have."
@@ -232,6 +256,59 @@ def _dialogue_response(sample: dict) -> str:
     if npc["hunger"] >= 45:
         return f"{opening} I am keeping one eye on food and one on the weather, same as everyone else."
     return f"{opening} {location['name']} feels steady for the moment, but that can change by dusk."
+
+
+def _direct_dialogue_response(
+    sample: dict,
+    *,
+    interaction_mode: str,
+    normalized_prompt: str,
+    goods: list[str],
+) -> str | None:
+    npc = sample["npc"]
+    location = sample["location"]
+    world = sample["world"]
+    rumors = npc.get("known_rumors", [])
+    best_food = _best_food_in_inventory(npc["inventory"])
+
+    if interaction_mode != "direct_say":
+        return None
+
+    if any(token in normalized_prompt for token in IDENTITY_TOKENS):
+        return f'I am {npc["name"]}, the village {npc["profession"]}.'
+
+    if any(token in normalized_prompt for token in ORIGIN_TOKENS):
+        return f'I keep close to {location["name"]} most days. Nothing farther than the village has me right now.'
+
+    if any(token in normalized_prompt for token in HUNGER_TOKENS):
+        if best_food is not None and npc.get("is_vendor"):
+            return f'If you can pay, I still have {best_food} on hand. Do not wait until the shelves thin further.'
+        if best_food is not None:
+            return f'I still have {best_food} nearby, but not enough to pretend the village is comfortable.'
+        return "I do not have food to spare. Try the bakery or the shrine before the square runs thin."
+
+    if any(token in normalized_prompt for token in STOCK_TOKENS):
+        if goods:
+            return f'What I can point to right now is {", ".join(goods[:3])}. I will not promise more than that.'
+        return "Not much. What is visible is all I would trust myself to promise."
+
+    if npc["profession"] == "guard" and any(token in normalized_prompt for token in SAFETY_TOKENS):
+        if world["weather"] == "storm_front":
+            return "Keep clear of the riverside and do not test the road while the storm front is pressing through."
+        return "Do not crowd hungry people or push a bad bargain in the square. That is how trouble starts here."
+
+    if npc["profession"] == "farmer" and any(token in normalized_prompt for token in RECOVERY_TOKENS):
+        if world["weather"] == "cool_rain":
+            return "Yes, if the cool rain holds. The field can settle faster than people expect when the ground drinks properly."
+        return f"It can recover, but not for free. Right now the {world['weather']} is still deciding how much the field will give back."
+
+    if rumors and "rumor" in normalized_prompt:
+        return f'The cleanest answer I can give is this: {rumors[0]}'
+
+    if "?" in normalized_prompt:
+        return f'Around {location["name"]}, I can only answer from what is in front of me right now.'
+
+    return None
 
 
 def _best_food_in_inventory(inventory: dict[str, int]) -> str | None:

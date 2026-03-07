@@ -6,12 +6,13 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from acidnet.engine import Simulation
-from acidnet.models import Rumor, RumorCategory
+from acidnet.simulator import Simulation
+from acidnet.simulator.models import Rumor, RumorCategory
 from acidnet.training.experiment_registry import recommended_experiment_order
 from acidnet.training.teacher_prompts import TeacherConfig, dialogue_user_prompt, planner_user_prompt, teacher_system_prompt
 
 WEATHER_VARIANTS = ("dry_wind", "clear", "cool_rain", "storm_front", "market_day", "dusty_heat")
+EDIBLE_ITEMS = ("bread", "fish", "stew", "wheat")
 
 RUMOR_TEMPLATES: tuple[dict[str, Any], ...] = (
     {
@@ -134,14 +135,18 @@ def _collect_turn_rows(
     candidate_order = [candidate.key for candidate in recommended_experiment_order()]
 
     for npc in simulation.npcs.values():
-        sample = _build_world_sample(simulation, npc.npc_id, rng=rng)
-        metadata = {
-            "candidate_order": candidate_order,
-            "scenario_id": scenario_id,
-            "npc_id": npc.npc_id,
-            "turn": turn,
-            "player_location": simulation.player.location_id,
-        }
+        dialogue_cases = _dialogue_interactions(simulation, npc.npc_id, turn=turn, rng=rng)
+        planner_case_id, planner_interaction = dialogue_cases[0]
+        sample = _build_world_sample(simulation, npc.npc_id, interaction=planner_interaction)
+        metadata = _row_metadata(
+            candidate_order=candidate_order,
+            scenario_id=scenario_id,
+            npc_id=npc.npc_id,
+            turn=turn,
+            player_location=simulation.player.location_id,
+            interaction_case=planner_case_id,
+            interaction_mode=planner_interaction["player_goal"],
+        )
         rows.append(
             PromptPackRow(
                 custom_id=f"planner.{scenario_id}.{turn}.{npc.npc_id}",
@@ -152,16 +157,32 @@ def _collect_turn_rows(
                 metadata=metadata,
             )
         )
-        rows.append(
-            PromptPackRow(
-                custom_id=f"dialogue.{scenario_id}.{turn}.{npc.npc_id}",
-                teacher_model=config.teacher_model,
-                task="dialogue",
-                system_prompt=teacher_system_prompt(config),
-                user_prompt=dialogue_user_prompt(sample),
-                metadata=metadata,
+        for interaction_case, interaction in dialogue_cases:
+            sample = _build_world_sample(simulation, npc.npc_id, interaction=interaction)
+            dialogue_metadata = _row_metadata(
+                candidate_order=candidate_order,
+                scenario_id=scenario_id,
+                npc_id=npc.npc_id,
+                turn=turn,
+                player_location=simulation.player.location_id,
+                interaction_case=interaction_case,
+                interaction_mode=interaction["player_goal"],
             )
-        )
+            custom_id = (
+                f"dialogue.{scenario_id}.{turn}.{npc.npc_id}"
+                if interaction_case == "base"
+                else f"dialogue.{scenario_id}.{turn}.{npc.npc_id}.{interaction_case}"
+            )
+            rows.append(
+                PromptPackRow(
+                    custom_id=custom_id,
+                    teacher_model=config.teacher_model,
+                    task="dialogue",
+                    system_prompt=teacher_system_prompt(config),
+                    user_prompt=dialogue_user_prompt(sample),
+                    metadata=dialogue_metadata,
+                )
+            )
     return rows
 
 
@@ -237,7 +258,7 @@ def _inject_scenario_rumors(simulation: Simulation, *, scenario_id: str, rng: ra
                 simulation.npcs[npc_id].known_rumor_ids.append(rumor_id)
 
 
-def _build_world_sample(simulation: Simulation, npc_id: str, *, rng: random.Random) -> dict[str, Any]:
+def _build_world_sample(simulation: Simulation, npc_id: str, *, interaction: dict[str, str]) -> dict[str, Any]:
     npc = simulation.npcs[npc_id]
     persona = simulation.personas[npc.persona_id]
     location = simulation.world.locations[npc.location_id]
@@ -263,7 +284,6 @@ def _build_world_sample(simulation: Simulation, npc_id: str, *, rng: random.Rand
         for relation in npc.relationships.values()
     ]
     recent_memories = [memory.model_dump(mode="json") for memory in simulation.memories.get(npc_id, [])[-4:]]
-    interaction = _interaction_context(simulation, npc_id, rng=rng)
 
     return {
         "world": {
@@ -317,7 +337,43 @@ def _build_world_sample(simulation: Simulation, npc_id: str, *, rng: random.Rand
     }
 
 
-def _interaction_context(simulation: Simulation, npc_id: str, *, rng: random.Random) -> dict[str, str]:
+def _dialogue_interactions(
+    simulation: Simulation,
+    npc_id: str,
+    *,
+    turn: int,
+    rng: random.Random,
+) -> list[tuple[str, dict[str, str]]]:
+    interactions: list[tuple[str, dict[str, str]]] = [("base", _base_interaction_context(simulation, npc_id, rng=rng))]
+    seen_prompts = {interactions[0][1]["player_prompt"]}
+
+    # Always keep one explicit hunger-direct example in the prompt pack so
+    # no-food redirects stay present even when the rotating hard case lands elsewhere.
+    hunger_case = (
+        "hunger_direct",
+        {
+            "player_prompt": "I am hungry.",
+            "player_goal": "direct_say",
+            "expected_focus": "React to immediate need and mention relevant food reality only if the NPC can ground it in state.",
+        },
+    )
+    interactions.append(hunger_case)
+    seen_prompts.add(hunger_case[1]["player_prompt"])
+
+    hard_case_id, hard_case = _hard_direct_say_context(simulation, npc_id, turn=turn)
+    if hard_case["player_prompt"] not in seen_prompts:
+        interactions.append((hard_case_id, hard_case))
+        seen_prompts.add(hard_case["player_prompt"])
+
+    for extra_case_id, extra_case in _supplemental_food_pressure_contexts(simulation, npc_id):
+        if extra_case["player_prompt"] in seen_prompts:
+            continue
+        interactions.append((extra_case_id, extra_case))
+        seen_prompts.add(extra_case["player_prompt"])
+    return interactions
+
+
+def _base_interaction_context(simulation: Simulation, npc_id: str, *, rng: random.Random) -> dict[str, str]:
     npc = simulation.npcs[npc_id]
     prompts: list[dict[str, str]] = [
         {
@@ -374,6 +430,173 @@ def _interaction_context(simulation: Simulation, npc_id: str, *, rng: random.Ran
     return rng.choice(prompts)
 
 
+def _hard_direct_say_context(simulation: Simulation, npc_id: str, *, turn: int) -> tuple[str, dict[str, str]]:
+    npc = simulation.npcs[npc_id]
+    cases: list[tuple[str, dict[str, str]]] = [
+        (
+            "origin_direct",
+            {
+                "player_prompt": "Where did you come from?",
+                "player_goal": "direct_say",
+                "expected_focus": "Answer the origin or usual-place question directly before any extra detail.",
+            },
+        ),
+        (
+            "identity_direct",
+            {
+                "player_prompt": "I do not think we have met. Who are you?",
+                "player_goal": "direct_say",
+                "expected_focus": "Introduce the NPC directly and briefly, without drifting into generic village commentary.",
+            },
+        ),
+        (
+            "hunger_direct",
+            {
+                "player_prompt": "I am hungry.",
+                "player_goal": "direct_say",
+                "expected_focus": "React to immediate need and mention relevant food reality only if the NPC can ground it in state.",
+            },
+        ),
+    ]
+    if npc.profession == "baker":
+        cases.append(
+            (
+                "baker_stock_direct",
+                {
+                    "player_prompt": "If I am hungry, can you actually spare bread right now?",
+                    "player_goal": "direct_say",
+                    "expected_focus": "Answer with current bread reality, not generic market chatter.",
+                },
+            )
+        )
+    if npc.profession == "merchant":
+        cases.append(
+            (
+                "merchant_stock_direct",
+                {
+                    "player_prompt": "What do you really have on hand right now?",
+                    "player_goal": "direct_say",
+                    "expected_focus": "Answer with grounded visible stock or scarcity, not a generic sales line.",
+                },
+            )
+        )
+    if npc.profession == "guard":
+        cases.append(
+            (
+                "guard_safety_direct",
+                {
+                    "player_prompt": "What should I avoid if I do not want trouble today?",
+                    "player_goal": "direct_say",
+                    "expected_focus": "Answer the safety question directly from visible tension, rumors, and route conditions.",
+                },
+            )
+        )
+    if npc.profession == "farmer":
+        cases.append(
+            (
+                "farmer_recovery_direct",
+                {
+                    "player_prompt": "Can the fields recover if the weather turns?",
+                    "player_goal": "direct_say",
+                    "expected_focus": "Answer the recovery question directly with field stress and weather context.",
+                },
+            )
+        )
+    if npc.profession == "priest":
+        cases.append(
+            (
+                "priest_need_direct",
+                {
+                    "player_prompt": "Who needs help first today?",
+                    "player_goal": "direct_say",
+                    "expected_focus": "Name the clearest need or say that no single case stands out.",
+                },
+            )
+        )
+    if npc.profession == "fisher":
+        cases.append(
+            (
+                "fisher_route_direct",
+                {
+                    "player_prompt": "Is the riverside still worth the walk today?",
+                    "player_goal": "direct_say",
+                    "expected_focus": "Answer the route and catch question directly with weather or catch pressure.",
+                },
+            )
+        )
+    if npc.profession == "blacksmith":
+        cases.append(
+            (
+                "smith_supply_direct",
+                {
+                    "player_prompt": "Are you holding tools back, or can people still get one?",
+                    "player_goal": "direct_say",
+                    "expected_focus": "Answer directly about tool availability and pressure.",
+                },
+            )
+        )
+    case_index = (sum(ord(ch) for ch in npc_id) + turn) % len(cases)
+    return cases[case_index]
+
+
+def _supplemental_food_pressure_contexts(
+    simulation: Simulation,
+    npc_id: str,
+) -> list[tuple[str, dict[str, str]]]:
+    npc = simulation.npcs[npc_id]
+    has_edible_goods = _has_edible_inventory(npc.inventory)
+    if has_edible_goods:
+        return [
+            (
+                "food_offer_direct",
+                {
+                    "player_prompt": "I am hungry. What can you actually spare right now?",
+                    "player_goal": "direct_say",
+                    "expected_focus": "Offer only edible help that exists in current state and keep the answer direct.",
+                },
+            )
+        ]
+    return [
+        (
+            "no_food_hunger_spare_direct",
+            {
+                "player_prompt": "I am hungry. Do you have food to spare?",
+                "player_goal": "direct_say",
+                "expected_focus": "Say plainly when there is no edible food in state and redirect instead of inventing stock.",
+            },
+        ),
+        (
+            "no_food_hunger_redirect_direct",
+            {
+                "player_prompt": "I am hungry. Should I try the bakery or the shrine instead?",
+                "player_goal": "direct_say",
+                "expected_focus": "Confirm the likely food source if the NPC has no edible food and do not pretend otherwise.",
+            },
+        ),
+    ]
+
+
+def _row_metadata(
+    *,
+    candidate_order: list[str],
+    scenario_id: str,
+    npc_id: str,
+    turn: int,
+    player_location: str,
+    interaction_case: str,
+    interaction_mode: str,
+) -> dict[str, Any]:
+    return {
+        "candidate_order": candidate_order,
+        "scenario_id": scenario_id,
+        "npc_id": npc_id,
+        "turn": turn,
+        "player_location": player_location,
+        "interaction_case": interaction_case,
+        "interaction_mode": interaction_mode,
+    }
+
+
 def _row_to_record(row: PromptPackRow) -> dict[str, Any]:
     metadata = row.metadata
     return {
@@ -392,3 +615,7 @@ def _row_to_record(row: PromptPackRow) -> dict[str, Any]:
 
 def _clamp(value: float, lower: float, upper: float) -> float:
     return max(lower, min(upper, value))
+
+
+def _has_edible_inventory(inventory: dict[str, int]) -> bool:
+    return any(inventory.get(item_id, 0) > 0 for item_id in EDIBLE_ITEMS)

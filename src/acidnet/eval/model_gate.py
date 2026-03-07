@@ -5,8 +5,8 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from acidnet.eval.circulation import CirculationReport, run_circulation_eval
-from acidnet.eval.prompt_only import PromptOnlyEvalRow, run_prompt_only_baseline_eval
-from acidnet.engine import Simulation
+from acidnet.eval.prompt_only import PromptOnlyEvalRow, count_backend_fallback_rows, run_prompt_only_baseline_eval
+from acidnet.simulator import Simulation
 
 
 @dataclass(slots=True)
@@ -45,11 +45,11 @@ def run_model_gate(
     prompt_average_latency_ms = sum(row.latency_ms for row in prompt_rows) / max(1, len(prompt_rows))
     prompt_max_latency_ms = max((row.latency_ms for row in prompt_rows), default=0.0)
     prompt_rows_with_failures = sum(1 for row in prompt_rows if row.failed_checks)
-    prompt_fallback_rows = sum(1 for row in prompt_rows if row.backend == "openai_compat" and row.adapter_name != "openai_compat")
+    prompt_fallback_rows = count_backend_fallback_rows(prompt_rows)
     prompt_adapter_names = sorted({row.adapter_name for row in prompt_rows})
     prompt_failures = sorted(
         {
-            f"{row.npc_name}:{row.interaction_mode}:{failure}"
+            f"{row.npc_name}:{row.interaction_mode}:{row.interaction_case}:{failure}"
             for row in prompt_rows
             for failure in row.failed_checks
         }
@@ -70,7 +70,7 @@ def run_model_gate(
         gate_failures.append("prompt_average_score_below_threshold")
     if prompt_rows_with_failures > 2:
         gate_failures.append("too_many_prompt_failures")
-    if dialogue_backend == "openai_compat" and prompt_fallback_rows > 2:
+    if dialogue_backend != "heuristic" and prompt_fallback_rows > 2:
         gate_failures.append("too_many_prompt_fallbacks")
     if dialogue_backend == "openai_compat" and prompt_average_latency_ms > 4000.0:
         gate_failures.append("prompt_latency_too_high")

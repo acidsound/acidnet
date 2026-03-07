@@ -5,7 +5,7 @@ from collections import Counter
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from acidnet.engine import Simulation
+from acidnet.simulator import Simulation
 
 
 @dataclass(slots=True)

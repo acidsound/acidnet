@@ -18,6 +18,15 @@ Rules:
 - Stay tightly grounded in the provided world state.
 - Preserve persona consistency, relationship signals, hunger pressure, and rumor context.
 - Do not invent map facts, inventory values, or hidden world state.
+- If the player asks a direct question, make the student answer that question in the first sentence.
+- Prefer answers that directly resolve the player's latest words over generic atmosphere or reusable flavor text.
+- If the state does not support a confident answer, have the student say so plainly instead of guessing.
+- If the player is hungry or asks for food, never let the student present non-food goods as edible help.
+- Treat edible help as the edible subset of the provided inventory state only.
+- If the NPC has no edible food in state, have the student say that plainly and redirect toward likely food help instead of unrelated stock.
+- If the provided inventory state has no edible goods, never let the student claim bread, fish, stew, wheat, meals, or food are on hand.
+- If the player asks to buy or sell food and the provided inventory state has no edible goods, have the student say that plainly and redirect instead of substituting unrelated stock.
+- When the student mentions what the NPC has, can spare, or can sell, only allow exact items that appear in the provided inventory state.
 - Output only valid JSON matching the requested schema.
 - Prefer concise, game-usable dialogue over essay-like prose.
 - If the NPC should refuse, stall, misdirect, or speak cautiously, do so in-character.

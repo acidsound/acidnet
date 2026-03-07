@@ -3,8 +3,9 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from acidnet.engine import Simulation
 from acidnet.eval import export_circulation_report_json, run_circulation_eval
+from acidnet.llm import RUNTIME_DIALOGUE_BACKENDS
+from acidnet.simulator import Simulation
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -12,7 +13,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--turns", type=int, default=120, help="Number of turns to simulate.")
     parser.add_argument(
         "--dialogue-backend",
-        choices=("heuristic", "openai_compat"),
+        choices=RUNTIME_DIALOGUE_BACKENDS,
         default="heuristic",
         help="Dialogue backend to use during the simulation run.",
     )
