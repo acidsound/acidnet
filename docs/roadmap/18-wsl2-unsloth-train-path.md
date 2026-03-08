@@ -128,7 +128,13 @@ Restore paths on a new machine:
 - gate reports -> `data/eval/`
 - final PEFT adapter -> `data/training/<run-name>_adapter/`
 - LoRA GGUF -> `data/gguf/`
-- base quantized model -> local `models/` path outside the HF adapter repo
+- base quantized model -> `models/Qwen3.5-4B-Q4_K_M.gguf`
+
+The base `Q4_K_M` file stays outside the HF adapter repo on purpose.
+If a new machine does not already have it, restore or download it into `models/Qwen3.5-4B-Q4_K_M.gguf` before launching `llama-server` for the promoted runtime path.
+Maintained reference source:
+
+- `https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf`
 
 ## End-To-End Refresh
 

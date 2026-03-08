@@ -19,6 +19,19 @@ This is also the promoted simulator runtime path for `run_acidnet.py` and `run_a
 - `run_acidnet.py`
 - `run_acidnet_web.py`
 
+## Base Model Location
+
+The promoted runtime expects the base quantized model at:
+
+- `models/Qwen3.5-4B-Q4_K_M.gguf`
+
+This file is not tracked in git and is not stored in `acidsound/acidnet_model`.
+On a new machine, restore or download the base model into that exact repo-relative path before starting `llama-server` or the promoted `openai_compat` runtime.
+
+Maintained reference source:
+
+- `https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf`
+
 ## Adapter GGUF Export
 
 Export a fine-tuned LoRA adapter to GGUF:

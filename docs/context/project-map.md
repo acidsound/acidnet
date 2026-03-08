@@ -68,7 +68,9 @@ The goal is to show where the live contracts actually sit in code and tests.
   - restore the LoRA GGUF into `data/gguf/` for `llama-server` deployment
 - The base quantized model is still separate.
   - `acidnet_model` stores the fine-tuned adapter and adapter GGUF, not the base `Q4_K_M` model itself
-  - the promoted runtime still expects the base GGUF in a local path such as `models/`
+  - the promoted runtime expects the base GGUF at `models/Qwen3.5-4B-Q4_K_M.gguf`
+  - if the file is missing on a new machine, restore or download it there before launching `run_llama_server.ps1`, `run_acidnet.py`, or `run_acidnet_web.py` against the promoted runtime path
+  - maintained reference source: `https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf`
 - If a new machine should reuse an existing run, either:
   - regenerate the canonical dataset locally with `run_bootstrap_qwen4b_pipeline.py`, or
   - restore the published dataset files back into the same repo-relative `data/...` paths before launching WSL training or local evaluation

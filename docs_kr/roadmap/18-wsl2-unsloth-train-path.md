@@ -129,7 +129,13 @@ Hub repo는 registry일 뿐이다.
 - gate reports -> `data/eval/`
 - final PEFT adapter -> `data/training/<run-name>_adapter/`
 - LoRA GGUF -> `data/gguf/`
-- base quantized model -> HF adapter repo와 별개인 로컬 `models/`
+- base quantized model -> `models/Qwen3.5-4B-Q4_K_M.gguf`
+
+Base `Q4_K_M` 파일은 의도적으로 HF adapter repo 밖에 둔다.
+새 머신에 이 파일이 없다면 승격된 runtime 경로에서 `llama-server`를 띄우기 전에 `models/Qwen3.5-4B-Q4_K_M.gguf`로 먼저 복원하거나 다운로드해야 한다.
+Maintained reference source:
+
+- `https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf`
 
 ## End-To-End 갱신 순서
 
