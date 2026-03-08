@@ -5,6 +5,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from acidnet.llm.prompt_builder import normalize_interaction_mode
+from acidnet.llm.trade_dialogue import TradeDialogueOption, TradeDialogueOutcome, render_trade_dialogue_outcome
 from acidnet.training.openai_batch import TeacherOutputRow, export_teacher_output_jsonl
 
 FOOD_VALUES = {"stew": 34.0, "bread": 26.0, "fish": 21.0, "wheat": 10.0}
@@ -13,6 +14,9 @@ IDENTITY_TOKENS = ("who are you", "we have met", "we've met", "first time")
 HUNGER_TOKENS = ("i am hungry", "i'm hungry", "hungry")
 STOCK_TOKENS = ("what do you have", "on hand", "spare", "sell", "stock", "bread right now", "tool")
 FOOD_REQUEST_TOKENS = ("food", "hungry", "eat", "meal", "bread", "stew", "fish", "wheat")
+PRICE_TOKENS = ("how much", "price", "prices", "cost", "gold", "coin")
+DEBT_TOKENS = ("on debt", "debt", "owe", "credit", "tab")
+FREE_REQUEST_TOKENS = ("for free", "free", "spare", "give", "gift", "share")
 SAFETY_TOKENS = ("avoid", "trouble", "unsafe", "safe")
 RECOVERY_TOKENS = ("recover", "fields", "weather turns")
 
@@ -207,8 +211,18 @@ def _dialogue_response(sample: dict) -> str:
     player_prompt = str(interaction.get("player_prompt", "")).strip()
     normalized_prompt = " ".join(player_prompt.lower().split())
     rumors = npc.get("known_rumors", [])
-    goods = [f"{item} x{qty}" for item, qty in npc["inventory"].items() if qty > 0]
-    edible_goods = [f"{item} x{qty}" for item, qty in npc["inventory"].items() if qty > 0 and item in FOOD_VALUES]
+    buy_options = list(npc.get("buy_options", []))
+    debt_options = list(npc.get("debt_options", []))
+    ask_options = list(npc.get("ask_options", []))
+    goods = [
+        f'{option["item"]} x{option["quantity"]}' if option.get("price") is None else f'{option["item"]} x{option["quantity"]} at {option["price"]} gold'
+        for option in buy_options
+    ]
+    edible_goods = [
+        f'{option["item"]} x{option["quantity"]}' if option.get("price") is None else f'{option["item"]} x{option["quantity"]} at {option["price"]} gold'
+        for option in buy_options
+        if option["item"] in FOOD_VALUES
+    ]
     opening = {
         "merchant": "The square moves on coin and timing.",
         "farmer": "The field answers to weather before it answers to people.",
@@ -220,6 +234,10 @@ def _dialogue_response(sample: dict) -> str:
         "priest": "Take a breath first. Then ask.",
         "tailor": "Stories and status travel together in this place.",
     }.get(npc["profession"], f"{npc['name']} watches the room before answering.")
+
+    trade_fact_response = _trade_fact_response(npc)
+    if trade_fact_response is not None:
+        return trade_fact_response
 
     direct_response = _direct_dialogue_response(
         sample,
@@ -233,11 +251,19 @@ def _dialogue_response(sample: dict) -> str:
     if interaction_mode == "rumor_request" and rumors:
         return f"{opening} The clearest thing going around is this: {rumors[0]}"
     if interaction_mode == "trade_request":
+        quoted_item = _mentioned_trade_item(sample, normalized_prompt)
+        quoted_buy = _find_trade_option(buy_options, quoted_item) if quoted_item else None
+        if quoted_buy is not None and any(token in normalized_prompt for token in PRICE_TOKENS):
+            return f'{opening} {quoted_buy["item"].capitalize()} is {quoted_buy["price"]} gold right now.'
         asks_for_food = any(token in normalized_prompt for token in FOOD_REQUEST_TOKENS)
         if asks_for_food and edible_goods:
             return f"{opening} Right now I can move {', '.join(edible_goods[:3])}, and the weather is already pushing the food line thin."
         if asks_for_food and not edible_goods:
             return f"{opening} I do not have food to sell from {location['name']} right now. Try the bakery or the tavern before the shelves thin further."
+        if any(token in normalized_prompt for token in FREE_REQUEST_TOKENS):
+            free_help = _free_help_response(ask_options, normalized_prompt)
+            if free_help is not None:
+                return free_help
         if goods:
             return f"{opening} Right now I can move {', '.join(goods[:3])}, and the weather is already pushing the market."
         return f"{opening} Stock is thin right now, so I would not promise more than I have."
@@ -270,9 +296,39 @@ def _direct_dialogue_response(
     world = sample["world"]
     rumors = npc.get("known_rumors", [])
     best_food = _best_food_in_inventory(npc["inventory"])
+    buy_options = list(npc.get("buy_options", []))
+    debt_options = list(npc.get("debt_options", []))
+    ask_options = list(npc.get("ask_options", []))
+    mentioned_item = _mentioned_trade_item(sample, normalized_prompt)
+    if mentioned_item is not None:
+        quoted_buy = _find_trade_option(buy_options, mentioned_item)
+        quoted_debt = _find_trade_option(debt_options, mentioned_item)
+        quoted_ask = _find_trade_option(ask_options, mentioned_item)
+        if any(token in normalized_prompt for token in PRICE_TOKENS):
+            if quoted_buy is not None:
+                if quoted_debt is not None:
+                    return f'{quoted_buy["item"].capitalize()} is {quoted_buy["price"]} gold right now, and I can still put it on debt for {quoted_debt["price"]} gold.'
+                return f'{quoted_buy["item"].capitalize()} is {quoted_buy["price"]} gold right now.'
+            if quoted_debt is not None:
+                return f'I will not sell {mentioned_item} cleanly right now, but I can still let it go on debt for {quoted_debt["price"]} gold.'
+            return f'I am not offering {mentioned_item} right now.'
+        if any(token in normalized_prompt for token in DEBT_TOKENS):
+            if quoted_debt is not None:
+                return f'I can still let {quoted_debt["item"]} go on debt for {quoted_debt["price"]} gold.'
+            return f'I am not putting {mentioned_item} on debt right now.'
+        if any(token in normalized_prompt for token in FREE_REQUEST_TOKENS):
+            if quoted_ask is not None and quoted_ask["item"] in FOOD_VALUES:
+                return f'I can spare {_quantity_phrase(quoted_ask["item"], quoted_ask["quantity"])} for free, but not more than that.'
+            if quoted_buy is not None:
+                return f'If you want {mentioned_item}, I can sell it cleanly, but I am not giving it away.'
 
     if interaction_mode != "direct_say":
         return None
+
+    if any(token in normalized_prompt for token in FREE_REQUEST_TOKENS):
+        free_help = _free_help_response(ask_options, normalized_prompt)
+        if free_help is not None:
+            return free_help
 
     if any(token in normalized_prompt for token in IDENTITY_TOKENS):
         return f'I am {npc["name"]}, the village {npc["profession"]}.'
@@ -319,3 +375,77 @@ def _best_food_in_inventory(inventory: dict[str, int]) -> str | None:
             best_item = item
             best_value = value
     return best_item
+
+
+def _mentioned_trade_item(sample: dict, normalized_prompt: str) -> str | None:
+    npc = sample["npc"]
+    option_items = {str(option.get("item", "")) for option in npc.get("buy_options", []) + npc.get("debt_options", [])}
+    option_items.update(item for item, qty in npc.get("inventory", {}).items() if qty > 0)
+    for item in sorted(option_items):
+        if item and item in normalized_prompt:
+            return item
+    return None
+
+
+def _find_trade_option(options: list[dict], item: str | None) -> dict | None:
+    if item is None:
+        return None
+    for option in options:
+        if option.get("item") == item:
+            return option
+    return None
+
+
+def _trade_fact_response(npc: dict) -> str | None:
+    trade_fact = npc.get("trade_fact")
+    if not isinstance(trade_fact, dict):
+        return None
+    stock = tuple(
+        TradeDialogueOption(
+            item=str(option.get("item", "")),
+            quantity=int(option.get("quantity", 0)),
+            price=int(option["price"]) if option.get("price") is not None else None,
+        )
+        for option in trade_fact.get("stock", [])
+    )
+    outcome = TradeDialogueOutcome(
+        kind=str(trade_fact.get("kind", "")),
+        item=trade_fact.get("item"),
+        quantity=int(trade_fact.get("quantity", 1) or 1),
+        available_quantity=int(trade_fact.get("available_quantity", 0) or 0),
+        listed_unit_price=trade_fact.get("listed_unit_price"),
+        debt_unit_price=trade_fact.get("debt_unit_price"),
+        offered_total_gold=trade_fact.get("offered_total_gold"),
+        minimum_total_gold=trade_fact.get("minimum_total_gold"),
+        accepted_total_gold=trade_fact.get("accepted_total_gold"),
+        counter_total_gold=trade_fact.get("counter_total_gold"),
+        error_code=trade_fact.get("error_code"),
+        stock=stock,
+    )
+    rendered = render_trade_dialogue_outcome(outcome).strip()
+    return rendered or None
+
+
+def _free_help_response(ask_options: list[dict], normalized_prompt: str) -> str | None:
+    mentioned_item = next(
+        (option for option in ask_options if option.get("item") and option.get("item") in normalized_prompt),
+        None,
+    )
+    if mentioned_item is not None and mentioned_item.get("item") in FOOD_VALUES:
+        return f'I can spare {_quantity_phrase(str(mentioned_item["item"]), int(mentioned_item.get("quantity", 1) or 1))} for free, but not more than that.'
+    edible_option = next(
+        (option for option in ask_options if option.get("item") in FOOD_VALUES and int(option.get("quantity", 0) or 0) > 0),
+        None,
+    )
+    if edible_option is not None:
+        return f'I can spare {_quantity_phrase(str(edible_option["item"]), int(edible_option.get("quantity", 1) or 1))} for free, but not more than that.'
+    if any(token in normalized_prompt for token in FOOD_REQUEST_TOKENS):
+        return "I do not have food to spare. Try the bakery or the shrine before the square runs thin."
+    return None
+
+
+def _quantity_phrase(item: str, quantity: int) -> str:
+    if quantity == 1:
+        article = "an" if item[:1].lower() in {"a", "e", "i", "o", "u"} else "a"
+        return f"{article} {item}"
+    return f"{item} x{quantity}"

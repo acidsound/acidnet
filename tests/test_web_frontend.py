@@ -203,6 +203,81 @@ def test_run_command_forwards_system_prompt_and_player_prompt_for_say() -> None:
     assert adapter.contexts[-1].player_prompt == "Where did you come from?"
 
 
+def test_run_command_routes_exact_trade_price_query_through_simulator_adjudication() -> None:
+    runtime, adapter = build_recording_runtime(
+        "web_frontend_trade_tool_price_test",
+        "Stay grounded. Reply as exactly one NPC.",
+    )
+    try:
+        result = runtime.run_command("say mara How much is bread?")
+    finally:
+        runtime.close()
+
+    assert result["ok"] is True
+    assert adapter.contexts
+    assert adapter.contexts[-1].trade_fact is not None
+    assert adapter.contexts[-1].trade_fact.kind == "trade_quote"
+    assert adapter.contexts[-1].trade_fact.listed_unit_price == 6
+    assert result["debug"]["dialogue_trace"]["path"] == "trade_adjudicated_repaired"
+    assert result["debug"]["dialogue_trace"]["trade_intent"] == "trade_quote"
+    assert result["debug"]["dialogue_trace"]["validation_reason"] == "missing_listed_price"
+    assert any(event["kind"] == "debug" and "trade_adjudicated_repaired" in event["text"] for event in result["state"]["recent_events"])
+
+
+def test_run_command_exposes_freeform_dialogue_trace_when_trade_tool_path_misses() -> None:
+    runtime, adapter = build_recording_runtime(
+        "web_frontend_trade_tool_miss_trace_test",
+        "Stay grounded. Reply as exactly one NPC.",
+    )
+    try:
+        result = runtime.run_command("say mara How is business today?")
+    finally:
+        runtime.close()
+
+    assert result["ok"] is True
+    assert adapter.contexts
+    assert result["debug"]["dialogue_trace"]["path"] == "freeform"
+    assert result["debug"]["dialogue_trace"]["reason"] == "no_trade_intent"
+    assert any(event["kind"] == "debug" and "no_trade_intent" in event["text"] for event in result["state"]["recent_events"])
+
+
+def test_run_command_writes_dialogue_trace_into_event_log_payload() -> None:
+    artifact_dir = Path("data") / "test_artifacts"
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    db_path = artifact_dir / "web_frontend_dialogue_trace_log.sqlite"
+    log_path = artifact_dir / "web_frontend_dialogue_trace.log"
+    if db_path.exists():
+        db_path.unlink()
+    if log_path.exists():
+        log_path.unlink()
+    setup = build_demo_setup()
+    adapter = RecordingDialogueAdapter()
+    simulation = Simulation(
+        world=setup.world,
+        player=setup.player,
+        npcs=setup.npcs,
+        personas=setup.personas,
+        rumors=setup.rumors,
+        dialogue_adapter=adapter,
+        dialogue_system_prompt="Stay grounded. Reply as exactly one NPC.",
+    )
+    runtime = WebSimulationRuntime(
+        db_path=db_path,
+        persist=False,
+        event_log_path=log_path,
+        prepare_dialogue=False,
+        simulation=simulation,
+    )
+    try:
+        result = runtime.run_command("say mara How much is bread?")
+    finally:
+        runtime.close()
+
+    assert result["ok"] is True
+    lines = log_path.read_text(encoding="utf-8").splitlines()
+    assert any('"dialogue_trace"' in line and '"trade_quote"' in line for line in lines)
+
+
 def test_run_command_forwards_system_prompt_and_player_prompt_for_ask_rumor() -> None:
     runtime, adapter = build_recording_runtime(
         "web_frontend_recording_rumor_test",

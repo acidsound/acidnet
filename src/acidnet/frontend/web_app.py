@@ -60,7 +60,6 @@ class WebSimulationRuntime:
             save_snapshot=True,
         )
         self._append_event("system", "acidnet web frontend ready.")
-        self._append_event("system", "Share this URL to get feedback on the simulation state and interaction loop.")
 
         if prepare_dialogue:
             self._append_event("system", self.dialogue_message)
@@ -86,6 +85,26 @@ class WebSimulationRuntime:
                 "tick": self.simulation.world.tick,
             }
         )
+
+    def _format_dialogue_trace_text(self, trace: dict[str, Any]) -> str:
+        parts = [f"path={trace.get('path', 'unknown')}"]
+        if trace.get("interaction_mode"):
+            parts.append(f"mode={trace['interaction_mode']}")
+        if trace.get("trade_parser_source"):
+            parts.append(f"parser={trace['trade_parser_source']}")
+        if trace.get("trade_intent"):
+            parts.append(f"intent={trace['trade_intent']}")
+        if trace.get("trade_fact_kind"):
+            parts.append(f"fact={trace['trade_fact_kind']}")
+        if trace.get("response_guard"):
+            parts.append(f"guard={trace['response_guard']}")
+        if trace.get("validation_reason"):
+            parts.append(f"validation={trace['validation_reason']}")
+        if trace.get("reason"):
+            parts.append(f"reason={trace['reason']}")
+        if trace.get("adapter_name"):
+            parts.append(f"adapter={trace['adapter_name']}")
+        return "dialogue trace | " + " | ".join(parts)
 
     def _record_system(
         self,
@@ -534,13 +553,19 @@ class WebSimulationRuntime:
             entries = [entry if isinstance(entry, TurnEvent) else TurnEvent(kind="world", text=str(entry)) for entry in result.entries]
             for entry in entries:
                 self._append_event(entry.kind, entry.text)
+            dialogue_trace = dict(self.simulation.last_dialogue_trace or {}) or None
+            if dialogue_trace is not None:
+                self._append_event("debug", self._format_dialogue_trace_text(dialogue_trace))
 
+            payload = {"result_lines": result.lines, "result_entries": result.payload()}
+            if dialogue_trace is not None:
+                payload["dialogue_trace"] = dialogue_trace
             if self.store is not None:
                 self.store.save_simulation(
                     self.simulation,
                     kind="web_command",
                     message=cleaned,
-                    payload={"result_lines": result.lines, "result_entries": result.payload()},
+                    payload=payload,
                 )
             if self.event_log is not None:
                 self.event_log.write(
@@ -548,15 +573,18 @@ class WebSimulationRuntime:
                     message=cleaned,
                     day=self.simulation.world.day,
                     tick=self.simulation.world.tick,
-                    payload={"result_lines": result.lines, "result_entries": result.payload()},
+                    payload=payload,
                 )
 
-            return {
+            response = {
                 "ok": True,
                 "command": cleaned,
                 "entries": result.payload(),
                 "state": self.scene_payload(),
             }
+            if dialogue_trace is not None:
+                response["debug"] = {"dialogue_trace": dialogue_trace}
+            return response
 
     def close(self) -> None:
         with self.lock:

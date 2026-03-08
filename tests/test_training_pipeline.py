@@ -63,6 +63,28 @@ def test_demo_prompt_pack_contains_hard_direct_say_rows() -> None:
     assert any(row.metadata.get("interaction_mode") == "direct_say" for row in dialogue_rows)
 
 
+def test_demo_prompt_pack_rotates_vendor_price_direct_rows() -> None:
+    rows = generate_demo_prompt_pack(num_turns=6)
+    dialogue_rows = [row for row in rows if row.task == "dialogue"]
+
+    assert any(row.metadata.get("interaction_case") == "vendor_price_direct" for row in dialogue_rows)
+
+
+def test_demo_prompt_pack_rotates_fact_grounded_vendor_trade_rows() -> None:
+    rows = generate_demo_prompt_pack(num_turns=20)
+    dialogue_rows = [row for row in rows if row.task == "dialogue"]
+    cases = {row.metadata.get("interaction_case") for row in dialogue_rows}
+
+    assert "vendor_stock_direct" in cases
+    assert "vendor_offer_accept_direct" in cases
+    assert "vendor_offer_counter_direct" in cases
+    assert "vendor_negative_offer_direct" in cases
+    assert "vendor_debt_direct" in cases
+    assert "vendor_free_food_direct" in cases
+    assert any("'trade_fact': {'kind': 'trade_offer'" in row.user_prompt for row in dialogue_rows)
+    assert any("'trade_parse_target': {'kind': 'trade_offer'" in row.user_prompt for row in dialogue_rows)
+
+
 def test_demo_prompt_pack_always_includes_hunger_direct_rows() -> None:
     rows = generate_demo_prompt_pack(num_turns=1)
     dialogue_rows = [row for row in rows if row.task == "dialogue"]
@@ -171,6 +193,60 @@ World sample:
     assert examples[0].messages[-1]["content"].startswith("Fresh bread")
     assert "Output one short in-character reply only." in examples[0].user_prompt
     assert "- mode: trade_request" in examples[0].user_prompt
+
+
+def test_runtime_dialogue_merge_carries_trade_fact_into_prompt() -> None:
+    prompt_rows = [
+        {
+            "custom_id": "dialogue.demo.0.npc.mara.vendor_offer_counter_direct",
+            "task": "dialogue",
+            "system_prompt": "teacher system",
+            "user_prompt": """NPC dialogue task.
+
+World sample:
+{'world': {'day': 1, 'tick': 0, 'weather': 'clear', 'scarcity_index': 0.4, 'market_prices': {'bread': 5}},
+ 'location': {'name': 'Market Square'},
+ 'player': {'hunger': 22.0},
+ 'npc': {'npc_id': 'npc.mara', 'name': 'Mara', 'profession': 'merchant', 'traits': ['quick'], 'hunger': 18.0,
+         'inventory': {'bread': 6, 'fish': 2},
+         'buy_options': [{'item': 'bread', 'quantity': 6, 'price': 6}],
+         'sell_options': [], 'ask_options': [{'item': 'bread', 'quantity': 1, 'price': None}],
+         'give_options': [], 'debt_options': [{'item': 'bread', 'quantity': 3, 'price': 6}],
+         'trade_fact': {'kind': 'trade_offer', 'item': 'bread', 'quantity': 1, 'available_quantity': 6,
+                        'listed_unit_price': 6, 'debt_unit_price': None, 'offered_total_gold': 3,
+                        'minimum_total_gold': 4, 'accepted_total_gold': None, 'counter_total_gold': 4,
+                        'error_code': None, 'stock': []},
+         'known_rumors': [], 'is_vendor': True},
+ 'persona': {'speech_style': ['plain'], 'values': ['trade']},
+ 'interaction_context': {'player_prompt': 'Would you take 3 gold for one bread?', 'player_goal': 'direct_say',
+                         'trade_parse_target': {'kind': 'trade_offer', 'item': 'bread', 'quantity': 1, 'offered_total_gold': 3}},
+ 'beliefs': [], 'recent_memories': [], 'visible_rumors': [], 'relationship_score': 0.0}
+""",
+            "metadata": {"npc_id": "npc.mara", "scenario_id": "scenario_0000"},
+        }
+    ]
+    teacher_rows = [
+        {
+            "custom_id": "dialogue.demo.0.npc.mara.vendor_offer_counter_direct",
+            "assistant_json": {
+                "task": "dialogue",
+                "npc_id": "npc.mara",
+                "response": "That is too low. For bread x1, I would need 4 gold.",
+            },
+        }
+    ]
+
+    examples = merge_prompt_pack_with_teacher_outputs_runtime_dialogue(prompt_rows, teacher_rows)
+
+    assert len(examples) == 2
+    runtime_example = next(example for example in examples if example.task == "dialogue_runtime")
+    parser_example = next(example for example in examples if example.task == "trade_parser_runtime")
+    assert "Trade Fact Summary:" in runtime_example.user_prompt
+    assert "counter_total_gold: 4" in runtime_example.user_prompt
+    assert "hidden during exact trade adjudication" in runtime_example.user_prompt
+    assert parser_example.messages[-1]["content"] == '{"kind": "trade_offer", "item": "bread", "quantity": 1, "offered_total_gold": 3}'
+    assert "strict trade-intent parser" in parser_example.system_prompt
+    assert "- buy_options: bread x6 @ 6 gold" in parser_example.user_prompt
 
 
 def test_openai_batch_requests_are_built_from_prompt_rows() -> None:
@@ -360,6 +436,222 @@ def test_bootstrap_teacher_redirects_food_trade_when_vendor_has_no_edible_goods(
         "If it matters, keep it plain. I do not have food to sell from Red Anvil Smithy right now. "
         "Try the bakery or the tavern before the shelves thin further."
     )
+
+
+def test_bootstrap_teacher_quotes_exact_vendor_price_from_buy_options() -> None:
+    sample = {
+        "world": {"day": 1, "tick": 0, "weather": "clear", "scarcity_index": 0.4, "market_prices": {"bread": 5}},
+        "location": {"name": "Market Square"},
+        "player": {"hunger": 22.0},
+        "npc": {
+            "npc_id": "npc.mara",
+            "name": "Mara",
+            "profession": "merchant",
+            "traits": ["quick"],
+            "hunger": 18.0,
+            "inventory": {"bread": 6, "fish": 2},
+            "buy_options": [{"item": "bread", "quantity": 6, "price": 6}],
+            "sell_options": [],
+            "ask_options": [],
+            "give_options": [],
+            "debt_options": [{"item": "bread", "quantity": 6, "price": 6}],
+            "trade_fact": {
+                "kind": "trade_quote",
+                "item": "bread",
+                "quantity": 1,
+                "available_quantity": 6,
+                "listed_unit_price": 6,
+                "debt_unit_price": 6,
+                "offered_total_gold": None,
+                "minimum_total_gold": None,
+                "accepted_total_gold": None,
+                "counter_total_gold": None,
+                "error_code": None,
+                "stock": [],
+            },
+            "known_rumors": [],
+            "is_vendor": True,
+        },
+        "persona": {"speech_style": ["plain"], "values": ["trade"]},
+        "interaction_context": {
+            "player_prompt": "How much is bread today?",
+            "player_goal": "direct_say",
+            "expected_focus": "Quote the exact current vendor price for the named item from live trade options.",
+        },
+        "beliefs": [],
+        "recent_memories": [],
+        "visible_rumors": [],
+        "relationship_score": 0.0,
+    }
+    prompt_rows = [
+        {
+            "custom_id": "dialogue.demo.0.npc.mara.vendor_price_direct",
+            "task": "dialogue",
+            "system_prompt": teacher_system_prompt(TeacherConfig()),
+            "user_prompt": dialogue_user_prompt(sample),
+            "metadata": {"npc_id": "npc.mara", "scenario_id": "scenario_0003"},
+        }
+    ]
+
+    rows = build_bootstrap_teacher_outputs(prompt_rows, tasks=("dialogue",))
+
+    assert len(rows) == 1
+    assert rows[0].assistant_json["response"] == "Bread is 6 gold right now. On debt I would call it 6 gold."
+
+
+def test_bootstrap_teacher_renders_counter_offer_from_trade_fact() -> None:
+    sample = {
+        "world": {"day": 1, "tick": 0, "weather": "clear", "scarcity_index": 0.4, "market_prices": {"bread": 5}},
+        "location": {"name": "Market Square"},
+        "player": {"hunger": 22.0},
+        "npc": {
+            "npc_id": "npc.mara",
+            "name": "Mara",
+            "profession": "merchant",
+            "traits": ["quick"],
+            "hunger": 18.0,
+            "inventory": {"bread": 6},
+            "buy_options": [{"item": "bread", "quantity": 6, "price": 6}],
+            "sell_options": [],
+            "ask_options": [{"item": "bread", "quantity": 1, "price": None}],
+            "give_options": [],
+            "debt_options": [{"item": "bread", "quantity": 3, "price": 6}],
+            "trade_fact": {
+                "kind": "trade_offer",
+                "item": "bread",
+                "quantity": 1,
+                "available_quantity": 6,
+                "listed_unit_price": 6,
+                "debt_unit_price": None,
+                "offered_total_gold": 3,
+                "minimum_total_gold": 4,
+                "accepted_total_gold": None,
+                "counter_total_gold": 4,
+                "error_code": None,
+                "stock": [],
+            },
+            "known_rumors": [],
+            "is_vendor": True,
+        },
+        "persona": {"speech_style": ["plain"], "values": ["trade"]},
+        "interaction_context": {
+            "player_prompt": "Would you take 3 gold for one bread?",
+            "player_goal": "direct_say",
+            "expected_focus": "Answer from the current counteroffer outcome and keep the exact adjudicated number.",
+        },
+        "beliefs": [],
+        "recent_memories": [],
+        "visible_rumors": [],
+        "relationship_score": 0.0,
+    }
+    prompt_rows = [
+        {
+            "custom_id": "dialogue.demo.0.npc.mara.vendor_offer_counter_direct",
+            "task": "dialogue",
+            "system_prompt": teacher_system_prompt(TeacherConfig()),
+            "user_prompt": dialogue_user_prompt(sample),
+            "metadata": {"npc_id": "npc.mara", "scenario_id": "scenario_0004"},
+        }
+    ]
+
+    rows = build_bootstrap_teacher_outputs(prompt_rows, tasks=("dialogue",))
+
+    assert len(rows) == 1
+    assert rows[0].assistant_json["response"] == "That is too low. For bread x1, I would need 4 gold."
+
+
+def test_bootstrap_teacher_grounds_free_food_request_in_ask_options() -> None:
+    sample = {
+        "world": {"day": 1, "tick": 0, "weather": "clear", "scarcity_index": 0.4, "market_prices": {"bread": 5}},
+        "location": {"name": "Market Square"},
+        "player": {"hunger": 72.0},
+        "npc": {
+            "npc_id": "npc.mara",
+            "name": "Mara",
+            "profession": "merchant",
+            "traits": ["quick"],
+            "hunger": 18.0,
+            "inventory": {"bread": 6},
+            "buy_options": [{"item": "bread", "quantity": 6, "price": 6}],
+            "sell_options": [],
+            "ask_options": [{"item": "bread", "quantity": 1, "price": None}],
+            "give_options": [],
+            "debt_options": [{"item": "bread", "quantity": 3, "price": 6}],
+            "known_rumors": [],
+            "is_vendor": True,
+        },
+        "persona": {"speech_style": ["plain"], "values": ["trade"]},
+        "interaction_context": {
+            "player_prompt": "I am hungry. Can you give me one bread for free?",
+            "player_goal": "direct_say",
+            "expected_focus": "Ground any free or spare help in the current zero-cash sharing contract instead of drifting into prices.",
+        },
+        "beliefs": [],
+        "recent_memories": [],
+        "visible_rumors": [],
+        "relationship_score": 0.0,
+    }
+    prompt_rows = [
+        {
+            "custom_id": "dialogue.demo.0.npc.mara.vendor_free_food_direct",
+            "task": "dialogue",
+            "system_prompt": teacher_system_prompt(TeacherConfig()),
+            "user_prompt": dialogue_user_prompt(sample),
+            "metadata": {"npc_id": "npc.mara", "scenario_id": "scenario_0005"},
+        }
+    ]
+
+    rows = build_bootstrap_teacher_outputs(prompt_rows, tasks=("dialogue",))
+
+    assert len(rows) == 1
+    assert rows[0].assistant_json["response"] == "I can spare a bread for free, but not more than that."
+
+
+def test_bootstrap_teacher_grounds_debt_request_in_debt_options() -> None:
+    sample = {
+        "world": {"day": 1, "tick": 0, "weather": "clear", "scarcity_index": 0.4, "market_prices": {"bread": 5}},
+        "location": {"name": "Market Square"},
+        "player": {"hunger": 22.0},
+        "npc": {
+            "npc_id": "npc.mara",
+            "name": "Mara",
+            "profession": "merchant",
+            "traits": ["quick"],
+            "hunger": 18.0,
+            "inventory": {"bread": 6},
+            "buy_options": [{"item": "bread", "quantity": 6, "price": 6}],
+            "sell_options": [],
+            "ask_options": [{"item": "bread", "quantity": 1, "price": None}],
+            "give_options": [],
+            "debt_options": [{"item": "bread", "quantity": 3, "price": 6}],
+            "known_rumors": [],
+            "is_vendor": True,
+        },
+        "persona": {"speech_style": ["plain"], "values": ["trade"]},
+        "interaction_context": {
+            "player_prompt": "Could I take one bread on debt?",
+            "player_goal": "direct_say",
+            "expected_focus": "Answer from the current debt contract instead of guessing from market prices.",
+        },
+        "beliefs": [],
+        "recent_memories": [],
+        "visible_rumors": [],
+        "relationship_score": 0.0,
+    }
+    prompt_rows = [
+        {
+            "custom_id": "dialogue.demo.0.npc.mara.vendor_debt_direct",
+            "task": "dialogue",
+            "system_prompt": teacher_system_prompt(TeacherConfig()),
+            "user_prompt": dialogue_user_prompt(sample),
+            "metadata": {"npc_id": "npc.mara", "scenario_id": "scenario_0006"},
+        }
+    ]
+
+    rows = build_bootstrap_teacher_outputs(prompt_rows, tasks=("dialogue",))
+
+    assert len(rows) == 1
+    assert rows[0].assistant_json["response"] == "I can still let bread go on debt for 6 gold."
 
 
 def test_qwen4b_baseline_run_spec_can_render_unsloth_script() -> None:

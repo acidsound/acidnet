@@ -27,6 +27,10 @@
 ## Dialogue Contract
 - `system_prompt` is a real runtime contract for all dialogue backends, including heuristic mode.
 - Global output rules belong in `system_prompt`; NPC-specific behavior belongs in structured context/persona.
+- Keep the simulation layer language-neutral.
+- Do not hardcode locale-specific tokens, aliases, or rendered dialogue strings inside `src/acidnet/simulator/*`.
+- If exact-fact dialogue needs language-aware parsing or rendering, keep that in a parser/renderer layer outside the simulator and pass only structured intents/results across the boundary.
+- Until explicit i18n work is scheduled, treat system-coupled dialogue parsing and rendering as English-canonical only. Do not add Korean-specific shortcuts or token lists to simulator or trade-tool paths.
 
 ## Change Discipline
 - When changing simulation or API contracts, update docs and tests in the same slice.

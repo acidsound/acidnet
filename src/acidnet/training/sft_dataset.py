@@ -7,7 +7,12 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from acidnet.llm.prompt_builder import build_system_prompt, build_user_prompt_from_sample
+from acidnet.llm.prompt_builder import (
+    build_system_prompt,
+    build_trade_parser_system_prompt,
+    build_trade_parser_user_prompt_from_sample,
+    build_user_prompt_from_sample,
+)
 
 
 @dataclass(slots=True)
@@ -103,6 +108,26 @@ def merge_prompt_pack_with_teacher_outputs_runtime_dialogue(
                 ],
             )
         )
+        parser_target = sample.get("interaction_context", {}).get("trade_parse_target")
+        if isinstance(parser_target, dict):
+            parser_system_prompt = build_trade_parser_system_prompt()
+            parser_user_prompt = build_trade_parser_user_prompt_from_sample(sample)
+            examples.append(
+                SFTExample(
+                    custom_id=f"{custom_id}.trade_parser",
+                    task="trade_parser_runtime",
+                    npc_id=str(metadata.get("npc_id", "")),
+                    scenario_id=metadata.get("scenario_id"),
+                    system_prompt=parser_system_prompt,
+                    user_prompt=parser_user_prompt,
+                    assistant_json=dict(parser_target),
+                    messages=[
+                        {"role": "system", "content": parser_system_prompt},
+                        {"role": "user", "content": parser_user_prompt},
+                        {"role": "assistant", "content": json.dumps(parser_target, ensure_ascii=False)},
+                    ],
+                )
+            )
     return examples
 
 

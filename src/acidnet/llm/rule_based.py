@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 
 from acidnet.llm.backend_catalog import DEFAULT_OPENAI_COMPAT_ENDPOINT, DEFAULT_OPENAI_COMPAT_MODEL
 from acidnet.llm.prompt_builder import finalize_dialogue_text
-from acidnet.llm.protocols import DialogueContext, DialogueModelAdapter, DialogueResult
+from acidnet.llm.protocols import DialogueContext, DialogueModelAdapter, DialogueResult, DialogueTradeOption
+from acidnet.llm.trade_dialogue import TradeDialogueOption as RenderTradeDialogueOption
+from acidnet.llm.trade_dialogue import TradeDialogueOutcome, render_trade_dialogue_outcome
 from acidnet.simulator.models import Rumor
 
 _OPENERS = {
@@ -48,6 +51,24 @@ _RUMOR_TOKENS = (
     "news",
     "gossip",
 )
+_PRICE_TOKENS = (
+    "how much",
+    "price",
+    "prices",
+    "cost",
+    "gold",
+    "coin",
+)
+_TRADE_AVAILABILITY_TOKENS = (
+    "sell",
+    "spare",
+    "have",
+    "holding",
+    "get",
+    "offer",
+    "available",
+    "on hand",
+)
 _FOOD_REQUEST_TOKENS = (
     "food",
     "hungry",
@@ -69,12 +90,15 @@ class RuleBasedDialogueAdapter(DialogueModelAdapter):
         rumor_line, rumor_ids = _rumor_line(context)
         trade_line = _trade_line(context)
         direct_line = _direct_response_line(context)
+        trade_fact_line = _trade_fact_line(context)
 
         opener = _profession_opener(context)
         memory_line = _memory_line(context)
         pressure_line = _pressure_line(context)
 
-        if direct_line:
+        if trade_fact_line:
+            parts = [trade_fact_line]
+        elif direct_line:
             parts = [direct_line]
         elif context.interaction_mode == "trade_request":
             parts = [_first_non_empty(trade_line, pressure_line, opener)]
@@ -111,6 +135,17 @@ class FallbackDialogueAdapter(DialogueModelAdapter):
             return self.primary.generate(context)
         except Exception:
             return self.fallback.generate(context)
+
+    def parse_trade_intent(self, context: DialogueContext):
+        parser = getattr(self.primary, "parse_trade_intent", None)
+        if parser is None:
+            parser = getattr(self.fallback, "parse_trade_intent", None)
+        if parser is None:
+            return None
+        try:
+            return parser(context)
+        except Exception:
+            return None
 
     @property
     def temperature(self) -> float:
@@ -218,14 +253,14 @@ def _trade_line(context: DialogueContext) -> str:
         return "I am not selling anything worth your time."
     normalized_prompt = " ".join(context.player_prompt.lower().split())
     asks_for_food = any(token in normalized_prompt for token in _FOOD_REQUEST_TOKENS)
-    goods = [f"{item} x{qty}" for item, qty in context.npc.inventory.items() if qty > 0]
-    edible_goods = [f"{item} x{qty}" for item, qty in context.npc.inventory.items() if qty > 0 and item in _EDIBLE_ITEMS]
-    if not goods:
-        return "Stock is thin right now."
+    goods = _format_trade_options(context.buy_options)
+    edible_goods = _format_trade_options(option for option in context.buy_options if option.item in _EDIBLE_ITEMS)
     if asks_for_food and edible_goods:
         return f"I can sell {', '.join(edible_goods[:3])} if your coin is ready."
     if asks_for_food:
         return "I do not have food to sell right now. Try the bakery or the tavern before it gets worse."
+    if not goods:
+        return "Stock is thin right now."
     return f"I can move {', '.join(goods[:3])} if your coin is ready."
 
 
@@ -234,6 +269,9 @@ def _direct_response_line(context: DialogueContext) -> str:
         return ""
     normalized_prompt = " ".join(context.player_prompt.lower().split())
     location_name = context.location.name
+    trade_line = _direct_trade_response_line(context, normalized_prompt)
+    if trade_line:
+        return trade_line
 
     if any(token in normalized_prompt for token in _FIRST_MEETING_TOKENS):
         return f"I am {context.npc.name}, one of the village {context.npc.profession}s."
@@ -263,6 +301,31 @@ def _direct_response_line(context: DialogueContext) -> str:
         return f"I only know what I have seen around {location_name}."
 
     return "I will keep that in mind."
+
+
+def _direct_trade_response_line(context: DialogueContext, normalized_prompt: str) -> str:
+    if context.trade_fact is not None:
+        return ""
+    if not any(token in normalized_prompt for token in (*_PRICE_TOKENS, *_TRADE_AVAILABILITY_TOKENS)):
+        return ""
+    mentioned_item = _mentioned_trade_item(context, normalized_prompt)
+    if mentioned_item is None:
+        return ""
+    buy_option = _find_trade_option(context.buy_options, mentioned_item)
+    debt_option = _find_trade_option(context.debt_options, mentioned_item)
+    if any(token in normalized_prompt for token in _PRICE_TOKENS):
+        if buy_option is not None and buy_option.price is not None:
+            if debt_option is not None and debt_option.price is not None:
+                return f"{mentioned_item.capitalize()} is {buy_option.price} gold right now. I can still put it on debt for {debt_option.price} gold."
+            return f"{mentioned_item.capitalize()} is {buy_option.price} gold right now."
+        if debt_option is not None and debt_option.price is not None:
+            return f"I am not selling {mentioned_item} cleanly right now, but I can still let it go on debt for {debt_option.price} gold."
+        return f"I am not offering {mentioned_item} right now."
+    if buy_option is not None:
+        return f"I can still move {buy_option.item} x{buy_option.quantity} right now."
+    if context.npc.inventory.get(mentioned_item, 0) > 0:
+        return f"I have some {mentioned_item}, but not enough to promise it cleanly right now."
+    return f"I am not offering {mentioned_item} right now."
 
 
 def _prompt_excerpt(text: str, *, limit: int = 48) -> str:
@@ -301,3 +364,52 @@ def _first_non_empty(*parts: str) -> str:
         if part:
             return part
     return ""
+
+
+def _trade_fact_line(context: DialogueContext) -> str:
+    if context.trade_fact is None:
+        return ""
+    outcome = TradeDialogueOutcome(
+        kind=context.trade_fact.kind,
+        item=context.trade_fact.item,
+        quantity=context.trade_fact.quantity,
+        available_quantity=context.trade_fact.available_quantity,
+        listed_unit_price=context.trade_fact.listed_unit_price,
+        debt_unit_price=context.trade_fact.debt_unit_price,
+        offered_total_gold=context.trade_fact.offered_total_gold,
+        minimum_total_gold=context.trade_fact.minimum_total_gold,
+        accepted_total_gold=context.trade_fact.accepted_total_gold,
+        counter_total_gold=context.trade_fact.counter_total_gold,
+        error_code=context.trade_fact.error_code,
+        stock=tuple(
+            RenderTradeDialogueOption(item=option.item, quantity=option.quantity, price=option.price)
+            for option in context.trade_fact.stock
+        ),
+    )
+    return render_trade_dialogue_outcome(outcome)
+
+
+def _format_trade_options(options) -> list[str]:
+    return [
+        f"{option.item} x{option.quantity}" if option.price is None else f"{option.item} x{option.quantity} at {option.price} gold"
+        for option in options
+    ]
+
+
+def _mentioned_trade_item(context: DialogueContext, normalized_prompt: str) -> str | None:
+    option_items = {
+        option.item
+        for option in [*context.buy_options, *context.debt_options, *context.sell_options]
+    }
+    option_items.update(item for item, qty in context.npc.inventory.items() if qty > 0)
+    for item in sorted(option_items):
+        if re.search(rf"\b{re.escape(item)}s?\b", normalized_prompt):
+            return item
+    return None
+
+
+def _find_trade_option(options: list[DialogueTradeOption], item: str) -> DialogueTradeOption | None:
+    for option in options:
+        if option.item == item:
+            return option
+    return None

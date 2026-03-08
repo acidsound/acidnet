@@ -35,6 +35,7 @@ The goal is to show where the live contracts actually sit in code and tests.
 - `data/training/`: generated run specs, exported trainer scripts, LoRA adapter outputs, and local Hugging Face publish manifests
 - `data/eval/`: prompt-only, model-gate, and related evaluation reports
 - `data/test_artifacts/`: temporary fixtures and small benchmark subsets created by tests and smoke paths
+- `models/`: local base GGUF restore point for the promoted runtime; the repo keeps only placeholder guidance such as `models/README.md`, while `models/*.gguf` stays gitignored
 - If a tool or editor hides `data/`, check whether it respects `.gitignore`; the directory is usually present or creatable even though it is not tracked.
 
 ## Main Entrypoints
@@ -45,6 +46,8 @@ The goal is to show where the live contracts actually sit in code and tests.
 - `run_publish_hf_artifacts.py`: `.env`-driven Hugging Face publish tool for LoRA/GGUF model artifacts and runtime-dialogue datasets
   - local and uploaded `publish_manifest.json` files are intended to stay portable: they record repo-relative source paths plus Hub `runs/<run-name>/...` targets instead of machine-specific absolute paths
   - the publish step also refreshes the repo-root `README.md` cards in both HF repos so the restore layout is visible from the Hub UI
+- `acidnet_qwen3.5_4b_gguf_lora.ipynb`: standalone Google Colab notebook that restores a published AcidNet dataset run from Hugging Face, fine-tunes a fresh Unsloth LoRA adapter, and can optionally export/upload the adapter GGUF back to the Hub
+- `acidnet_qwen3.5_4b_unsloth_t4_colab.ipynb`: alternate Google Colab notebook tuned for the official free-T4 Unsloth install matrix; it defaults to a smoke run and is meant as a compatibility probe before attempting longer Colab training
 - `run_local_adapter_server.py`: local OpenAI-compatible adapter server for dev/eval, not the promoted deployment runtime
 - `run_local_adapter_dev_loop.ps1`: optional Windows helper that now launches the local adapter server, model gate, and web runtime together for dev/eval observation
 - `run_*pipeline*.py`, `run_*train*.py`, `run_*eval*.py`: training and evaluation entrypoints
@@ -88,6 +91,10 @@ The goal is to show where the live contracts actually sit in code and tests.
 - `src/acidnet/simulator/simulation.py`
   - dominant simulation loop and command handling
   - travel, recovery, exchange, rumor flow, NPC turns, and many derived rules currently live here
+  - exact trade quote/stock/bargain dialogue now routes through simulator adjudication here before the dialogue backend phrases the result
+  - the simulator only adjudicates structured trade facts; parser/renderer work stays outside the simulator boundary
+  - the built-in parser remains English-canonical for now, but `openai_compat` can add a model-assisted parse attempt before freeform fallback
+  - web/runtime debugging now surfaces a dialogue trace so engineers can see whether a turn was freeform, adjudicated, repaired, or fell back
 - `src/acidnet/engine/simulation.py`
   - compatibility shim over `src/acidnet/simulator/simulation.py`
 - `src/acidnet/simulator/core.py`
@@ -104,6 +111,7 @@ The goal is to show where the live contracts actually sit in code and tests.
   - current pure static browser client asset bundle
 - `src/acidnet/llm/prompt_builder.py`
   - shared dialogue prompt and interaction-mode shaping
+  - carries live vendor `buy_options` / `debt_options` into the prompt contract so exact price questions can stay aligned with simulator trade facts
 - `src/acidnet/llm/rule_based.py`
 - `src/acidnet/llm/openai_compat.py`
   - promoted simulator runtime path against `llama-server` serving the `Q4_K_M` GGUF model line
@@ -114,6 +122,10 @@ The goal is to show where the live contracts actually sit in code and tests.
 - `src/acidnet/training/bootstrap_teacher.py`
 - `src/acidnet/training/teacher_prompts.py`
   - prompt-pack generation and bootstrap teacher shaping for runtime dialogue training
+  - mirrors live trade-option context into training samples so future dialogue refreshes do not regress back to raw-market price guesses
+  - vendor hard-case samples can now also carry server-authored `trade_fact` plus `ask_options`/`debt_options`, so quote/stock/offer/free-help supervision stays aligned with the live adjudication path
+- `src/acidnet/training/sft_dataset.py`
+  - runtime-aligned SFT export now emits both in-character dialogue examples and strict trade-parser JSON examples from the same fact-grounded prompt rows when a canonical trade intent is present
 - `src/acidnet/eval/prompt_only.py`
 - `src/acidnet/eval/model_gate.py`
   - question-focused dialogue scoring and combined promotion checks
@@ -152,6 +164,8 @@ For repo-split safety, the minimum simulator-only gate is `tests/test_simulation
 ## Working Boundaries
 
 - Simulation truth belongs in the simulation runtime and shared models, not in the web client.
+- `src/acidnet/simulator/*` should stay language-neutral; locale-specific token parsing, alias tables, and rendered dialogue strings belong in a parser/renderer layer outside the simulator boundary.
+- Until explicit i18n work exists, keep system-coupled trade-dialogue parsing and rendering English-canonical only.
 - Headless CLI, eval, and split-gate code should prefer `acidnet.simulator` as the stable import surface when possible.
 - Compatibility shims in `engine`, `models`, `world`, and `storage` should import from `acidnet.simulator.runtime`, `acidnet.simulator.models`, `acidnet.simulator.world`, and `acidnet.simulator.storage`, not from deeper simulator modules.
 - Frontends should remain thin intent/state clients; future realtime ticking still belongs to the simulator side, not the client.

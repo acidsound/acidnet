@@ -169,7 +169,17 @@ Success response shape:
   "entries": [
     {"kind": "system", "text": "Interaction target set to Mara."}
   ],
-  "state": {}
+  "state": {},
+  "debug": {
+    "dialogue_trace": {
+      "path": "trade_adjudicated",
+      "interaction_mode": "direct_say",
+      "trade_intent": "trade_quote",
+      "trade_fact_kind": "trade_quote",
+      "adapter_name": "openai_compat",
+      "response_guard": "llm_ok"
+    }
+  }
 }
 ```
 
@@ -177,6 +187,11 @@ Notes:
 
 - `state` is the same player-view snapshot shape returned by `GET /api/state`
 - `entries` is the appendable event list for the submitted command, not a full replacement for `recent_events`
+- `debug` is optional and currently used for dialogue-command routing trace data
+- `debug.dialogue_trace.path` currently distinguishes `freeform`, `trade_adjudicated`, `trade_adjudicated_repaired`, and `trade_adjudicated_fallback`
+- `debug.dialogue_trace` may also include `interaction_mode`, `trade_parser_source`, `trade_intent`, `trade_fact_kind`, `response_guard`, `validation_reason`, and `reason`
+- `trade_parser_source` currently distinguishes the built-in English-canonical parser from the additional `openai_compat` model-assisted trade parser when available
+- the built-in deterministic parser remains English-canonical; broader locale-aware recovery is currently opportunistic through the `openai_compat` model-assisted parser rather than a formal contract guarantee
 
 Failure response shape:
 
@@ -269,6 +284,7 @@ Failure response:
 - `active_events` entries currently expose `event_id`, `event_type`, and `summary`
 - `active_events` may now include `market_support` or `market_pressure` entries when visible summarized regional transit is actively steadying, tightening, or relieving a local market crisis
 - when the player is traveling, the scene description and player travel state are the authoritative source for route progress
+- `recent_events` may now include `debug`-kind entries for dialogue commands so browser debugging can see whether the reply was freeform, server-adjudicated, or deterministically repaired/fell back
 
 ### `player`
 

@@ -169,7 +169,17 @@
   "entries": [
     {"kind": "system", "text": "Interaction target set to Mara."}
   ],
-  "state": {}
+  "state": {},
+  "debug": {
+    "dialogue_trace": {
+      "path": "trade_adjudicated",
+      "interaction_mode": "direct_say",
+      "trade_intent": "trade_quote",
+      "trade_fact_kind": "trade_quote",
+      "adapter_name": "openai_compat",
+      "response_guard": "llm_ok"
+    }
+  }
 }
 ```
 

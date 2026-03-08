@@ -12,7 +12,7 @@ Keep it limited to the player-visible HTTP contract:
 Do not duplicate simulation design notes here.
 Do not document raw persistence or private Python helpers here.
 
-Updated: 2026-03-07
+Updated: 2026-03-08
 
 ## Canonical Ownership
 
@@ -79,6 +79,7 @@ Notes:
 - `actions.travel` is the server-authored travel action catalog aligned with `scene.route_preview`.
 - `actions` is the allowed action catalog for the current state, not a hint to rebuild rules in the browser.
 - `recent_events` is the append-only player-visible feed, not a full simulation log.
+- dialogue commands may append `debug`-kind `recent_events` entries that summarize whether the server used freeform dialogue, server-routed trade adjudication, or deterministic repair/fallback.
 
 ### `GET /api/dialogue-prompt`
 
@@ -110,6 +111,7 @@ Frontend responsibility:
 - send the server-authored command string
 - render returned `entries`
 - refresh local UI from returned `state` or the next `GET /api/state`
+- optionally inspect `debug.dialogue_trace` for dialogue-command routing/debugging
 
 The client must not synthesize new command grammar from UI assumptions.
 
@@ -120,6 +122,13 @@ Current exchange and debt command note:
 - `trade [npc] barter <give_item> <give_qty> for <get_item> <get_qty>` is now supported as the raw item-for-item exchange command.
 - `trade [npc] debt <item> <qty>` is now supported as the raw credit-transfer command.
 - `repay [npc] [amount]` repays player debt to a local NPC; omitting `amount` repays the full remaining balance.
+- narrow trade-fact `say` messages now go through server-routed simulator adjudication before the dialogue backend phrases the reply.
+- the current narrow trade path covers exact price queries, sellable-stock queries, and simple bargain offers, so quoted trade facts should align with `scene.people[*].buy_options` instead of drifting from model-only dialogue.
+- the built-in narrow trade-dialogue parser remains English-canonical; broader locale-aware parsing is still not part of the formal browser contract.
+- when the runtime uses `openai_compat`, the server may also attempt an additional model-assisted trade parse before falling back to freeform dialogue.
+- dialogue commands may return optional `debug.dialogue_trace` metadata with fields such as `path`, `interaction_mode`, `trade_parser_source`, `trade_intent`, `trade_fact_kind`, `response_guard`, `validation_reason`, and `reason`.
+- `trade_parser_source` currently distinguishes the built-in English-canonical parser from the additional `openai_compat` model-assisted trade parser when that recovery path is available.
+- when present, the same `dialogue_trace` object is also written into the `/api/command` event-log payload.
 
 ### `POST /api/dialogue-prompt`
 

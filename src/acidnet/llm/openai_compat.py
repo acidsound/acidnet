@@ -6,8 +6,15 @@ import time
 from dataclasses import dataclass
 from urllib import request
 
-from acidnet.llm.prompt_builder import build_system_prompt, build_user_prompt, finalize_dialogue_text
+from acidnet.llm.prompt_builder import (
+    build_system_prompt,
+    build_trade_parser_system_prompt,
+    build_trade_parser_user_prompt,
+    build_user_prompt,
+    finalize_dialogue_text,
+)
 from acidnet.llm.protocols import DialogueContext, DialogueModelAdapter, DialogueResult
+from acidnet.llm.trade_dialogue import TradeDialogueIntent, parse_trade_dialogue_intent_payload
 
 
 @dataclass(slots=True)
@@ -29,21 +36,73 @@ class OpenAICompatDialogueAdapter(DialogueModelAdapter):
 
     def generate(self, context: DialogueContext) -> DialogueResult:
         started_at = time.perf_counter()
-        payload = {
-            "model": self.model,
-            "messages": [
+        text = self._request_text(
+            [
                 {"role": "system", "content": build_system_prompt(context)},
                 {"role": "user", "content": build_user_prompt(context)},
             ],
-            "temperature": self.temperature,
-            "top_p": self.top_p,
-            "top_k": self.top_k,
-            "min_p": self.min_p,
-            "presence_penalty": self.presence_penalty,
-            # llama.cpp exposes this as `repeat_penalty` on the OpenAI-compatible wire.
-            "repeat_penalty": self.repetition_penalty,
-            "max_tokens": self.max_tokens,
+            temperature=self.temperature,
+            top_p=self.top_p,
+            top_k=self.top_k,
+            min_p=self.min_p,
+            presence_penalty=self.presence_penalty,
+            repetition_penalty=self.repetition_penalty,
+            max_tokens=self.max_tokens,
+        )
+        text = finalize_dialogue_text(text, context)
+        if not text:
+            raise RuntimeError("OpenAI-compatible server returned an empty dialogue response.")
+        latency_ms = (time.perf_counter() - started_at) * 1000.0
+        return DialogueResult(text=text, adapter_name="openai_compat", latency_ms=round(latency_ms, 3))
+
+    def parse_trade_intent(self, context: DialogueContext) -> TradeDialogueIntent | None:
+        text = self._request_text(
+            [
+                {"role": "system", "content": build_trade_parser_system_prompt()},
+                {"role": "user", "content": build_trade_parser_user_prompt(context)},
+            ],
+            temperature=0.0,
+            top_p=1.0,
+            top_k=0,
+            min_p=0.0,
+            presence_penalty=0.0,
+            repetition_penalty=1.0,
+            max_tokens=80,
+        )
+        return parse_trade_dialogue_intent_payload(text)
+
+    def _request_text(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        temperature: float,
+        top_p: float,
+        top_k: int,
+        min_p: float,
+        presence_penalty: float,
+        repetition_penalty: float,
+        max_tokens: int,
+    ) -> str:
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature,
+            "top_p": top_p,
+            "top_k": top_k,
+            "min_p": min_p,
+            "presence_penalty": presence_penalty,
+            "repeat_penalty": repetition_penalty,
+            "max_tokens": max_tokens,
         }
+        response_payload = self._request_payload(payload)
+        return (
+            response_payload.get("choices", [{}])[0]
+            .get("message", {})
+            .get("content", "")
+            .strip()
+        )
+
+    def _request_payload(self, payload: dict[str, object]) -> dict[str, object]:
         body = json.dumps(payload).encode("utf-8")
         headers = {"Content-Type": "application/json"}
         api_key = os.environ.get(self.api_key_env)
@@ -52,16 +111,4 @@ class OpenAICompatDialogueAdapter(DialogueModelAdapter):
 
         http_request = request.Request(self.endpoint, data=body, headers=headers, method="POST")
         with request.urlopen(http_request, timeout=self.timeout_seconds) as response:
-            response_payload = json.loads(response.read().decode("utf-8"))
-
-        text = (
-            response_payload.get("choices", [{}])[0]
-            .get("message", {})
-            .get("content", "")
-            .strip()
-        )
-        text = finalize_dialogue_text(text, context)
-        if not text:
-            raise RuntimeError("OpenAI-compatible server returned an empty dialogue response.")
-        latency_ms = (time.perf_counter() - started_at) * 1000.0
-        return DialogueResult(text=text, adapter_name="openai_compat", latency_ms=round(latency_ms, 3))
+            return json.loads(response.read().decode("utf-8"))

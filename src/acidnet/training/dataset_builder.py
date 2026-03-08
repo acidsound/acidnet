@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from acidnet.llm import TradeDialogueIntent
 from acidnet.simulator import Simulation
 from acidnet.simulator.models import Rumor, RumorCategory
 from acidnet.training.experiment_registry import recommended_experiment_order
@@ -263,6 +264,11 @@ def _build_world_sample(simulation: Simulation, npc_id: str, *, interaction: dic
     persona = simulation.personas[npc.persona_id]
     location = simulation.world.locations[npc.location_id]
     rumors = [simulation.rumors[rumor_id].content for rumor_id in npc.known_rumor_ids if rumor_id in simulation.rumors]
+    buy_options = _trade_option_records(simulation.player_trade_options(npc_id, mode="buy"))
+    sell_options = _trade_option_records(simulation.player_trade_options(npc_id, mode="sell"))
+    ask_options = _trade_option_records(simulation.player_trade_options(npc_id, mode="ask"))
+    give_options = _trade_option_records(simulation.player_trade_options(npc_id, mode="give"))
+    debt_options = _trade_option_records(simulation.player_trade_options(npc_id, mode="debt"))
     nearby_npcs = [
         {
             "npc_id": other.npc_id,
@@ -285,6 +291,35 @@ def _build_world_sample(simulation: Simulation, npc_id: str, *, interaction: dic
     ]
     recent_memories = [memory.model_dump(mode="json") for memory in simulation.memories.get(npc_id, [])[-4:]]
 
+    npc_payload = {
+        "npc_id": npc.npc_id,
+        "name": npc.name,
+        "profession": npc.profession,
+        "persona_id": npc.persona_id,
+        "traits": list(npc.traits),
+        "location_id": npc.location_id,
+        "home_location_id": npc.home_location_id,
+        "workplace_id": npc.workplace_id,
+        "inventory": dict(npc.inventory),
+        "money": npc.money,
+        "hunger": npc.hunger,
+        "buy_options": buy_options,
+        "sell_options": sell_options,
+        "ask_options": ask_options,
+        "give_options": give_options,
+        "debt_options": debt_options,
+        "goals": list(npc.goals),
+        "beliefs": [belief.model_dump(mode="json") for belief in simulation._derive_beliefs(npc)],
+        "known_rumors": rumors,
+        "recent_memories": recent_memories,
+        "relationships": relationship_summary,
+        "current_intent": npc.current_intent.model_dump(mode="json") if npc.current_intent is not None else None,
+        "is_vendor": npc.is_vendor,
+    }
+    trade_fact = interaction.get("trade_fact")
+    if trade_fact is not None:
+        npc_payload["trade_fact"] = dict(trade_fact)
+
     return {
         "world": {
             "tick": simulation.world.tick,
@@ -306,26 +341,7 @@ def _build_world_sample(simulation: Simulation, npc_id: str, *, interaction: dic
             "hunger": simulation.player.hunger,
             "known_rumors": list(simulation.player.known_rumor_ids),
         },
-        "npc": {
-            "npc_id": npc.npc_id,
-            "name": npc.name,
-            "profession": npc.profession,
-            "persona_id": npc.persona_id,
-            "traits": list(npc.traits),
-            "location_id": npc.location_id,
-            "home_location_id": npc.home_location_id,
-            "workplace_id": npc.workplace_id,
-            "inventory": dict(npc.inventory),
-            "money": npc.money,
-            "hunger": npc.hunger,
-            "goals": list(npc.goals),
-            "beliefs": [belief.model_dump(mode="json") for belief in simulation._derive_beliefs(npc)],
-            "known_rumors": rumors,
-            "recent_memories": recent_memories,
-            "relationships": relationship_summary,
-            "current_intent": npc.current_intent.model_dump(mode="json") if npc.current_intent is not None else None,
-            "is_vendor": npc.is_vendor,
-        },
+        "npc": npc_payload,
         "persona": persona.model_dump(mode="json"),
         "nearby_npcs": nearby_npcs,
         "known_player_rumors": [
@@ -343,8 +359,8 @@ def _dialogue_interactions(
     *,
     turn: int,
     rng: random.Random,
-) -> list[tuple[str, dict[str, str]]]:
-    interactions: list[tuple[str, dict[str, str]]] = [("base", _base_interaction_context(simulation, npc_id, rng=rng))]
+) -> list[tuple[str, dict[str, Any]]]:
+    interactions: list[tuple[str, dict[str, Any]]] = [("base", _base_interaction_context(simulation, npc_id, rng=rng))]
     seen_prompts = {interactions[0][1]["player_prompt"]}
 
     # Always keep one explicit hunger-direct example in the prompt pack so
@@ -373,7 +389,7 @@ def _dialogue_interactions(
     return interactions
 
 
-def _base_interaction_context(simulation: Simulation, npc_id: str, *, rng: random.Random) -> dict[str, str]:
+def _base_interaction_context(simulation: Simulation, npc_id: str, *, rng: random.Random) -> dict[str, Any]:
     npc = simulation.npcs[npc_id]
     prompts: list[dict[str, str]] = [
         {
@@ -430,9 +446,9 @@ def _base_interaction_context(simulation: Simulation, npc_id: str, *, rng: rando
     return rng.choice(prompts)
 
 
-def _hard_direct_say_context(simulation: Simulation, npc_id: str, *, turn: int) -> tuple[str, dict[str, str]]:
+def _hard_direct_say_context(simulation: Simulation, npc_id: str, *, turn: int) -> tuple[str, dict[str, Any]]:
     npc = simulation.npcs[npc_id]
-    cases: list[tuple[str, dict[str, str]]] = [
+    cases: list[tuple[str, dict[str, Any]]] = [
         (
             "origin_direct",
             {
@@ -480,6 +496,8 @@ def _hard_direct_say_context(simulation: Simulation, npc_id: str, *, turn: int) 
                 },
             )
         )
+    if npc.is_vendor:
+        cases.extend(_vendor_trade_hard_cases(simulation, npc_id))
     if npc.profession == "guard":
         cases.append(
             (
@@ -542,7 +560,7 @@ def _hard_direct_say_context(simulation: Simulation, npc_id: str, *, turn: int) 
 def _supplemental_food_pressure_contexts(
     simulation: Simulation,
     npc_id: str,
-) -> list[tuple[str, dict[str, str]]]:
+) -> list[tuple[str, dict[str, Any]]]:
     npc = simulation.npcs[npc_id]
     has_edible_goods = _has_edible_inventory(npc.inventory)
     if has_edible_goods:
@@ -619,3 +637,181 @@ def _clamp(value: float, lower: float, upper: float) -> float:
 
 def _has_edible_inventory(inventory: dict[str, int]) -> bool:
     return any(inventory.get(item_id, 0) > 0 for item_id in EDIBLE_ITEMS)
+
+
+def _trade_option_records(options: list[Any]) -> list[dict[str, Any]]:
+    return [
+        {"item": option.item, "quantity": option.quantity, "price": option.price}
+        for option in options
+    ]
+
+
+def _vendor_trade_hard_cases(simulation: Simulation, npc_id: str) -> list[tuple[str, dict[str, Any]]]:
+    buy_options = [option for option in simulation.player_trade_options(npc_id, mode="buy") if option.quantity > 0]
+    if not buy_options:
+        return []
+
+    primary = buy_options[0]
+    cases: list[tuple[str, dict[str, Any]]] = []
+
+    quote_fact = _trade_fact_payload(
+        simulation,
+        npc_id,
+        TradeDialogueIntent(kind="trade_quote", item=primary.item),
+    )
+    if quote_fact is not None:
+        cases.append(
+            (
+                "vendor_price_direct",
+                {
+                    "player_prompt": f"How much is {primary.item} today?",
+                    "player_goal": "direct_say",
+                    "expected_focus": "Quote the exact current vendor price for the named item from live trade adjudication.",
+                    "trade_fact": quote_fact,
+                    "trade_parse_target": {"kind": "trade_quote", "item": primary.item},
+                },
+            )
+        )
+
+    stock_fact = _trade_fact_payload(
+        simulation,
+        npc_id,
+        TradeDialogueIntent(kind="trade_stock"),
+    )
+    if stock_fact is not None:
+        cases.append(
+            (
+                "vendor_stock_direct",
+                {
+                    "player_prompt": "What can you sell right now?",
+                    "player_goal": "direct_say",
+                    "expected_focus": "Answer from the current sellable stock contract instead of generic market flavor.",
+                    "trade_fact": stock_fact,
+                    "trade_parse_target": {"kind": "trade_stock"},
+                },
+            )
+        )
+
+    accepted_fact = _trade_fact_payload(
+        simulation,
+        npc_id,
+        TradeDialogueIntent(kind="trade_offer", item=primary.item, quantity=1, offered_total_gold=primary.price),
+    )
+    if accepted_fact is not None:
+        cases.append(
+            (
+                "vendor_offer_accept_direct",
+                {
+                    "player_prompt": f"Would you take {primary.price} gold for one {primary.item}?",
+                    "player_goal": "direct_say",
+                    "expected_focus": "Answer from the current accepted trade outcome instead of restating the market price abstractly.",
+                    "trade_fact": accepted_fact,
+                    "trade_parse_target": {
+                        "kind": "trade_offer",
+                        "item": primary.item,
+                        "quantity": 1,
+                        "offered_total_gold": primary.price,
+                    },
+                },
+            )
+        )
+
+    counter_offer_total, counter_fact = _counter_offer_case(simulation, npc_id, primary.item, listed_unit_price=primary.price)
+    if counter_offer_total is not None and counter_fact is not None:
+        cases.append(
+            (
+                "vendor_offer_counter_direct",
+                {
+                    "player_prompt": f"Would you take {counter_offer_total} gold for one {primary.item}?",
+                    "player_goal": "direct_say",
+                    "expected_focus": "Answer from the current counteroffer outcome and keep the exact adjudicated number.",
+                    "trade_fact": counter_fact,
+                    "trade_parse_target": {
+                        "kind": "trade_offer",
+                        "item": primary.item,
+                        "quantity": 1,
+                        "offered_total_gold": counter_offer_total,
+                    },
+                },
+            )
+        )
+
+    negative_fact = _trade_fact_payload(
+        simulation,
+        npc_id,
+        TradeDialogueIntent(kind="trade_offer", item=primary.item, quantity=1, offered_total_gold=-2),
+    )
+    if negative_fact is not None:
+        cases.append(
+            (
+                "vendor_negative_offer_direct",
+                {
+                    "player_prompt": f"Would you take -2 gold for one {primary.item}?",
+                    "player_goal": "direct_say",
+                    "expected_focus": "Reject invalid negative-gold bargaining plainly from the server-authored trade outcome.",
+                    "trade_fact": negative_fact,
+                    "trade_parse_target": {
+                        "kind": "trade_offer",
+                        "item": primary.item,
+                        "quantity": 1,
+                        "offered_total_gold": -2,
+                    },
+                },
+            )
+        )
+
+    cases.append(
+        (
+            "vendor_debt_direct",
+            {
+                "player_prompt": f"Could I take one {primary.item} on debt?",
+                "player_goal": "direct_say",
+                "expected_focus": "Answer from the current debt contract instead of guessing from market prices.",
+            },
+        )
+    )
+
+    if primary.item in EDIBLE_ITEMS:
+        cases.append(
+            (
+                "vendor_free_food_direct",
+                {
+                    "player_prompt": f"I am hungry. Can you give me one {primary.item} for free?",
+                    "player_goal": "direct_say",
+                    "expected_focus": "Ground any free or spare help in the current zero-cash sharing contract instead of drifting into prices.",
+                },
+            )
+        )
+    return cases
+
+
+def _trade_fact_payload(
+    simulation: Simulation,
+    npc_id: str,
+    intent: TradeDialogueIntent,
+) -> dict[str, Any] | None:
+    npc = simulation.npcs[npc_id]
+    outcome = simulation._trade_dialogue_outcome(npc, intent)
+    if outcome is None:
+        return None
+    return simulation._dialogue_trade_fact(outcome).model_dump(mode="json")
+
+
+def _counter_offer_case(
+    simulation: Simulation,
+    npc_id: str,
+    item: str,
+    *,
+    listed_unit_price: int,
+) -> tuple[int | None, dict[str, Any] | None]:
+    for offered_total in range(0, max(0, listed_unit_price)):
+        trade_fact = _trade_fact_payload(
+            simulation,
+            npc_id,
+            TradeDialogueIntent(kind="trade_offer", item=item, quantity=1, offered_total_gold=offered_total),
+        )
+        if trade_fact is None:
+            continue
+        if trade_fact.get("counter_total_gold") is not None:
+            return offered_total, trade_fact
+    return None, None

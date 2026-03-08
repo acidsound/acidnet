@@ -5,7 +5,21 @@ from dataclasses import dataclass
 import re
 from typing import Any, Iterable
 
-from acidnet.llm import DialogueContext, DialogueModelAdapter, DialogueResult, RuleBasedDialogueAdapter, build_dialogue_adapter
+from acidnet.llm import (
+    DialogueContext,
+    DialogueModelAdapter,
+    DialogueResult,
+    DialogueTradeFact,
+    DialogueTradeOption,
+    RuleBasedDialogueAdapter,
+    TradeDialogueIntent,
+    TradeDialogueOption,
+    TradeDialogueOutcome,
+    build_dialogue_adapter,
+    parse_trade_dialogue_intent,
+    render_trade_dialogue_outcome,
+    validate_trade_dialogue_text,
+)
 from acidnet.llm.prompt_builder import DEFAULT_SYSTEM_PROMPT, infer_interaction_mode
 from acidnet.simulator.models import (
     Belief,
@@ -209,6 +223,7 @@ class Simulation:
         self.dialogue_system_prompt = dialogue_system_prompt or DEFAULT_SYSTEM_PROMPT
         self.turn_ticks = 12
         self.turn_counter = 0
+        self.last_dialogue_trace: dict[str, Any] | None = None
         self._normalize_rumor_state()
         self._refresh_actor_loads()
 
@@ -259,6 +274,16 @@ class Simulation:
             "tick_log": list(self.tick_log),
             "turn_counter": self.turn_counter,
         }
+
+    def _reset_dialogue_trace(self) -> None:
+        self.last_dialogue_trace = None
+
+    def _update_dialogue_trace(self, **fields: Any) -> None:
+        trace = dict(self.last_dialogue_trace or {})
+        for key, value in fields.items():
+            if value is not None:
+                trace[key] = value
+        self.last_dialogue_trace = trace
 
     def prepare_dialogue_adapter(self) -> str:
         return self.dialogue_adapter.prepare() or f"{type(self.dialogue_adapter).__name__} ready."
@@ -629,7 +654,9 @@ class Simulation:
             return TurnResult(self._events("system", ["Say what?"]))
 
         interaction_mode = infer_interaction_mode(player_prompt)
-        dialogue = self._generate_dialogue_result(npc, interaction_mode=interaction_mode, player_prompt=player_prompt)
+        dialogue = self._trade_dialogue_tool_result(npc, player_prompt=player_prompt, interaction_mode=interaction_mode)
+        if dialogue is None:
+            dialogue = self._generate_dialogue_result(npc, interaction_mode=interaction_mode, player_prompt=player_prompt)
         entries = [
             self._npc_dialogue_event(npc, dialogue.text)
         ]
@@ -1057,6 +1084,7 @@ class Simulation:
         return TurnResult(lines)
 
     def handle_command(self, raw_command: str) -> TurnResult:
+        self._reset_dialogue_trace()
         parts = raw_command.strip().split()
         if not parts:
             return TurnResult([])
@@ -1842,15 +1870,343 @@ class Simulation:
             player_prompt=player_prompt,
         ).text
 
-    def _generate_dialogue_result(self, npc: NPCState, *, interaction_mode: str, player_prompt: str) -> DialogueResult:
-        context = self._build_dialogue_context(npc, interaction_mode=interaction_mode, player_prompt=player_prompt)
-        return self.dialogue_adapter.generate(context)
+    def _generate_dialogue_result(
+        self,
+        npc: NPCState,
+        *,
+        interaction_mode: str,
+        player_prompt: str,
+        trade_fact: DialogueTradeFact | None = None,
+    ) -> DialogueResult:
+        context = self._build_dialogue_context(
+            npc,
+            interaction_mode=interaction_mode,
+            player_prompt=player_prompt,
+            trade_fact=trade_fact,
+        )
+        result = self.dialogue_adapter.generate(context)
+        if trade_fact is None:
+            if self.last_dialogue_trace is None:
+                self._update_dialogue_trace(path="freeform", trade_parser_hit=False)
+            self._update_dialogue_trace(
+                interaction_mode=interaction_mode,
+                npc_id=npc.npc_id,
+                npc_name=npc.name,
+                adapter_name=result.adapter_name,
+            )
+        return result
+
+    def _trade_dialogue_tool_result(
+        self,
+        npc: NPCState,
+        *,
+        player_prompt: str,
+        interaction_mode: str,
+    ) -> DialogueResult | None:
+        if interaction_mode not in {"trade_request", "direct_say"}:
+            return None
+        if not npc.is_vendor:
+            return None
+        intent = parse_trade_dialogue_intent(player_prompt)
+        parser_source = "canonical" if intent is not None else None
+        if intent is None:
+            intent = self._llm_trade_dialogue_intent(
+                npc,
+                interaction_mode=interaction_mode,
+                player_prompt=player_prompt,
+            )
+            if intent is not None:
+                parser_source = "llm"
+        if intent is None:
+            self._update_dialogue_trace(
+                path="freeform",
+                interaction_mode=interaction_mode,
+                npc_id=npc.npc_id,
+                npc_name=npc.name,
+                trade_parser_hit=False,
+                trade_parser_source="llm" if self._supports_llm_trade_parser() else "canonical",
+                reason="no_trade_intent",
+            )
+            return None
+        outcome = self._trade_dialogue_outcome(npc, intent)
+        if outcome is None:
+            self._update_dialogue_trace(
+                path="freeform",
+                interaction_mode=interaction_mode,
+                npc_id=npc.npc_id,
+                npc_name=npc.name,
+                trade_parser_hit=True,
+                trade_parser_source=parser_source,
+                trade_intent=intent.kind,
+                reason="no_trade_outcome",
+            )
+            return None
+        trade_fact = self._dialogue_trade_fact(outcome)
+        try:
+            dialogue = self._generate_dialogue_result(
+                npc,
+                interaction_mode=interaction_mode,
+                player_prompt=player_prompt,
+                trade_fact=trade_fact,
+            )
+        except Exception:
+            text = render_trade_dialogue_outcome(outcome)
+            if not text:
+                return None
+            self._update_dialogue_trace(
+                path="trade_adjudicated_fallback",
+                interaction_mode=interaction_mode,
+                npc_id=npc.npc_id,
+                npc_name=npc.name,
+                trade_parser_hit=True,
+                trade_parser_source=parser_source,
+                trade_intent=intent.kind,
+                trade_fact_kind=trade_fact.kind,
+                trade_error_code=trade_fact.error_code,
+                listed_unit_price=trade_fact.listed_unit_price,
+                accepted_total_gold=trade_fact.accepted_total_gold,
+                counter_total_gold=trade_fact.counter_total_gold,
+                adapter_name="simulation_trade_tool",
+                response_guard="deterministic_fallback",
+                reason="dialogue_backend_error",
+            )
+            return DialogueResult(text=text, adapter_name="simulation_trade_tool")
+        validation_reason = validate_trade_dialogue_text(dialogue.text, outcome)
+        if validation_reason is not None:
+            repaired = dialogue.model_copy(update={"text": render_trade_dialogue_outcome(outcome)})
+            self._update_dialogue_trace(
+                path="trade_adjudicated_repaired",
+                interaction_mode=interaction_mode,
+                npc_id=npc.npc_id,
+                npc_name=npc.name,
+                trade_parser_hit=True,
+                trade_parser_source=parser_source,
+                trade_intent=intent.kind,
+                trade_fact_kind=trade_fact.kind,
+                trade_error_code=trade_fact.error_code,
+                listed_unit_price=trade_fact.listed_unit_price,
+                accepted_total_gold=trade_fact.accepted_total_gold,
+                counter_total_gold=trade_fact.counter_total_gold,
+                adapter_name=dialogue.adapter_name,
+                response_guard="deterministic_repair",
+                validation_reason=validation_reason,
+            )
+            return repaired
+        self._update_dialogue_trace(
+            path="trade_adjudicated",
+            interaction_mode=interaction_mode,
+            npc_id=npc.npc_id,
+            npc_name=npc.name,
+            trade_parser_hit=True,
+            trade_parser_source=parser_source,
+            trade_intent=intent.kind,
+            trade_fact_kind=trade_fact.kind,
+            trade_error_code=trade_fact.error_code,
+            listed_unit_price=trade_fact.listed_unit_price,
+            accepted_total_gold=trade_fact.accepted_total_gold,
+            counter_total_gold=trade_fact.counter_total_gold,
+            adapter_name=dialogue.adapter_name,
+            response_guard="llm_ok",
+        )
+        return dialogue
+
+    def _supports_llm_trade_parser(self) -> bool:
+        return callable(getattr(self.dialogue_adapter, "parse_trade_intent", None))
+
+    def _llm_trade_dialogue_intent(
+        self,
+        npc: NPCState,
+        *,
+        interaction_mode: str,
+        player_prompt: str,
+    ) -> TradeDialogueIntent | None:
+        parser = getattr(self.dialogue_adapter, "parse_trade_intent", None)
+        if not callable(parser):
+            return None
+        context = self._build_dialogue_context(
+            npc,
+            interaction_mode=interaction_mode,
+            player_prompt=player_prompt,
+        )
+        return parser(context)
+
+    def _trade_dialogue_outcome(self, npc: NPCState, intent: TradeDialogueIntent) -> TradeDialogueOutcome | None:
+        if intent.kind == "trade_stock":
+            return self._trade_stock_dialogue_outcome(npc)
+        if intent.item is None:
+            return None
+        if intent.kind == "trade_quote":
+            return self._trade_quote_dialogue_outcome(npc, intent.item)
+        if intent.kind == "trade_offer" and intent.offered_total_gold is not None:
+            return self._trade_offer_dialogue_outcome(
+                npc,
+                intent.item,
+                qty=max(1, intent.quantity),
+                offered_total_gold=intent.offered_total_gold,
+            )
+        return None
+
+    def _trade_quote_dialogue_outcome(self, npc: NPCState, item: str) -> TradeDialogueOutcome:
+        buy_option = self._find_trade_option(npc.npc_id, item, mode="buy")
+        debt_option = self._find_trade_option(npc.npc_id, item, mode="debt")
+        if buy_option is None:
+            return TradeDialogueOutcome(
+                kind="trade_quote",
+                item=item,
+                debt_unit_price=debt_option.price if debt_option is not None else None,
+                error_code="not_offered",
+            )
+        return TradeDialogueOutcome(
+            kind="trade_quote",
+            item=item,
+            available_quantity=buy_option.quantity,
+            listed_unit_price=buy_option.price,
+            debt_unit_price=debt_option.price if debt_option is not None else None,
+        )
+
+    def _trade_stock_dialogue_outcome(self, npc: NPCState) -> TradeDialogueOutcome:
+        buy_options = self.player_trade_options(npc.npc_id, mode="buy")
+        stock = tuple(
+            TradeDialogueOption(item=option.item, quantity=option.quantity, price=option.price)
+            for option in buy_options[:4]
+            if option.price is not None
+        )
+        return TradeDialogueOutcome(kind="trade_stock", stock=stock)
+
+    def _trade_offer_dialogue_outcome(
+        self,
+        npc: NPCState,
+        item: str,
+        *,
+        qty: int,
+        offered_total_gold: int,
+    ) -> TradeDialogueOutcome:
+        buy_option = self._find_trade_option(npc.npc_id, item, mode="buy")
+        if offered_total_gold < 0:
+            return TradeDialogueOutcome(
+                kind="trade_offer",
+                item=item,
+                quantity=qty,
+                offered_total_gold=offered_total_gold,
+                error_code="negative_offer",
+            )
+        if qty <= 0:
+            return TradeDialogueOutcome(
+                kind="trade_offer",
+                item=item,
+                quantity=qty,
+                offered_total_gold=offered_total_gold,
+                error_code="invalid_quantity",
+            )
+        if buy_option is None or buy_option.price is None:
+            return TradeDialogueOutcome(
+                kind="trade_offer",
+                item=item,
+                quantity=qty,
+                offered_total_gold=offered_total_gold,
+                error_code="not_offered",
+            )
+        if qty > buy_option.quantity:
+            return TradeDialogueOutcome(
+                kind="trade_offer",
+                item=item,
+                quantity=qty,
+                available_quantity=buy_option.quantity,
+                listed_unit_price=buy_option.price,
+                offered_total_gold=offered_total_gold,
+                error_code="insufficient_stock",
+            )
+
+        listed_total = buy_option.price * qty
+        minimum_total = self._negotiated_trade_floor_total(npc, item, qty=qty, listed_unit_price=buy_option.price)
+        counter_total = max(minimum_total, min(listed_total, offered_total_gold + qty))
+
+        if offered_total_gold >= listed_total:
+            return TradeDialogueOutcome(
+                kind="trade_offer",
+                item=item,
+                quantity=qty,
+                available_quantity=buy_option.quantity,
+                listed_unit_price=buy_option.price,
+                offered_total_gold=offered_total_gold,
+                minimum_total_gold=minimum_total,
+                accepted_total_gold=listed_total,
+            )
+        if offered_total_gold >= minimum_total:
+            return TradeDialogueOutcome(
+                kind="trade_offer",
+                item=item,
+                quantity=qty,
+                available_quantity=buy_option.quantity,
+                listed_unit_price=buy_option.price,
+                offered_total_gold=offered_total_gold,
+                minimum_total_gold=minimum_total,
+                accepted_total_gold=offered_total_gold,
+            )
+        return TradeDialogueOutcome(
+            kind="trade_offer",
+            item=item,
+            quantity=qty,
+            available_quantity=buy_option.quantity,
+            listed_unit_price=buy_option.price,
+            offered_total_gold=offered_total_gold,
+            minimum_total_gold=minimum_total,
+            counter_total_gold=counter_total,
+        )
+
+    def _negotiated_trade_floor_total(self, npc: NPCState, item: str, *, qty: int, listed_unit_price: int) -> int:
+        discount_budget = 0
+        relationship = self._relationship_score(npc, self.player.player_id)
+        if relationship >= 0.15:
+            discount_budget += 1
+        if relationship >= 0.45:
+            discount_budget += 1
+        if self.world.market.scarcity_index <= 0.35:
+            discount_budget += 1
+        if npc.profession == "merchant":
+            discount_budget += 1
+        if item in FOOD_ITEMS and self.world.market.scarcity_index >= 0.6:
+            discount_budget = min(discount_budget, 1)
+        negotiated_unit_floor = max(1, listed_unit_price - min(2, max(1, discount_budget) if listed_unit_price > 1 else 0))
+        return negotiated_unit_floor * qty
+
+    def _find_trade_option(self, npc_id: str, item: str, *, mode: str) -> TradeOption | None:
+        for option in self.player_trade_options(npc_id, mode=mode):
+            if option.item == item:
+                return option
+        return None
+
+    def _dialogue_trade_fact(self, outcome: TradeDialogueOutcome) -> DialogueTradeFact:
+        return DialogueTradeFact(
+            kind=outcome.kind,
+            item=outcome.item,
+            quantity=outcome.quantity,
+            available_quantity=outcome.available_quantity,
+            listed_unit_price=outcome.listed_unit_price,
+            debt_unit_price=outcome.debt_unit_price,
+            offered_total_gold=outcome.offered_total_gold,
+            minimum_total_gold=outcome.minimum_total_gold,
+            accepted_total_gold=outcome.accepted_total_gold,
+            counter_total_gold=outcome.counter_total_gold,
+            error_code=outcome.error_code,
+            stock=[
+                DialogueTradeOption(item=option.item, quantity=option.quantity, price=option.price)
+                for option in outcome.stock
+            ],
+        )
 
     def _derive_beliefs(self, npc: NPCState) -> list[Belief]:
         self._refresh_beliefs_for_npc(npc)
         return list(npc.beliefs)
 
-    def _build_dialogue_context(self, npc: NPCState, *, interaction_mode: str, player_prompt: str) -> DialogueContext:
+    def _build_dialogue_context(
+        self,
+        npc: NPCState,
+        *,
+        interaction_mode: str,
+        player_prompt: str,
+        trade_fact: DialogueTradeFact | None = None,
+    ) -> DialogueContext:
         related_entities = [self.player.player_id]
         salient_memories = self._retrieve_salient_memories(
             npc.npc_id,
@@ -1872,7 +2228,19 @@ class Simulation:
             salient_beliefs=self._derive_beliefs(npc),
             salient_memories=salient_memories,
             visible_rumors=visible_rumors,
+            buy_options=self._dialogue_trade_options(npc.npc_id, mode="buy"),
+            sell_options=self._dialogue_trade_options(npc.npc_id, mode="sell"),
+            ask_options=self._dialogue_trade_options(npc.npc_id, mode="ask"),
+            give_options=self._dialogue_trade_options(npc.npc_id, mode="give"),
+            debt_options=self._dialogue_trade_options(npc.npc_id, mode="debt"),
+            trade_fact=trade_fact,
         )
+
+    def _dialogue_trade_options(self, npc_id: str, *, mode: str) -> list[DialogueTradeOption]:
+        return [
+            DialogueTradeOption(item=option.item, quantity=option.quantity, price=option.price)
+            for option in self.player_trade_options(npc_id, mode=mode)
+        ]
 
     def _retrieve_salient_memories(
         self,

@@ -31,6 +31,8 @@ If they compete for the next thin slice, this file decides.
 - exchange should converge on one rule path across cash, gifting, barter, and debt
 - `system_prompt` is a live runtime contract across all dialogue backends
 - the frontend consumes derived player-view state, not raw persistence snapshots
+- keep `src/acidnet/simulator/*` language-neutral; locale-specific parsing, aliases, and rendered dialogue text belong outside the simulator boundary
+- until explicit i18n work exists, keep the built-in system-coupled trade dialogue parsing and rendering English-canonical; any broader recovery should stay outside the simulator boundary and remain opportunistic rather than contractual
 
 ## Where The Live Center Is Today
 
@@ -67,8 +69,13 @@ If they compete for the next thin slice, this file decides.
 - the promoted simulator runtime path is now `openai_compat` against `llama-server` with the `Q4_K_M` GGUF base model and optional GGUF LoRA adapter; `local_peft` stays available only for in-process dev/eval parity
 - promoted `llama-server` launchers now force `--reasoning-format none` and `--reasoning-budget 0`; `thinking` on the Qwen3.5 small-model runtime path is treated as a deployment error because it can empty `message.content` and silently trigger heuristic fallback
 - promoted `openai_compat` defaults now follow the `Qwen/Qwen3.5-4B` Hugging Face non-thinking general-task guidance: `temperature=0.7`, `top_p=0.8`, `top_k=20`, `min_p=0.0`, `presence_penalty=1.5`, and `repeat_penalty=1.0` on the llama.cpp wire
+- dialogue context now carries live `buy_options` and `debt_options` from the simulator trade path, so exact price questions can be grounded in the same vendor-specific contract the browser shows instead of the raw global market snapshot alone
+- `say` now has a narrow server-routed trade dialogue adjudication path for exact price queries, sellable-stock queries, and simple bargain offers; the simulator fixes the trade facts first, then the dialogue backend can phrase those facts in-character, and the current canonical path is English-only until explicit i18n work lands
+- when the runtime uses `openai_compat`, the narrow trade path can now attempt an additional model-assisted trade parse after the built-in English-canonical parser misses, and the server exposes a dialogue trace showing whether the turn stayed freeform, was adjudicated, or had to be deterministically repaired/fell back
 - HTTP `/api/command` was rechecked in-process with the hungerfix adapter: Hobb answers origin and rumor requests correctly and Doran now redirects hunger cleanly instead of inventing edible stock
 - bootstrap teacher trade guidance now handles food-buy requests to no-food vendors by refusing plainly and redirecting instead of naming unrelated stock
+- bootstrap dialogue data now also rotates fact-grounded vendor hard cases for exact quotes, sellable stock, accepted offers, counteroffers, negative offers, debt requests, and free-food requests, and those samples can now carry server-authored `trade_fact` into the runtime dialogue prompt
+- runtime-aligned SFT export now also emits parser-side trade-intent examples for quote, stock, and offer cases, so the `openai_compat` model-assisted trade parser can be tuned against the same canonical trade facts as the phrasing path
 - shared dialogue output cleanup and sentence-limit enforcement now run through one post-processing path across `heuristic`, `openai_compat`, and `local_peft`
 - shared dialogue cleanup now also unwraps common code-fenced or JSON-wrapped replies before sentence limiting, reducing backend-specific formatting drift from runtime and eval servers
 - prompt-only evaluation now reaches wrapped `openai_compat` and `local_peft` adapters with `temperature=0.0`, and model-gate fallback accounting now treats `local_peft` the same way as `openai_compat`

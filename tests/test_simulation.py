@@ -1,6 +1,6 @@
 import re
 
-from acidnet.llm import DialogueContext, DialogueResult
+from acidnet.llm import DialogueContext, DialogueResult, TradeDialogueIntent
 from acidnet.simulator import Simulation, build_demo_setup
 from acidnet.simulator.models import RegionalTransit, WorldEvent
 
@@ -33,6 +33,22 @@ class StaticDialogueAdapter:
         )
 
 
+class ParsingDialogueAdapter:
+    def prepare(self) -> str | None:
+        return "ready"
+
+    def parse_trade_intent(self, context: DialogueContext) -> TradeDialogueIntent | None:
+        return TradeDialogueIntent(
+            kind="trade_offer",
+            item="bread",
+            quantity=1,
+            offered_total_gold=5,
+        )
+
+    def generate(self, context: DialogueContext) -> DialogueResult:
+        return DialogueResult(text="That can work.", adapter_name="parsing")
+
+
 def build_recording_simulation(system_prompt: str = "Test system prompt.") -> tuple[Simulation, RecordingDialogueAdapter]:
     setup = build_demo_setup()
     adapter = RecordingDialogueAdapter()
@@ -51,6 +67,19 @@ def build_recording_simulation(system_prompt: str = "Test system prompt.") -> tu
 def build_static_simulation(text: str, *, used_rumor_ids: list[str] | None = None) -> Simulation:
     setup = build_demo_setup()
     adapter = StaticDialogueAdapter(text, used_rumor_ids=used_rumor_ids)
+    return Simulation(
+        world=setup.world,
+        player=setup.player,
+        npcs=setup.npcs,
+        personas=setup.personas,
+        rumors=setup.rumors,
+        dialogue_adapter=adapter,
+    )
+
+
+def build_parsing_simulation() -> Simulation:
+    setup = build_demo_setup()
+    adapter = ParsingDialogueAdapter()
     return Simulation(
         world=setup.world,
         player=setup.player,
@@ -157,6 +186,17 @@ def test_direct_say_forwards_exact_player_prompt_into_dialogue_context() -> None
     assert adapter.contexts[-1].player_prompt == "Where did you come from?"
 
 
+def test_direct_say_forwards_live_buy_options_into_dialogue_context() -> None:
+    simulation, adapter = build_recording_simulation("Quote exact prices only from live trade options.")
+
+    simulation.handle_command("say mara How is business today?")
+
+    assert adapter.contexts
+    bread_option = next(option for option in adapter.contexts[-1].buy_options if option.item == "bread")
+    assert bread_option.quantity >= 1
+    assert bread_option.price == 6
+
+
 def test_asking_for_rumor_uses_single_npc_line_and_nonverbal_system_note() -> None:
     simulation = Simulation.create_demo(dialogue_backend="heuristic")
 
@@ -218,6 +258,90 @@ def test_heuristic_food_trade_reply_redirects_when_vendor_has_no_edible_stock() 
 
     assert "tool" not in reply.lower()
     assert "do not have food" in reply.lower()
+
+
+def test_heuristic_price_question_uses_live_vendor_buy_price() -> None:
+    simulation = Simulation.create_demo(dialogue_backend="heuristic")
+
+    reply = simulation.probe_npc_dialogue("npc.mara", interaction_mode="direct_say", player_prompt="How much is bread?")
+
+    assert "6 gold" in reply.lower()
+    assert "5 gold" not in reply.lower()
+
+
+def test_trade_dialogue_tool_forwards_adjudicated_trade_fact_to_backend() -> None:
+    simulation, adapter = build_recording_simulation("Quote exact prices only from simulator trade options.")
+
+    result = simulation.handle_command("say mara How much is bread?")
+
+    assert adapter.contexts
+    assert result.entries[0].kind == "npc"
+    assert result.entries[0].text.startswith("Mara:")
+    assert adapter.contexts[-1].trade_fact is not None
+    assert adapter.contexts[-1].trade_fact.kind == "trade_quote"
+    assert adapter.contexts[-1].trade_fact.item == "bread"
+    assert adapter.contexts[-1].trade_fact.listed_unit_price == 6
+
+
+def test_trade_dialogue_tool_forwards_bargain_trade_fact_without_state_change() -> None:
+    simulation, adapter = build_recording_simulation("Use simulator trade tools first.")
+    money_before = simulation.player.money
+    bread_before = simulation.player.inventory.get("bread", 0)
+
+    result = simulation.handle_command("say mara Would you take 3 gold for one bread?")
+
+    assert adapter.contexts
+    assert result.entries[0].kind == "npc"
+    assert adapter.contexts[-1].trade_fact is not None
+    assert adapter.contexts[-1].trade_fact.kind == "trade_offer"
+    assert adapter.contexts[-1].trade_fact.offered_total_gold == 3
+    assert adapter.contexts[-1].trade_fact.counter_total_gold == 4
+    assert simulation.player.money == money_before
+    assert simulation.player.inventory.get("bread", 0) == bread_before
+
+
+def test_trade_dialogue_tool_rejects_negative_gold_offer_without_state_change() -> None:
+    simulation, adapter = build_recording_simulation("Use simulator trade tools first.")
+    money_before = simulation.player.money
+    bread_before = simulation.player.inventory.get("bread", 0)
+
+    result = simulation.handle_command("say mara Would you take -2 gold for one bread?")
+
+    assert adapter.contexts
+    assert adapter.contexts[-1].trade_fact is not None
+    assert adapter.contexts[-1].trade_fact.error_code == "negative_offer"
+    assert simulation.player.money == money_before
+    assert simulation.player.inventory.get("bread", 0) == bread_before
+
+
+def test_heuristic_trade_fact_fallback_still_renders_exact_counter_offer() -> None:
+    simulation = Simulation.create_demo(dialogue_backend="heuristic")
+
+    result = simulation.handle_command("say mara Would you take 3 gold for one bread?")
+
+    assert "4 gold" in result.entries[0].text.lower()
+
+
+def test_trade_dialogue_tool_repairs_conflicting_quote_reply_with_exact_renderer() -> None:
+    simulation = build_static_simulation("Bread is 5 gold right now.")
+
+    result = simulation.handle_command("say mara How much is bread?")
+
+    assert result.entries[0].text == "Mara: Bread is 6 gold right now."
+    assert simulation.last_dialogue_trace is not None
+    assert simulation.last_dialogue_trace["path"] == "trade_adjudicated_repaired"
+    assert simulation.last_dialogue_trace["validation_reason"] == "missing_listed_price"
+
+
+def test_llm_trade_parser_can_route_followup_offer_when_canonical_parser_misses() -> None:
+    simulation = build_parsing_simulation()
+
+    result = simulation.handle_command("say mara Then I will take it for 5 gold.")
+
+    assert result.entries[0].text == "Mara: All right. I would take 5 gold for bread x1."
+    assert simulation.last_dialogue_trace is not None
+    assert simulation.last_dialogue_trace["trade_parser_source"] == "llm"
+    assert simulation.last_dialogue_trace["trade_intent"] == "trade_offer"
 
 
 def test_demo_world_starts_with_multiple_distinct_rumors() -> None:
