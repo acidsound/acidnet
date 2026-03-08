@@ -33,6 +33,7 @@ from acidnet.training import (
     export_finetune_manifest_json,
     export_hf_peft_training_script,
     export_sft_jsonl,
+    load_jsonl,
     export_teacher_output_jsonl,
     export_unsloth_training_script,
     generate_demo_prompt_pack,
@@ -285,6 +286,59 @@ World sample:
     assert parser_example.messages[-1]["content"] == '{"kind": "trade_offer", "item": "bread", "quantity": 1, "offered_total_gold": 3}'
     assert "strict trade-intent parser" in parser_example.system_prompt
     assert "- buy_options: bread x6 @ 6 gold" in parser_example.user_prompt
+
+
+def test_exported_sft_jsonl_round_trips_with_trade_parser_runtime_rows() -> None:
+    prompt_rows = [
+        {
+            "custom_id": "dialogue.demo.0.npc.mara.vendor_offer_counter_direct",
+            "task": "dialogue",
+            "system_prompt": "teacher system",
+            "user_prompt": """NPC dialogue task.
+
+World sample:
+{'world': {'day': 1, 'tick': 0, 'weather': 'clear', 'scarcity_index': 0.4, 'market_prices': {'bread': 5}},
+ 'location': {'name': 'Market Square'},
+ 'player': {'hunger': 22.0},
+ 'npc': {'npc_id': 'npc.mara', 'name': 'Mara', 'profession': 'merchant', 'traits': ['quick'], 'hunger': 18.0,
+         'inventory': {'bread': 6, 'fish': 2},
+         'buy_options': [{'item': 'bread', 'quantity': 6, 'price': 6}],
+         'sell_options': [], 'ask_options': [{'item': 'bread', 'quantity': 1, 'price': None}],
+         'give_options': [], 'debt_options': [{'item': 'bread', 'quantity': 3, 'price': 6}],
+         'trade_fact': {'kind': 'trade_offer', 'item': 'bread', 'quantity': 1, 'available_quantity': 6,
+                        'listed_unit_price': 6, 'debt_unit_price': None, 'offered_total_gold': 3,
+                        'minimum_total_gold': 4, 'accepted_total_gold': None, 'counter_total_gold': 4,
+                        'error_code': None, 'stock': []},
+         'known_rumors': [], 'is_vendor': True},
+ 'persona': {'speech_style': ['plain'], 'values': ['trade']},
+ 'interaction_context': {'player_prompt': 'Would you take 3 gold for one bread?', 'player_goal': 'direct_say',
+                         'trade_parse_target': {'kind': 'trade_offer', 'item': 'bread', 'quantity': 1, 'offered_total_gold': 3}},
+ 'beliefs': [], 'recent_memories': [], 'visible_rumors': [], 'relationship_score': 0.0}
+""",
+            "metadata": {"npc_id": "npc.mara", "scenario_id": "scenario_0000"},
+        }
+    ]
+    teacher_rows = [
+        {
+            "custom_id": "dialogue.demo.0.npc.mara.vendor_offer_counter_direct",
+            "assistant_json": {
+                "task": "dialogue",
+                "npc_id": "npc.mara",
+                "response": "That is too low. For bread x1, I would need 4 gold.",
+            },
+        }
+    ]
+    examples = merge_prompt_pack_with_teacher_outputs_runtime_dialogue(prompt_rows, teacher_rows)
+    artifact_dir = Path("data") / "test_artifacts"
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    output_path = export_sft_jsonl(artifact_dir / "trade_parser_roundtrip_sft.jsonl", examples)
+
+    round_tripped = coerce_sft_examples(load_jsonl(output_path))
+
+    assert len(round_tripped) == 2
+    parser_example = next(example for example in round_tripped if example.task == "trade_parser_runtime")
+    assert parser_example.assistant_json["kind"] == "trade_offer"
+    assert parser_example.assistant_json["offered_total_gold"] == 3
 
 
 def test_openai_batch_requests_are_built_from_prompt_rows() -> None:

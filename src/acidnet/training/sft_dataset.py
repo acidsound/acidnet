@@ -28,7 +28,17 @@ class SFTExample:
 
 
 def coerce_sft_examples(rows: list[dict[str, Any]]) -> list[SFTExample]:
-    return [SFTExample(**row) for row in rows]
+    examples: list[SFTExample] = []
+    for row in rows:
+        normalized = dict(row)
+        assistant_json = normalized.get("assistant_json")
+        if isinstance(assistant_json, str) and assistant_json.strip():
+            normalized["assistant_json"] = json.loads(assistant_json)
+        messages = normalized.get("messages")
+        if isinstance(messages, str) and messages.strip():
+            normalized["messages"] = json.loads(messages)
+        examples.append(SFTExample(**normalized))
+    return examples
 
 
 def load_jsonl(path: str | Path) -> list[dict[str, Any]]:
@@ -178,7 +188,9 @@ def export_sft_jsonl(path: str | Path, examples: list[SFTExample]) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", encoding="utf-8") as handle:
         for example in examples:
-            handle.write(json.dumps(asdict(example), ensure_ascii=False) + "\n")
+            record = asdict(example)
+            record["assistant_json"] = json.dumps(record["assistant_json"], ensure_ascii=False)
+            handle.write(json.dumps(record, ensure_ascii=False) + "\n")
     return output_path
 
 
