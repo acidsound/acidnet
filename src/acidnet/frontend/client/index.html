@@ -507,6 +507,8 @@
 
   <script>
     let latestState = null;
+    let latestEventSeq = 0;
+    let eventLoopAbort = false;
 
     function appendButton(parent, label, onClick, options = {}) {
       const button = document.createElement('button');
@@ -533,6 +535,7 @@
     async function fetchState() {
       const response = await fetch('/api/state');
       latestState = await response.json();
+      latestEventSeq = Number(latestState.latest_event_seq || 0);
       render(latestState);
     }
 
@@ -544,9 +547,34 @@
       });
       const payload = await response.json();
       latestState = payload.state || latestState;
+      latestEventSeq = Number(payload.latest_event_seq || latestState?.latest_event_seq || latestEventSeq || 0);
       render(latestState);
       if (!response.ok && payload.error) {
         alert(payload.error);
+      }
+    }
+
+    async function pollEventsOnce() {
+      const response = await fetch(`/api/events?after_seq=${latestEventSeq}&timeout_s=20&limit=96`, {
+        cache: 'no-store',
+      });
+      const payload = await response.json();
+      latestEventSeq = Number(payload.latest_event_seq || latestEventSeq || 0);
+      if (payload.reset_required || (payload.events && payload.events.length)) {
+        await fetchState();
+      } else if (latestState && Number(payload.state_version || 0) !== Number(latestState.state_version || 0)) {
+        await fetchState();
+      }
+    }
+
+    async function startEventLoop() {
+      while (!eventLoopAbort) {
+        try {
+          await pollEventsOnce();
+        } catch (error) {
+          console.warn('acidnet event poll failed', error);
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+        }
       }
     }
 
@@ -981,8 +1009,8 @@
     });
 
     loadPrompt();
-    fetchState();
-    setInterval(fetchState, 2500);
+    fetchState().then(startEventLoop);
+    setInterval(fetchState, 60000);
   </script>
 </body>
 </html>

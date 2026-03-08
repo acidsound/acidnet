@@ -2,604 +2,16 @@ from __future__ import annotations
 
 import argparse
 import json
-import threading
-from collections import deque
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 from acidnet.llm import DEFAULT_OPENAI_COMPAT_MODEL, RUNTIME_DIALOGUE_BACKENDS
-from acidnet.simulator import EventLogFile, SQLiteWorldStore, Simulation
-from acidnet.simulator.runtime import CONSUMPTION_VALUE, TurnEvent
+from acidnet.simulator.service import SimulatorService
 
-
-class WebSimulationRuntime:
-    def __init__(
-        self,
-        *,
-        db_path: str | Path = Path("data") / "acidnet.sqlite",
-        persist: bool = True,
-        player_name: str | None = None,
-        dialogue_backend: str = "heuristic",
-        dialogue_model: str | None = None,
-        dialogue_endpoint: str | None = None,
-        dialogue_adapter_path: str | None = None,
-        simulation: Simulation | None = None,
-        event_log_path: str | Path | None = Path("data") / "logs" / "acidnet-web-events.log",
-        prepare_dialogue: bool = True,
-    ) -> None:
-        self.lock = threading.RLock()
-        self.config_store = SQLiteWorldStore(db_path)
-        if player_name is not None:
-            self.config_store.set_player_name(player_name)
-        provided_simulation = simulation is not None
-        self.simulation = simulation or Simulation.create_demo(
-            player_name=self.config_store.get_player_name(),
-            dialogue_backend=dialogue_backend,
-            dialogue_model=dialogue_model,
-            dialogue_endpoint=dialogue_endpoint,
-            dialogue_adapter_path=dialogue_adapter_path,
-        )
-        self.store = self.config_store if persist else None
-        self.event_log = EventLogFile(event_log_path) if event_log_path is not None else None
-        if provided_simulation and player_name is not None:
-            self.simulation.player.name = self.config_store.get_player_name()
-        if not provided_simulation:
-            self.simulation.set_dialogue_system_prompt(self.config_store.get_dialogue_system_prompt())
-        self.dialogue_ready = False
-        self.dialogue_loading = False
-        self.dialogue_message = f"Loading {dialogue_backend} dialogue model..."
-        self.recent_events: deque[dict[str, Any]] = deque(maxlen=96)
-        self._asset_root = Path(__file__).resolve().parent / "client"
-
-        self._record_system(
-            "session_start",
-            "Web session started.",
-            payload={"entrypoint": "web", "dialogue_backend": dialogue_backend},
-            save_snapshot=True,
-        )
-        self._append_event("system", "acidnet web frontend ready.")
-
-        if prepare_dialogue:
-            self._append_event("system", self.dialogue_message)
-            self._start_dialogue_prepare()
-        else:
-            if dialogue_backend == "heuristic":
-                self.dialogue_ready = True
-                self.dialogue_message = f"{type(self.simulation.dialogue_adapter).__name__} ready."
-            else:
-                self.dialogue_message = "Dialogue preparation skipped for this runtime."
-            self._append_event("system", self.dialogue_message)
-
-    @property
-    def asset_root(self) -> Path:
-        return self._asset_root
-
-    def _append_event(self, kind: str, text: str) -> None:
-        self.recent_events.append(
-            {
-                "kind": kind,
-                "text": text,
-                "day": self.simulation.world.day,
-                "tick": self.simulation.world.tick,
-            }
-        )
-
-    def _format_dialogue_trace_text(self, trace: dict[str, Any]) -> str:
-        parts = [f"path={trace.get('path', 'unknown')}"]
-        if trace.get("interaction_mode"):
-            parts.append(f"mode={trace['interaction_mode']}")
-        if trace.get("trade_parser_source"):
-            parts.append(f"parser={trace['trade_parser_source']}")
-        if trace.get("trade_intent"):
-            parts.append(f"intent={trace['trade_intent']}")
-        if trace.get("trade_fact_kind"):
-            parts.append(f"fact={trace['trade_fact_kind']}")
-        if trace.get("response_guard"):
-            parts.append(f"guard={trace['response_guard']}")
-        if trace.get("validation_reason"):
-            parts.append(f"validation={trace['validation_reason']}")
-        if trace.get("reason"):
-            parts.append(f"reason={trace['reason']}")
-        if trace.get("adapter_name"):
-            parts.append(f"adapter={trace['adapter_name']}")
-        return "dialogue trace | " + " | ".join(parts)
-
-    def _record_system(
-        self,
-        kind: str,
-        message: str,
-        *,
-        payload: dict[str, Any] | None = None,
-        save_snapshot: bool = False,
-    ) -> None:
-        if save_snapshot and self.store is not None:
-            self.store.save_simulation(self.simulation, kind=kind, message=message, payload=payload)
-        if self.event_log is not None:
-            self.event_log.write(
-                kind=kind,
-                message=message,
-                day=self.simulation.world.day,
-                tick=self.simulation.world.tick,
-                payload=payload,
-            )
-
-    def _start_dialogue_prepare(self) -> None:
-        if self.dialogue_loading or self.dialogue_ready:
-            return
-        self.dialogue_loading = True
-        thread = threading.Thread(target=self._prepare_dialogue_worker, name="acidnet-web-dialogue-prepare", daemon=True)
-        thread.start()
-
-    def _prepare_dialogue_worker(self) -> None:
-        try:
-            message = self.simulation.prepare_dialogue_adapter()
-        except Exception as exc:
-            success = False
-            message = f"Dialogue model failed to load: {exc}"
-        else:
-            success = True
-        with self.lock:
-            self.dialogue_loading = False
-            self.dialogue_ready = success
-            self.dialogue_message = message
-            self._append_event("system", message)
-
-    def _is_dialogue_command(self, command: str) -> bool:
-        lowered = command.strip().lower()
-        return lowered.startswith("talk") or lowered.startswith("say ") or lowered.startswith("tell ") or lowered.startswith("ask ")
-
-    def _scene_people(self) -> list[dict[str, Any]]:
-        if self.simulation.player.travel_state.is_traveling:
-            return []
-        people: list[dict[str, Any]] = []
-        focused_npc = self.simulation.player.focused_npc_id
-        for npc in self.simulation._npcs_at(self.simulation.player.location_id):
-            people.append(
-                {
-                    "npc_id": npc.npc_id,
-                    "name": npc.name,
-                    "profession": npc.profession,
-                    "mood": self.simulation._npc_mood(npc),
-                    "is_vendor": npc.is_vendor,
-                    "is_target": npc.npc_id == focused_npc,
-                    "stock": [
-                        {"item": item, "quantity": qty}
-                        for item, qty in npc.inventory.items()
-                        if qty > 0
-                    ],
-                    "buy_options": [
-                        {"item": option.item, "quantity": option.quantity, "price": option.price}
-                        for option in self.simulation.player_trade_options(npc.npc_id, mode="buy")
-                    ],
-                    "sell_options": [
-                        {"item": option.item, "quantity": option.quantity, "price": option.price}
-                        for option in self.simulation.player_trade_options(npc.npc_id, mode="sell")
-                    ],
-                    "ask_options": [
-                        {"item": option.item, "quantity": option.quantity, "price": option.price}
-                        for option in self.simulation.player_trade_options(npc.npc_id, mode="ask")
-                    ],
-                    "give_options": [
-                        {"item": option.item, "quantity": option.quantity, "price": option.price}
-                        for option in self.simulation.player_trade_options(npc.npc_id, mode="give")
-                    ],
-                    "debt_options": [
-                        {"item": option.item, "quantity": option.quantity, "price": option.price}
-                        for option in self.simulation.player_trade_options(npc.npc_id, mode="debt")
-                    ],
-                }
-            )
-        return people
-
-    def _map_nodes(self) -> list[dict[str, Any]]:
-        current_id = self.simulation.player.location_id
-        current = self.simulation.world.locations[current_id]
-        current_region = self.simulation.current_region()
-        nodes: list[dict[str, Any]] = []
-        for location_id, location in self.simulation.world.locations.items():
-            occupant_count = sum(1 for npc in self.simulation.npcs.values() if npc.location_id == location_id)
-            move_command: str | None = None
-            connection_kind = "local"
-            is_reachable = False
-            if location_id == current_id:
-                move_command = "look"
-                is_reachable = True
-            elif location.region_id == current.region_id and location_id in current.neighbors:
-                move_command = f"go {location_id}"
-                is_reachable = True
-            elif current_region is not None and location.location_id == self.simulation.world.regions.get(location.region_id, current_region).anchor_location_id:
-                route = self.simulation._regional_route_between(current.region_id, location.region_id)
-                if route is not None and not self.simulation.player.travel_state.is_traveling:
-                    target_region = self.simulation.world.regions.get(location.region_id)
-                    if target_region is not None:
-                        move_command = f"travel-region {target_region.name}"
-                        is_reachable = True
-                        connection_kind = "regional"
-            nodes.append(
-                {
-                    "location_id": location_id,
-                    "name": location.name,
-                    "kind": location.kind,
-                    "row": location.map_row,
-                    "column": location.map_column,
-                    "glyph": location.map_glyph,
-                    "is_player_here": location_id == current_id,
-                    "is_adjacent": location_id in current.neighbors,
-                    "is_reachable": is_reachable,
-                    "move_command": move_command,
-                    "connection_kind": connection_kind,
-                    "occupant_count": occupant_count,
-                }
-            )
-        return nodes
-
-    def _map_edges(self) -> list[dict[str, Any]]:
-        current_region = self.simulation.current_region()
-        current_location = self.simulation.world.locations[self.simulation.player.location_id]
-        seen: set[tuple[str, str, str]] = set()
-        edges: list[dict[str, Any]] = []
-
-        for location in self.simulation.world.locations.values():
-            if location.region_id != current_location.region_id:
-                continue
-            for neighbor_id in location.neighbors:
-                neighbor = self.simulation.world.locations.get(neighbor_id)
-                if neighbor is None or neighbor.region_id != current_location.region_id:
-                    continue
-                key = tuple(sorted((location.location_id, neighbor.location_id))) + ("local",)
-                if key in seen:
-                    continue
-                seen.add(key)
-                edges.append(
-                    {
-                        "from_location_id": location.location_id,
-                        "to_location_id": neighbor.location_id,
-                        "kind": "local",
-                        "route_id": None,
-                        "is_delayed": False,
-                    }
-                )
-
-        if current_region is None or current_region.anchor_location_id is None:
-            return edges
-
-        for route in self.simulation.world.regional_routes:
-            other_region_id: str | None = None
-            if route.from_region_id == current_region.region_id:
-                other_region_id = route.to_region_id
-            elif route.to_region_id == current_region.region_id:
-                other_region_id = route.from_region_id
-            if other_region_id is None:
-                continue
-            other_region = self.simulation.world.regions.get(other_region_id)
-            if other_region is None or other_region.anchor_location_id is None:
-                continue
-            key = tuple(sorted((current_region.anchor_location_id, other_region.anchor_location_id))) + ("regional",)
-            if key in seen:
-                continue
-            seen.add(key)
-            edges.append(
-                {
-                    "from_location_id": current_region.anchor_location_id,
-                    "to_location_id": other_region.anchor_location_id,
-                    "kind": "regional",
-                    "route_id": route.route_id,
-                    "is_delayed": self.simulation._visible_route_delay_event_for_player(route.route_id) is not None,
-                }
-            )
-        return edges
-
-    def _route_preview(self) -> list[dict[str, Any]]:
-        if self.simulation.player.travel_state.is_traveling:
-            return []
-        previews: list[dict[str, Any]] = []
-        current = self.simulation.world.locations[self.simulation.player.location_id]
-        for neighbor_id in current.neighbors:
-            preview = self.simulation._preview_local_route(neighbor_id)
-            if preview is not None:
-                previews.append(preview)
-        for region in self.simulation.world.regions.values():
-            preview = self.simulation._preview_regional_route(region.region_id)
-            if preview is not None:
-                previews.append(preview)
-        return previews
-
-    def _action_catalog(self) -> dict[str, list[dict[str, Any]]]:
-        focused_npc = self.simulation._focused_npc_here()
-        best_food = self.simulation._best_food_in_inventory(self.simulation.player.inventory)
-        route_preview = self._route_preview()
-        common = [
-            {"label": "Look", "command": "look"},
-            {"label": "Work", "command": "work"},
-            {
-                "label": "Meal",
-                "command": "meal",
-                "enabled": best_food is not None,
-                "item": best_food,
-            },
-            {"label": "Rest", "command": "rest 1"},
-            {"label": "Sleep", "command": "sleep 3"},
-            {"label": "Next", "command": "next 1"},
-        ]
-        consume = [
-            {
-                "label": f"Eat {item.title()}",
-                "command": f"eat {item}",
-                "item": item,
-                "quantity": qty,
-            }
-            for item, qty in sorted(self.simulation.player.inventory.items())
-            if qty > 0 and item in CONSUMPTION_VALUE
-        ]
-        target = [
-            {
-                "label": "Inspect",
-                "command": "inspect",
-                "requires_target": True,
-                "enabled": focused_npc is not None,
-            },
-            {
-                "label": "Talk",
-                "command": "talk",
-                "requires_target": True,
-                "enabled": focused_npc is not None and self.dialogue_ready,
-            },
-            {
-                "label": "Ask Rumor",
-                "command": "ask rumor",
-                "requires_target": True,
-                "enabled": focused_npc is not None and self.dialogue_ready,
-            },
-        ]
-        travel = [
-            {
-                "label": ("Go " if preview["connection_kind"] == "local" else "Travel to ") + str(preview["destination_name"]),
-                "command": preview["command"],
-                "enabled": preview["enabled"],
-                "kind": preview["connection_kind"],
-                "destination_location_id": preview["destination_location_id"],
-                "destination_region_id": preview["destination_region_id"],
-                "travel_ticks": preview["travel_ticks"],
-                "travel_turns": preview["travel_turns"],
-                "blocked_reason": preview["blocked_reason"],
-                "route_id": preview["route_id"],
-            }
-            for preview in route_preview
-        ]
-        return {"common": common, "consume": consume, "target": target, "travel": travel}
-
-    def dialogue_prompt_payload(self) -> dict[str, Any]:
-        with self.lock:
-            current_prompt = self.simulation.dialogue_system_prompt.strip()
-            default_prompt = self.config_store.get_default_dialogue_system_prompt().strip()
-            return {
-                "current_prompt": current_prompt,
-                "default_prompt": default_prompt,
-                "current_lines": len(current_prompt.splitlines()),
-                "current_chars": len(current_prompt),
-            }
-
-    def save_dialogue_system_prompt(self, prompt: str) -> dict[str, Any]:
-        cleaned = prompt.strip()
-        if not cleaned:
-            return {"ok": False, "error": "The dialogue system prompt cannot be empty."}
-        with self.lock:
-            self.config_store.set_dialogue_system_prompt(cleaned)
-            self.simulation.set_dialogue_system_prompt(cleaned)
-            self._append_event("system", "Dialogue system prompt updated.")
-            self._record_system(
-                "settings",
-                "Updated dialogue system prompt.",
-                payload={"prompt_lines": len(cleaned.splitlines()), "prompt_chars": len(cleaned)},
-                save_snapshot=True,
-            )
-            return {
-                "ok": True,
-                "message": "Dialogue system prompt updated.",
-                "prompt": self.dialogue_prompt_payload(),
-            }
-
-    def reset_dialogue_system_prompt(self) -> dict[str, Any]:
-        default_prompt = self.config_store.get_default_dialogue_system_prompt().strip()
-        result = self.save_dialogue_system_prompt(default_prompt)
-        if result.get("ok"):
-            result["message"] = "Dialogue system prompt reset to default."
-        return result
-
-    def scene_payload(self) -> dict[str, Any]:
-        with self.lock:
-            self.simulation._refresh_actor_loads()
-            self.simulation._refresh_market_snapshot()
-            focused_npc = self.simulation._focused_npc_here()
-            location = self.simulation.world.locations[self.simulation.player.location_id]
-            region = self.simulation.current_region()
-            location_name = location.name
-            if self.simulation.player.travel_state.is_traveling:
-                destination_id = self.simulation.player.travel_state.destination_location_id or self.simulation.player.location_id
-                location_name = f"On the road to {self.simulation.world.locations[destination_id].name}"
-            return {
-                "dialogue": {
-                    "ready": self.dialogue_ready,
-                    "loading": self.dialogue_loading,
-                    "message": self.dialogue_message,
-                    "backend": type(self.simulation.dialogue_adapter).__name__,
-                },
-                "world": {
-                    "day": self.simulation.world.day,
-                    "tick": self.simulation.world.tick,
-                    "weather": self.simulation.world.weather,
-                    "field_stress": round(self.simulation.world.field_stress, 2),
-                    "scarcity_index": round(self.simulation.world.market.scarcity_index, 2),
-                    "market_prices": {
-                        item_id: state.current_price for item_id, state in sorted(self.simulation.world.market.items.items())
-                    },
-                    "location_id": location.location_id,
-                    "location_name": location_name,
-                    "region_id": location.region_id,
-                    "region_name": region.name if region is not None else None,
-                    "active_events": [
-                        {
-                            "event_id": event.event_id,
-                            "event_type": event.event_type,
-                            "summary": event.summary,
-                        }
-                        for event in self.simulation._visible_world_events_for_player()
-                    ],
-                },
-                "player": {
-                    "name": self.simulation.player.name,
-                    "location_id": self.simulation.player.location_id,
-                    "money": self.simulation.player.money,
-                    "hunger": round(self.simulation.player.hunger, 1),
-                    "fatigue": round(self.simulation.player.fatigue, 1),
-                    "carried_weight": round(self.simulation.player.carried_weight, 1),
-                    "carry_capacity": round(self.simulation.player.carry_capacity, 1),
-                    "focused_npc_id": self.simulation.player.focused_npc_id,
-                    "inventory": [
-                        {"item": item, "quantity": qty}
-                        for item, qty in self.simulation.player.inventory.items()
-                        if qty > 0
-                    ],
-                    "debts": [
-                        {
-                            "npc_id": npc_id,
-                            "name": self.simulation.npcs[npc_id].name if npc_id in self.simulation.npcs else npc_id,
-                            "amount": amount,
-                        }
-                        for npc_id, amount in sorted(self.simulation.player.debts.items())
-                        if amount > 0
-                    ],
-                    "travel_state": self.simulation.player.travel_state.model_dump(mode="json"),
-                },
-                "actions": self._action_catalog(),
-                "scene": {
-                    "description": self.simulation.describe_location(),
-                    "people": self._scene_people(),
-                    "rumors": [
-                        {"content": rumor.content, "confidence": round(rumor.confidence, 2)}
-                        for rumor in self.simulation._sorted_known_rumors(
-                            self.simulation.player.known_rumor_ids,
-                            dedupe_by_signature=True,
-                        )
-                    ],
-                    "route_preview": self._route_preview(),
-                    "map_nodes": self._map_nodes(),
-                    "map_edges": self._map_edges(),
-                    "regional_nodes": [
-                        {
-                            "region_id": node.region_id,
-                            "name": node.name,
-                            "kind": node.kind,
-                            "summary": node.summary,
-                            "risk_level": round(node.risk_level, 2),
-                            "is_current_region": node.region_id == location.region_id,
-                            "known_local_locations": list(node.local_location_ids),
-                            "stock_signals": dict(node.stock_signals),
-                        }
-                        for node in self.simulation.world.regions.values()
-                    ],
-                    "regional_routes": [
-                        {
-                            "route_id": route.route_id,
-                            "from_region_id": route.from_region_id,
-                            "to_region_id": route.to_region_id,
-                            "travel_ticks": route.travel_ticks,
-                            "cargo_risk": round(route.cargo_risk, 2),
-                            "weather_sensitivity": round(route.weather_sensitivity, 2),
-                            "seasonal_capacity": round(route.seasonal_capacity, 2),
-                            "transit_count": sum(
-                                1
-                                for transit in self.simulation.world.regional_transits
-                                if transit.route_id == route.route_id
-                            ),
-                            "status": "unknown"
-                            if not self.simulation._is_route_visible_to_player(route)
-                            else "delayed"
-                            if self.simulation._visible_route_delay_event_for_player(route.route_id) is not None
-                            else "stable",
-                            "status_summary": None
-                            if self.simulation._visible_route_delay_event_for_player(route.route_id) is None
-                            else self.simulation._visible_route_delay_event_for_player(route.route_id).summary,
-                        }
-                        for route in self.simulation.world.regional_routes
-                    ],
-                },
-                "target": None
-                if focused_npc is None
-                else {
-                    "npc_id": focused_npc.npc_id,
-                    "name": focused_npc.name,
-                    "detail_text": self.simulation.npc_detail_text(focused_npc.npc_id),
-                },
-                "recent_events": list(self.recent_events),
-                "help": self.simulation.help_text().splitlines(),
-            }
-
-    def run_command(self, command: str) -> dict[str, Any]:
-        cleaned = " ".join(command.split())
-        if not cleaned:
-            return {"ok": False, "error": "Command is empty.", "state": self.scene_payload(), "entries": []}
-
-        with self.lock:
-            if self._is_dialogue_command(cleaned) and not self.dialogue_ready:
-                message = "Dialogue model is still loading. Wait for the ready message."
-                self._append_event("system", message)
-                return {"ok": False, "error": message, "state": self.scene_payload(), "entries": []}
-
-            self._append_event("input", f"> {cleaned}")
-            result = self.simulation.handle_command(cleaned)
-            entries = [entry if isinstance(entry, TurnEvent) else TurnEvent(kind="world", text=str(entry)) for entry in result.entries]
-            for entry in entries:
-                self._append_event(entry.kind, entry.text)
-            dialogue_trace = dict(self.simulation.last_dialogue_trace or {}) or None
-            if dialogue_trace is not None:
-                self._append_event("debug", self._format_dialogue_trace_text(dialogue_trace))
-
-            payload = {"result_lines": result.lines, "result_entries": result.payload()}
-            if dialogue_trace is not None:
-                payload["dialogue_trace"] = dialogue_trace
-            if self.store is not None:
-                self.store.save_simulation(
-                    self.simulation,
-                    kind="web_command",
-                    message=cleaned,
-                    payload=payload,
-                )
-            if self.event_log is not None:
-                self.event_log.write(
-                    kind="web_command",
-                    message=cleaned,
-                    day=self.simulation.world.day,
-                    tick=self.simulation.world.tick,
-                    payload=payload,
-                )
-
-            response = {
-                "ok": True,
-                "command": cleaned,
-                "entries": result.payload(),
-                "state": self.scene_payload(),
-            }
-            if dialogue_trace is not None:
-                response["debug"] = {"dialogue_trace": dialogue_trace}
-            return response
-
-    def close(self) -> None:
-        with self.lock:
-            self._record_system("session_end", "Web session ended.", payload={"entrypoint": "web"}, save_snapshot=True)
-            store = self.store
-            config_store = self.config_store
-            self.store = None
-            self.config_store = None
-            if store is not None:
-                store.close()
-            elif config_store is not None:
-                config_store.close()
-            if self.event_log is not None:
-                self.event_log.close()
-                self.event_log = None
+WebSimulationRuntime = SimulatorService
 
 
 class AcidNetWebHandler(BaseHTTPRequestHandler):
@@ -609,19 +21,31 @@ class AcidNetWebHandler(BaseHTTPRequestHandler):
         return
 
     def do_GET(self) -> None:
-        if self.path in {"/", "/index.html"}:
+        parsed = urlparse(self.path)
+        if parsed.path in {"/", "/index.html"}:
             self._serve_asset("index.html", "text/html; charset=utf-8")
             return
-        if self.path == "/api/state":
+        if parsed.path == "/api/state":
             self._write_json(HTTPStatus.OK, self.server.runtime.scene_payload())
             return
-        if self.path == "/api/dialogue-prompt":
+        if parsed.path == "/api/events":
+            query = parse_qs(parsed.query)
+            after_seq = self._parse_int(query.get("after_seq", ["0"])[0], default=0, minimum=0)
+            timeout_s = self._parse_float(query.get("timeout_s", ["15"])[0], default=15.0, minimum=0.0)
+            limit = self._parse_int(query.get("limit", ["64"])[0], default=64, minimum=1)
+            self._write_json(
+                HTTPStatus.OK,
+                self.server.runtime.events_payload(after_seq=after_seq, timeout_s=timeout_s, limit=limit),
+            )
+            return
+        if parsed.path == "/api/dialogue-prompt":
             self._write_json(HTTPStatus.OK, self.server.runtime.dialogue_prompt_payload())
             return
         self._write_json(HTTPStatus.NOT_FOUND, {"error": "Not found."})
 
     def do_POST(self) -> None:
-        if self.path not in {"/api/command", "/api/dialogue-prompt"}:
+        parsed = urlparse(self.path)
+        if parsed.path not in {"/api/command", "/api/dialogue-prompt"}:
             self._write_json(HTTPStatus.NOT_FOUND, {"error": "Not found."})
             return
         content_length = int(self.headers.get("Content-Length", "0"))
@@ -631,7 +55,7 @@ class AcidNetWebHandler(BaseHTTPRequestHandler):
         except json.JSONDecodeError:
             self._write_json(HTTPStatus.BAD_REQUEST, {"error": "Invalid JSON body."})
             return
-        if self.path == "/api/dialogue-prompt":
+        if parsed.path == "/api/dialogue-prompt":
             if payload.get("reset_default"):
                 result = self.server.runtime.reset_dialogue_system_prompt()
             else:
@@ -645,7 +69,7 @@ class AcidNetWebHandler(BaseHTTPRequestHandler):
         self._write_json(status, result)
 
     def _serve_asset(self, relative_path: str, content_type: str) -> None:
-        asset_path = self.server.runtime.asset_root / relative_path
+        asset_path = self.server.asset_root / relative_path
         if not asset_path.exists():
             self._write_json(HTTPStatus.NOT_FOUND, {"error": "Asset not found."})
             return
@@ -660,15 +84,31 @@ class AcidNetWebHandler(BaseHTTPRequestHandler):
         encoded = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(encoded)))
         self.end_headers()
         self.wfile.write(encoded)
+
+    def _parse_int(self, raw: str, *, default: int, minimum: int) -> int:
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            return default
+        return max(minimum, value)
+
+    def _parse_float(self, raw: str, *, default: float, minimum: float) -> float:
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            return default
+        return max(minimum, value)
 
 
 class AcidNetWebServer(ThreadingHTTPServer):
     def __init__(self, server_address: tuple[str, int], runtime: WebSimulationRuntime) -> None:
         super().__init__(server_address, AcidNetWebHandler)
         self.runtime = runtime
+        self.asset_root = Path(__file__).resolve().parent / "client"
 
 
 def build_parser() -> argparse.ArgumentParser:

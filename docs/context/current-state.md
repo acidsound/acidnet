@@ -40,6 +40,8 @@ If they compete for the next thin slice, this file decides.
 - `src/acidnet/engine/simulation.py` is now a compatibility shim over the simulator runtime.
 - Headless split-prep imports now have a stable public boundary in `src/acidnet/simulator/`.
 - The browser contract is served by `src/acidnet/frontend/web_app.py` and specified in `docs/roadmap/23-web-client-api-spec.md`.
+- `src/acidnet/simulator/service.py` now owns the browser-facing simulator service contract, authoritative snapshots, and authoritative event stream.
+- `src/acidnet/frontend/web_app.py` is now an HTTP gateway plus static asset host over that in-process simulator service instead of the direct owner of simulation state plumbing.
 - The current village, personas, and seeded rumors live in `src/acidnet/simulator/demo.py`.
 - Runtime prompt persistence lives in `src/acidnet/simulator/sqlite_store.py`.
 
@@ -107,6 +109,8 @@ If they compete for the next thin slice, this file decides.
 - `trade [npc] debt <item> <qty>` now extends credit through the same stock, reserve-floor, relationship, urgency, and debt-ceiling checks, and `repay [npc] [amount]` settles that debt on the live command path
 - web state now exposes player debt summaries and per-NPC `debt_options`, so browser-visible exchange state no longer hides the remaining debt leg of `20C`
 - web state now also exposes `scene.route_preview` plus `actions.travel`, so browser-visible route preview no longer has to be reconstructed from map topology or ad hoc client rules
+- browser snapshots now also expose `state_version` and `latest_event_seq`, and the HTTP surface now includes long-poll `GET /api/events` batches over the simulator-owned event stream
+- the Python web runtime is now split into `src/acidnet/simulator/service.py` for simulator-owned state/event/persistence concerns and `src/acidnet/frontend/web_app.py` for HTTP transport plus static asset serving
 - summarized regional `risk_level` now drifts with offscreen stock pressure, route throughput, and local scarcity, so regional nodes surface broader pressure than price alone
 
 ## Immediate Queue
@@ -121,8 +125,9 @@ If they compete for the next thin slice, this file decides.
 ### Track A: Structural Boundary
 
 1. Keep repo split prep on the structural verification gate: public `acidnet.simulator` sub-surfaces only, no deep-internal imports in live code, no simulator back-imports into frontend/eval/training, and stable entrypoint targets.
-2. Run the deeper frontend audit only after the promotion-quality refresh closes and the split-verification gate stays green, so browser assumptions are checked against a stable runtime boundary.
-3. Queue the realtime-transition refactor after the split verification and frontend audit: separate command resolution from world time progression so the simulator owns the clock and frontends remain request/response clients only.
+2. The in-process simulator-service plus web-gateway boundary and long-poll event contract are now in place; websocket remains deferred and the next boundary work is time/space policy plus eventual remote simulator transport, not more browser-owned rules.
+3. Run the deeper frontend audit only after the promotion-quality refresh closes and the split-verification gate stays green, so browser assumptions are checked against a stable runtime boundary.
+4. Queue the realtime-transition refactor after the split verification and frontend audit: separate command resolution from world time progression so the simulator owns the clock and frontends remain request/response clients only.
 
 ### Track B: Live Simulation and World Loop
 

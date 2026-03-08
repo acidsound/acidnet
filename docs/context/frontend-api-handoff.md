@@ -12,11 +12,12 @@ Keep it limited to the player-visible HTTP contract:
 Do not duplicate simulation design notes here.
 Do not document raw persistence or private Python helpers here.
 
-Updated: 2026-03-08
+Updated: 2026-03-09
 
 ## Canonical Ownership
 
-- HTTP runtime: `src/acidnet/frontend/web_app.py`
+- HTTP gateway: `src/acidnet/frontend/web_app.py`
+- simulator-owned service: `src/acidnet/simulator/service.py`
 - Full protocol spec: `docs/roadmap/23-web-client-api-spec.md`
 - Contract tests: `tests/test_web_frontend.py`
 - Current browser probe: `src/acidnet/frontend/client/index.html`
@@ -32,6 +33,8 @@ Primary player-view snapshot for the browser.
 
 Frontend-safe top-level sections:
 
+- `state_version`
+- `latest_event_seq`
 - `dialogue`
 - `world`
 - `player`
@@ -68,6 +71,8 @@ Current `scene` fields that are explicitly safe to render:
 
 Notes:
 
+- `state_version` is the authoritative snapshot version from the simulator service.
+- `latest_event_seq` is the current event cursor for `/api/events`.
 - `scarcity_index` and `market_prices` are server-authoritative derived values.
 - `active_events` entries currently expose `event_id`, `event_type`, and `summary`.
 - `active_events` may now include item-aware `market_support` or `market_pressure` summaries when visible regional transits are actively steadying, tightening, or relieving a local crisis in the market.
@@ -79,6 +84,7 @@ Notes:
 - `actions.travel` is the server-authored travel action catalog aligned with `scene.route_preview`.
 - `actions` is the allowed action catalog for the current state, not a hint to rebuild rules in the browser.
 - `recent_events` is the append-only player-visible feed, not a full simulation log.
+- `recent_events` entries now also expose `seq`, which is the same cursor family used by `GET /api/events`.
 - dialogue commands may append `debug`-kind `recent_events` entries that summarize whether the server used freeform dialogue, server-routed trade adjudication, or deterministic repair/fallback.
 
 ### `GET /api/dialogue-prompt`
@@ -91,6 +97,26 @@ Safe fields:
 - `default_prompt`
 - `current_lines`
 - `current_chars`
+
+### `GET /api/events?after_seq=<n>`
+
+Long-poll event batch for browser/mobile/desktop clients.
+
+Safe response fields:
+
+- `after_seq`
+- `latest_event_seq`
+- `state_version`
+- `timed_out`
+- `reset_required`
+- `events`
+
+Notes:
+
+- start from `GET /api/state`, then use `latest_event_seq` as the next cursor
+- each event currently exposes `seq`, `kind`, `text`, `day`, and `tick`
+- `reset_required=true` means the client cursor fell behind the retained event window and should re-sync from `GET /api/state`
+- this is the current authoritative event transport; websocket is intentionally not part of the live contract yet
 
 ## Controllable API
 
@@ -110,7 +136,9 @@ Frontend responsibility:
 
 - send the server-authored command string
 - render returned `entries`
+- track returned `command_id`, `state_version`, and `latest_event_seq`
 - refresh local UI from returned `state` or the next `GET /api/state`
+- continue long-polling `/api/events` from the returned `latest_event_seq`
 - optionally inspect `debug.dialogue_trace` for dialogue-command routing/debugging
 
 The client must not synthesize new command grammar from UI assumptions.
@@ -129,6 +157,7 @@ Current exchange and debt command note:
 - dialogue commands may return optional `debug.dialogue_trace` metadata with fields such as `path`, `interaction_mode`, `trade_parser_source`, `trade_intent`, `trade_fact_kind`, `response_guard`, `validation_reason`, and `reason`.
 - `trade_parser_source` currently distinguishes the built-in English-canonical parser from the additional `openai_compat` model-assisted trade parser when that recovery path is available.
 - when present, the same `dialogue_trace` object is also written into the `/api/command` event-log payload.
+- successful command responses now also expose `command_id`, `state_version`, and `latest_event_seq`.
 
 ### `POST /api/dialogue-prompt`
 
@@ -138,6 +167,8 @@ Supported write modes:
 
 - save with `prompt`
 - reset with `reset_default`
+
+Current write responses may also expose `state_version` and `latest_event_seq` so clients can continue long-polling from the updated simulator-owned cursor.
 
 This endpoint is for runtime prompt control only.
 It is not a general configuration API.

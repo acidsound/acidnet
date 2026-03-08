@@ -20,6 +20,7 @@ Anyone implementing a new client should be able to read this file and build a co
 The current implementation lives in:
 
 - `src/acidnet/frontend/web_app.py`
+- `src/acidnet/simulator/service.py`
 - `docs/context/frontend-api-handoff.md`
 - `src/acidnet/frontend/client/index.html`
 - `tests/test_web_frontend.py`
@@ -31,7 +32,7 @@ The browser should treat `src/acidnet/frontend/web_app.py` as the canonical HTTP
 - protocol: HTTP
 - content type for API responses: `application/json; charset=utf-8`
 - content type for write operations: `application/json`
-- frontend refresh model: polling for now
+- frontend refresh model: initial snapshot plus long-poll event batches for now
 
 ## Endpoints
 
@@ -47,6 +48,8 @@ Response shape:
 
 ```json
 {
+  "state_version": 3,
+  "latest_event_seq": 18,
   "dialogue": {
     "ready": true,
     "loading": false,
@@ -148,6 +151,11 @@ Response shape:
 }
 ```
 
+Notes:
+
+- `state_version` is the authoritative simulator snapshot version
+- `latest_event_seq` is the current event cursor for `GET /api/events`
+
 ### `POST /api/command`
 
 Submits one raw command string to the simulation.
@@ -166,6 +174,9 @@ Success response shape:
 {
   "ok": true,
   "command": "focus npc.mara",
+  "command_id": "cmd-4",
+  "state_version": 4,
+  "latest_event_seq": 21,
   "entries": [
     {"kind": "system", "text": "Interaction target set to Mara."}
   ],
@@ -185,6 +196,7 @@ Success response shape:
 
 Notes:
 
+- successful command responses now include `command_id`, `state_version`, and `latest_event_seq`
 - `state` is the same player-view snapshot shape returned by `GET /api/state`
 - `entries` is the appendable event list for the submitted command, not a full replacement for `recent_events`
 - `debug` is optional and currently used for dialogue-command routing trace data
@@ -219,6 +231,39 @@ Response shape:
 }
 ```
 
+### `GET /api/events?after_seq=<n>`
+
+Returns the next player-visible event batch after the supplied cursor.
+
+Response shape:
+
+```json
+{
+  "ok": true,
+  "after_seq": 18,
+  "latest_event_seq": 21,
+  "state_version": 4,
+  "timed_out": false,
+  "reset_required": false,
+  "events": [
+    {
+      "seq": 19,
+      "kind": "input",
+      "text": "> focus npc.mara",
+      "day": 1,
+      "tick": 0
+    }
+  ]
+}
+```
+
+Notes:
+
+- clients should start from `GET /api/state`, then continue from the returned `latest_event_seq`
+- `timed_out=true` means no new events arrived before the long-poll timeout
+- `reset_required=true` means the client cursor fell behind the retained event window and should re-sync from `GET /api/state`
+- websocket transport is intentionally deferred; the event contract is the current transport boundary
+
 ### `POST /api/dialogue-prompt`
 
 Updates or resets the active global dialogue system prompt.
@@ -245,6 +290,8 @@ Save success response:
 {
   "ok": true,
   "message": "Dialogue system prompt updated.",
+  "state_version": 5,
+  "latest_event_seq": 24,
   "prompt": {
     "current_prompt": "...",
     "default_prompt": "...",
@@ -253,6 +300,10 @@ Save success response:
   }
 }
 ```
+
+Notes:
+
+- prompt-write responses may also include `state_version` and `latest_event_seq` so clients can continue from the updated simulator-owned cursor
 
 Failure response:
 
@@ -534,6 +585,7 @@ Per-entry shape:
 
 ```json
 {
+  "seq": 19,
   "kind": "npc",
   "text": "Mara: Prices move faster than patience here.",
   "day": 1,
@@ -548,6 +600,11 @@ Kinds currently include:
 - `world`
 - `npc`
 - `ui`
+- `debug`
+
+Notes:
+
+- `seq` is the event cursor used by `GET /api/events`
 
 ### `help`
 

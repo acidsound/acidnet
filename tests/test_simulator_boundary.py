@@ -11,9 +11,10 @@ import acidnet.storage.event_log_file as storage_event_log_file
 import acidnet.storage.sqlite_store as storage_sqlite_store
 import acidnet.world.demo as world_demo
 from acidnet.models import PlayerState as ShimPlayerState
-from acidnet.simulator import DemoSetup, EventLogFile, SQLiteWorldStore, Simulation, build_demo_setup
+from acidnet.simulator import DemoSetup, EventLogFile, SQLiteWorldStore, Simulation, SimulatorService, build_demo_setup
 from acidnet.simulator.models import PlayerState
 from acidnet.simulator.runtime import CONSUMPTION_VALUE, FOOD_ITEMS, Simulation as RuntimeSimulation, TradeOption, TurnEvent, TurnResult
+from acidnet.simulator.service import SimulatorService as BoundarySimulatorService
 from acidnet.simulator.storage import (
     EventLogFile as BoundaryEventLogFile,
     SQLiteWorldStore as BoundarySQLiteWorldStore,
@@ -58,6 +59,7 @@ ALLOWED_LEGACY_IMPORT_FILES = {
 ALLOWED_DEEP_SIMULATOR_IMPORT_FILES = {
     Path("src/acidnet/simulator/models.py"),
     Path("src/acidnet/simulator/runtime.py"),
+    Path("src/acidnet/simulator/service.py"),
     Path("src/acidnet/simulator/storage.py"),
     Path("src/acidnet/simulator/world.py"),
 }
@@ -130,6 +132,7 @@ def test_public_simulator_boundary_matches_compatibility_shims() -> None:
     assert storage_sqlite_store.SQLiteWorldStore is BoundarySQLiteWorldStore
     assert storage_sqlite_store.SYSTEM_PROMPT_SETTING_KEY == SYSTEM_PROMPT_SETTING_KEY
     assert storage_sqlite_store.SYSTEM_PROMPT_PRESET_ID == SYSTEM_PROMPT_PRESET_ID
+    assert SimulatorService is BoundarySimulatorService
 
 
 def test_repo_avoids_legacy_split_imports_outside_shims() -> None:

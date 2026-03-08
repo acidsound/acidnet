@@ -105,6 +105,8 @@ def test_scene_payload_exposes_player_view_contract() -> None:
     finally:
         runtime.close()
 
+    assert state["state_version"] >= 1
+    assert state["latest_event_seq"] >= 1
     assert state["world"]["location_id"] == "square"
     assert state["player"]["location_id"] == "square"
     assert "field_stress" in state["world"]
@@ -132,6 +134,7 @@ def test_scene_payload_exposes_player_view_contract() -> None:
     assert any(action["command"] == "travel-region Hollow Market" for action in state["actions"]["travel"])
     assert "people" in state["scene"]
     assert all("ask_options" in person and "give_options" in person for person in state["scene"]["people"])
+    assert all("seq" in event for event in state["recent_events"])
     assert isinstance(state["help"], list)
 
 
@@ -153,6 +156,9 @@ def test_run_command_updates_target_and_recent_events() -> None:
         runtime.close()
 
     assert result["ok"] is True
+    assert result["command_id"].startswith("cmd-")
+    assert result["state_version"] == result["state"]["state_version"]
+    assert result["latest_event_seq"] == result["state"]["latest_event_seq"]
     assert result["state"]["player"]["focused_npc_id"] == "npc.mara"
     assert result["state"]["target"]["name"] == "Mara"
     assert any(event["kind"] == "input" and "focus mara" in event["text"] for event in result["state"]["recent_events"])
@@ -331,6 +337,44 @@ def test_api_command_forwards_system_prompt_and_player_prompt_for_ask_rumor() ->
     assert adapter.contexts[-1].system_prompt == "Stay grounded. Reply as exactly one NPC."
     assert adapter.contexts[-1].interaction_mode == "rumor_request"
     assert adapter.contexts[-1].player_prompt == "Have you heard any useful rumors?"
+
+
+def test_api_events_returns_new_entries_after_cursor() -> None:
+    runtime = build_runtime("web_frontend_events_after_cursor_test")
+    server, thread, base_url = start_test_server(runtime)
+    try:
+        state = get_json(base_url, "/api/state")
+        initial_seq = state["latest_event_seq"]
+        post_json(base_url, "/api/command", {"command": "look"})
+        events = get_json(base_url, f"/api/events?after_seq={initial_seq}")
+    finally:
+        stop_test_server(server, thread, runtime)
+
+    assert events["ok"] is True
+    assert events["after_seq"] == initial_seq
+    assert events["latest_event_seq"] > initial_seq
+    assert events["timed_out"] is False
+    assert events["reset_required"] is False
+    assert events["events"]
+    assert all(event["seq"] > initial_seq for event in events["events"])
+
+
+def test_api_events_can_timeout_without_new_entries() -> None:
+    runtime = build_runtime("web_frontend_events_timeout_test")
+    server, thread, base_url = start_test_server(runtime)
+    try:
+        state = get_json(base_url, "/api/state")
+        initial_seq = state["latest_event_seq"]
+        events = get_json(base_url, f"/api/events?after_seq={initial_seq}&timeout_s=0")
+    finally:
+        stop_test_server(server, thread, runtime)
+
+    assert events["ok"] is True
+    assert events["after_seq"] == initial_seq
+    assert events["latest_event_seq"] == initial_seq
+    assert events["timed_out"] is True
+    assert events["reset_required"] is False
+    assert events["events"] == []
 
 
 def test_api_command_accepts_share_shortcut_for_social_transfer() -> None:

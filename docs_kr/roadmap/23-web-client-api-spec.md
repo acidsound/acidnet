@@ -20,6 +20,7 @@
 현재 구현은 다음 파일에 있다.
 
 - `src/acidnet/frontend/web_app.py`
+- `src/acidnet/simulator/service.py`
 - `docs/context/frontend-api-handoff.md`
 - `src/acidnet/frontend/client/index.html`
 - `tests/test_web_frontend.py`
@@ -31,7 +32,7 @@
 - protocol: HTTP
 - API 응답 content type: `application/json; charset=utf-8`
 - 쓰기 요청 content type: `application/json`
-- 프런트 refresh 모델: 현재는 polling
+- 프런트 refresh 모델: 초기 snapshot 뒤 long-poll event batch
 
 ## 엔드포인트
 
@@ -47,6 +48,8 @@
 
 ```json
 {
+  "state_version": 3,
+  "latest_event_seq": 18,
   "dialogue": {
     "ready": true,
     "loading": false,
@@ -148,6 +151,9 @@
 }
 ```
 
+- `state_version` 는 authoritative simulator snapshot version 이다
+- `latest_event_seq` 는 `GET /api/events` 에 넘길 현재 event cursor 이다
+
 ### `POST /api/command`
 
 시뮬레이션에 raw command 문자열 하나를 보낸다.
@@ -166,6 +172,9 @@
 {
   "ok": true,
   "command": "focus npc.mara",
+  "command_id": "cmd-4",
+  "state_version": 4,
+  "latest_event_seq": 21,
   "entries": [
     {"kind": "system", "text": "Interaction target set to Mara."}
   ],
@@ -187,6 +196,7 @@
 
 - `state` 는 `GET /api/state` 와 같은 player-view snapshot 구조를 그대로 반환한다
 - `entries` 는 이번 command 결과에 바로 붙여 그릴 수 있는 이벤트 목록이지 `recent_events` 전체를 대체하지 않는다
+- 성공 command 응답은 `command_id`, `state_version`, `latest_event_seq` 도 함께 반환한다
 
 실패 응답 구조:
 
@@ -240,6 +250,8 @@
 {
   "ok": true,
   "message": "Dialogue system prompt updated.",
+  "state_version": 5,
+  "latest_event_seq": 24,
   "prompt": {
     "current_prompt": "...",
     "default_prompt": "...",
@@ -249,6 +261,8 @@
 }
 ```
 
+- prompt write 응답도 업데이트된 simulator cursor 를 이어갈 수 있도록 `state_version`, `latest_event_seq` 를 함께 줄 수 있다
+
 실패 응답:
 
 ```json
@@ -257,6 +271,37 @@
   "error": "The dialogue system prompt cannot be empty."
 }
 ```
+
+### `GET /api/events?after_seq=<n>`
+
+지정한 cursor 이후의 다음 player-visible event batch 를 반환한다.
+
+응답 구조:
+
+```json
+{
+  "ok": true,
+  "after_seq": 18,
+  "latest_event_seq": 21,
+  "state_version": 4,
+  "timed_out": false,
+  "reset_required": false,
+  "events": [
+    {
+      "seq": 19,
+      "kind": "input",
+      "text": "> focus npc.mara",
+      "day": 1,
+      "tick": 0
+    }
+  ]
+}
+```
+
+- client 는 먼저 `GET /api/state` 를 읽고, 거기서 받은 `latest_event_seq` 부터 이어서 polling 해야 한다
+- `timed_out=true` 는 long-poll timeout 안에 새 event 가 없었다는 뜻이다
+- `reset_required=true` 는 client cursor 가 retained event window 밖으로 밀렸으니 `GET /api/state` 로 재동기화해야 한다는 뜻이다
+- websocket transport 는 아직 deferred 상태이며, 현재 transport boundary 는 이 event contract 다
 
 ## 필드 의미
 
@@ -528,6 +573,7 @@
 
 ```json
 {
+  "seq": 19,
   "kind": "npc",
   "text": "Mara: Prices move faster than patience here.",
   "day": 1,
@@ -542,6 +588,9 @@
 - `world`
 - `npc`
 - `ui`
+- `debug`
+
+- `seq` 는 `GET /api/events` 에 넘길 event cursor 다
 
 ### `help`
 

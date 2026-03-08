@@ -3,6 +3,7 @@
 __all__ = [
     "DemoSetup",
     "EventLogFile",
+    "SimulatorService",
     "Simulation",
     "SQLiteWorldStore",
     "build_demo_setup",
@@ -18,6 +19,10 @@ def __getattr__(name: str):
         from acidnet.simulator.storage import EventLogFile, SQLiteWorldStore
 
         return {"EventLogFile": EventLogFile, "SQLiteWorldStore": SQLiteWorldStore}[name]
+    if name == "SimulatorService":
+        from acidnet.simulator.service import SimulatorService
+
+        return SimulatorService
     if name in {"DemoSetup", "build_demo_setup"}:
         from acidnet.simulator.world import DemoSetup, build_demo_setup
 

@@ -96,6 +96,9 @@ The goal is to show where the live contracts actually sit in code and tests.
   - stable headless import boundary for repo-split prep
   - active rehome surface for `engine`, `models`, `world`, and `storage`
   - now used by headless CLI, eval, web runtime, and split-gate/runtime-adjacent tests
+- `src/acidnet/simulator/service.py`
+  - browser-facing simulator service boundary
+  - owns authoritative state snapshots, event cursoring, long-poll event batches, and persistence/event-log plumbing for the current web gateway
 - `src/acidnet/simulator/runtime.py`, `src/acidnet/simulator/models.py`, `src/acidnet/simulator/world.py`, `src/acidnet/simulator/storage.py`
   - public split-safe sub-surfaces under the simulator package
   - compatibility shims should re-export from these modules rather than from deeper simulator internals
@@ -117,9 +120,11 @@ The goal is to show where the live contracts actually sit in code and tests.
 - `src/acidnet/world/demo.py`
   - compatibility shim over `src/acidnet/simulator/demo.py`
 - `src/acidnet/frontend/web_app.py`
-  - canonical HTTP surface and derived player-view payload
+  - canonical HTTP gateway and static asset surface
+  - now proxies an in-process `SimulatorService` instead of directly owning simulator state/event plumbing
 - `src/acidnet/frontend/client/index.html`
   - current pure static browser client asset bundle
+  - now uses initial snapshot plus long-poll `/api/events` batches instead of fixed-interval full-state polling
 - `src/acidnet/llm/prompt_builder.py`
   - shared dialogue prompt and interaction-mode shaping
   - carries live vendor `buy_options` / `debt_options` into the prompt contract so exact price questions can stay aligned with simulator trade facts
