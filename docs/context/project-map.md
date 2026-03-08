@@ -41,6 +41,7 @@ The goal is to show where the live contracts actually sit in code and tests.
 
 - `run_acidnet.py`: terminal and raw-command runtime
 - `run_acidnet_web.py`: shareable web runtime
+- `run_llama_server.ps1`: promoted local GGUF runtime launcher; it now forces `--reasoning-format none` and `--reasoning-budget 0` so Qwen3.5 runtime replies stay in `message.content` instead of falling into hidden-reasoning mode
 - `run_publish_hf_artifacts.py`: `.env`-driven Hugging Face publish tool for LoRA/GGUF model artifacts and runtime-dialogue datasets
   - local and uploaded `publish_manifest.json` files are intended to stay portable: they record repo-relative source paths plus Hub `runs/<run-name>/...` targets instead of machine-specific absolute paths
   - the publish step also refreshes the repo-root `README.md` cards in both HF repos so the restore layout is visible from the Hub UI
@@ -106,6 +107,7 @@ The goal is to show where the live contracts actually sit in code and tests.
 - `src/acidnet/llm/rule_based.py`
 - `src/acidnet/llm/openai_compat.py`
   - promoted simulator runtime path against `llama-server` serving the `Q4_K_M` GGUF model line
+  - if `llama-server` is left in Qwen thinking mode, replies can arrive as empty `message.content` plus `reasoning_content`, which currently falls through to heuristic fallback
 - `src/acidnet/llm/local_peft.py`
   - in-process dev/eval parity backend; not the promoted deployment runtime
 - `src/acidnet/training/dataset_builder.py`

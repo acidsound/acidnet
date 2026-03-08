@@ -65,6 +65,8 @@ If they compete for the next thin slice, this file decides.
   - `data/eval/model_gate_runtime_dialogue_unsloth_wsl_hungerfix_smoke_report.json`
 - the latest in-process `local_peft` hungerfix smoke rerun now confirms `prompt_avg=1.000`, `prompt_fail_rows=0`, `prompt_fallback_rows=0`, `prompt_latency_ms=2304.7`, and `circulation=0.806`
 - the promoted simulator runtime path is now `openai_compat` against `llama-server` with the `Q4_K_M` GGUF base model and optional GGUF LoRA adapter; `local_peft` stays available only for in-process dev/eval parity
+- promoted `llama-server` launchers now force `--reasoning-format none` and `--reasoning-budget 0`; `thinking` on the Qwen3.5 small-model runtime path is treated as a deployment error because it can empty `message.content` and silently trigger heuristic fallback
+- promoted `openai_compat` defaults now follow the `Qwen/Qwen3.5-4B` Hugging Face non-thinking general-task guidance: `temperature=0.7`, `top_p=0.8`, `top_k=20`, `min_p=0.0`, `presence_penalty=1.5`, and `repeat_penalty=1.0` on the llama.cpp wire
 - HTTP `/api/command` was rechecked in-process with the hungerfix adapter: Hobb answers origin and rumor requests correctly and Doran now redirects hunger cleanly instead of inventing edible stock
 - bootstrap teacher trade guidance now handles food-buy requests to no-food vendors by refusing plainly and redirecting instead of naming unrelated stock
 - shared dialogue output cleanup and sentence-limit enforcement now run through one post-processing path across `heuristic`, `openai_compat`, and `local_peft`

@@ -32,6 +32,25 @@ Maintained reference source:
 
 - `https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf`
 
+## Qwen Thinking Policy
+
+Small-model runtime launches must keep Qwen thinking disabled.
+For the promoted `llama-server` path this means forcing:
+
+- `--reasoning-format none`
+- `--reasoning-budget 0`
+
+If thinking is left enabled, Qwen3.5 can emit an empty `message.content` plus `reasoning_content`, which the current runtime treats as a failed model reply and silently falls back to the heuristic adapter.
+
+The promoted runtime also follows the `Qwen/Qwen3.5-4B` Hugging Face non-thinking general-task sampling guidance:
+
+- `temperature=0.7`
+- `top_p=0.8`
+- `top_k=20`
+- `min_p=0.0`
+- `presence_penalty=1.5`
+- `repeat_penalty=1.0` on the llama.cpp wire (`repetition_penalty` in the Qwen model card)
+
 ## Adapter GGUF Export
 
 fine-tuned LoRA adapter를 GGUF로 export:
@@ -120,5 +139,6 @@ python run_acidnet_web.py `
 
 - `run_export_gguf.py --mode adapter`는 llama.cpp Python converter script만 있으면 된다
 - merged `Q4_K_M` export는 `llama-quantize`가 필요하다
+- `run_llama_server.ps1`와 `run_local_qwen_dev_loop.ps1`는 이제 promoted Qwen3.5 runtime 경로에서 `--reasoning-format none`과 `--reasoning-budget 0`를 강제한다
 - 현재 smoke GGUF는 export path 증명용이지, 승격 가능한 모델은 아니다
 - 실제 승격은 더 강한 4B checkpoint가 model gate를 통과한 뒤에만 가능하다

@@ -136,6 +136,11 @@ Maintained reference source:
 
 - `https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf`
 
+Promoted runtime note:
+
+- keep Qwen thinking disabled on the `llama-server` path with `--reasoning-format none` and `--reasoning-budget 0`
+- for this small-model runtime, thinking mode is treated as a deployment error because it can move output into `reasoning_content` and trigger heuristic fallback
+
 ## End-To-End Refresh
 
 The maintained refresh order is:

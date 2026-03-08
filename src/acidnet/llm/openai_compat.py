@@ -15,7 +15,12 @@ class OpenAICompatDialogueAdapter(DialogueModelAdapter):
     model: str
     endpoint: str
     api_key_env: str = "OPENAI_API_KEY"
-    temperature: float = 0.35
+    temperature: float = 0.7
+    top_p: float = 0.8
+    top_k: int = 20
+    min_p: float = 0.0
+    presence_penalty: float = 1.5
+    repetition_penalty: float = 1.0
     max_tokens: int = 96
     timeout_seconds: int = 30
 
@@ -31,6 +36,12 @@ class OpenAICompatDialogueAdapter(DialogueModelAdapter):
                 {"role": "user", "content": build_user_prompt(context)},
             ],
             "temperature": self.temperature,
+            "top_p": self.top_p,
+            "top_k": self.top_k,
+            "min_p": self.min_p,
+            "presence_penalty": self.presence_penalty,
+            # llama.cpp exposes this as `repeat_penalty` on the OpenAI-compatible wire.
+            "repeat_penalty": self.repetition_penalty,
             "max_tokens": self.max_tokens,
         }
         body = json.dumps(payload).encode("utf-8")

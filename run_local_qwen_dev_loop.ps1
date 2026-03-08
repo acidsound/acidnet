@@ -35,6 +35,8 @@ $ServerArgs = @(
     "--port", $Port,
     "-c", $ContextSize,
     "-ngl", $GpuLayers,
+    "--reasoning-format", "none",
+    "--reasoning-budget", "0",
     "--alias", $ModelAlias
 )
 if ($LoraPath) {

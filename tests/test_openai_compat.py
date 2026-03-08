@@ -65,3 +65,28 @@ def test_openai_compat_generate_sanitizes_hidden_reasoning_and_sentence_limit(mo
 
     assert result.text == "I keep close to Market Square."
     assert result.adapter_name == "openai_compat"
+
+
+def test_openai_compat_generate_sends_qwen_non_thinking_sampling_defaults(monkeypatch) -> None:
+    captured_payload: dict[str, object] = {}
+
+    def fake_urlopen(http_request, timeout: int):  # noqa: ANN001
+        nonlocal captured_payload
+        captured_payload = json.loads(http_request.data.decode("utf-8"))
+        return _FakeResponse({"choices": [{"message": {"content": "I keep close to Market Square."}}]})
+
+    monkeypatch.setattr("acidnet.llm.openai_compat.request.urlopen", fake_urlopen)
+
+    adapter = OpenAICompatDialogueAdapter(
+        model="demo-model",
+        endpoint="http://127.0.0.1:8000/v1/chat/completions",
+    )
+
+    adapter.generate(_build_dialogue_context("Stay grounded. Reply with one short in-character sentence only."))
+
+    assert captured_payload["temperature"] == 0.7
+    assert captured_payload["top_p"] == 0.8
+    assert captured_payload["top_k"] == 20
+    assert captured_payload["min_p"] == 0.0
+    assert captured_payload["presence_penalty"] == 1.5
+    assert captured_payload["repeat_penalty"] == 1.0

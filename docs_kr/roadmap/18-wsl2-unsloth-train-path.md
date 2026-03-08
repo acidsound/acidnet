@@ -137,6 +137,11 @@ Maintained reference source:
 
 - `https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf`
 
+Promoted runtime note:
+
+- `llama-server` 경로에서는 `--reasoning-format none`과 `--reasoning-budget 0`로 Qwen thinking을 꺼둔다
+- 이 small-model runtime에서는 thinking mode가 `reasoning_content`로 출력이 빠져 heuristic fallback을 유발할 수 있으므로 deployment error로 취급한다
+
 ## End-To-End 갱신 순서
 
 유지 중인 갱신 순서는 다음과 같다.

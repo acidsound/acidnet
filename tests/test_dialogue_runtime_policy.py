@@ -53,3 +53,12 @@ def test_openai_compat_default_model_alias_matches_promoted_runtime() -> None:
     assert isinstance(adapter, FallbackDialogueAdapter)
     assert isinstance(adapter.primary, OpenAICompatDialogueAdapter)
     assert adapter.primary.model == DEFAULT_OPENAI_COMPAT_MODEL
+
+
+def test_promoted_llama_server_launchers_disable_reasoning() -> None:
+    run_llama_server = (ROOT / "run_llama_server.ps1").read_text(encoding="utf-8")
+    run_local_qwen_dev_loop = (ROOT / "run_local_qwen_dev_loop.ps1").read_text(encoding="utf-8")
+
+    for content in (run_llama_server, run_local_qwen_dev_loop):
+        assert '"--reasoning-format", "none"' in content
+        assert '"--reasoning-budget", "0"' in content
