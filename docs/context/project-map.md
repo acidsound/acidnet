@@ -37,6 +37,7 @@ The goal is to show where the live contracts actually sit in code and tests.
 - `data/test_artifacts/`: temporary fixtures and small benchmark subsets created by tests and smoke paths
 - `models/`: local base GGUF restore point for the promoted runtime; the repo keeps only placeholder guidance such as `models/README.md`, while `models/*.gguf` stays gitignored
 - If a tool or editor hides `data/`, check whether it respects `.gitignore`; the directory is usually present or creatable even though it is not tracked.
+- The maintained runtime-dialogue training defaults now use `data/prompt_packs/bootstrap_teacher_requests.*`, `data/sft/train_bootstrap_teacher_sft_dataset.*`, `data/sft/eval_bootstrap_teacher_sft_dataset.*`, and the refreshed bench subset `data/sft/bench_{train_1024,eval_128}.jsonl`.
 
 ## Main Entrypoints
 

@@ -2,7 +2,15 @@ from pathlib import Path
 from dataclasses import asdict
 from types import SimpleNamespace
 
-from run_qwen4b_baseline_train import _apply_hf_peft_overrides, _apply_unsloth_overrides, _assert_training_dependencies
+from run_qwen4b_baseline_train import (
+    _apply_hf_peft_overrides,
+    _apply_unsloth_overrides,
+    _assert_training_dependencies,
+    build_parser as build_train_parser,
+)
+from run_qwen4b_baseline_prep import build_parser as build_prep_parser
+from run_qwen4b_baseline_pipeline import build_parser as build_pipeline_parser
+from run_teacher_sft_split import build_parser as build_split_parser
 
 from acidnet.training.teacher_prompts import TeacherConfig, dialogue_user_prompt, teacher_system_prompt
 from acidnet.training import (
@@ -123,6 +131,36 @@ def test_finetune_manifest_exports_two_experiments() -> None:
     assert manifest[0].track == "baseline"
     assert manifest[1].track == "challenger"
     assert output_path.exists()
+
+
+def test_finetune_manifest_uses_bootstrap_teacher_runtime_dialogue_artifacts() -> None:
+    dataset = build_finetune_manifest(vram_gb=24)[0].dataset
+
+    assert dataset.prompt_format == "bootstrap_teacher_prompt_pack_v1"
+    assert dataset.train_jsonl_path == "data/prompt_packs/bootstrap_teacher_requests.jsonl"
+    assert dataset.train_parquet_path == "data/prompt_packs/bootstrap_teacher_requests.parquet"
+    assert dataset.merged_sft_jsonl_path == "data/sft/bootstrap_teacher_sft_dataset.jsonl"
+    assert dataset.train_sft_jsonl_path == "data/sft/train_bootstrap_teacher_sft_dataset.jsonl"
+    assert dataset.eval_sft_jsonl_path == "data/sft/eval_bootstrap_teacher_sft_dataset.jsonl"
+
+
+def test_baseline_cli_defaults_point_to_bootstrap_teacher_artifacts() -> None:
+    train_args = build_train_parser().parse_args([])
+    prep_args = build_prep_parser().parse_args([])
+    pipeline_args = build_pipeline_parser().parse_args(["--teacher-output", "data/prompt_packs/bootstrap_teacher_outputs.jsonl"])
+    split_args = build_split_parser().parse_args([])
+
+    assert Path(train_args.train_dataset).as_posix() == "data/sft/train_bootstrap_teacher_sft_dataset.jsonl"
+    assert Path(train_args.eval_dataset).as_posix() == "data/sft/eval_bootstrap_teacher_sft_dataset.jsonl"
+    assert Path(prep_args.train_dataset).as_posix() == "data/sft/train_bootstrap_teacher_sft_dataset.jsonl"
+    assert Path(prep_args.eval_dataset).as_posix() == "data/sft/eval_bootstrap_teacher_sft_dataset.jsonl"
+    assert Path(pipeline_args.prompt_pack).as_posix() == "data/prompt_packs/bootstrap_teacher_requests.jsonl"
+    assert Path(pipeline_args.merged_jsonl_output).as_posix() == "data/sft/bootstrap_teacher_sft_dataset.jsonl"
+    assert Path(pipeline_args.train_jsonl_output).as_posix() == "data/sft/train_bootstrap_teacher_sft_dataset.jsonl"
+    assert Path(pipeline_args.eval_jsonl_output).as_posix() == "data/sft/eval_bootstrap_teacher_sft_dataset.jsonl"
+    assert Path(split_args.input).as_posix() == "data/sft/bootstrap_teacher_sft_dataset.jsonl"
+    assert Path(split_args.train_output).as_posix() == "data/sft/train_bootstrap_teacher_sft_dataset.jsonl"
+    assert Path(split_args.eval_output).as_posix() == "data/sft/eval_bootstrap_teacher_sft_dataset.jsonl"
 
 
 def test_teacher_outputs_can_be_merged_into_sft_examples() -> None:

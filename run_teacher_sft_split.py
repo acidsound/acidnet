@@ -17,27 +17,27 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Split merged teacher SFT data into deterministic train/eval artifacts.")
     parser.add_argument(
         "--input",
-        default=str(Path("data") / "sft" / "teacher_sft_dataset.jsonl"),
+        default=str(Path("data") / "sft" / "bootstrap_teacher_sft_dataset.jsonl"),
         help="Merged SFT JSONL input path.",
     )
     parser.add_argument(
         "--train-output",
-        default=str(Path("data") / "sft" / "train_teacher_sft_dataset.jsonl"),
+        default=str(Path("data") / "sft" / "train_bootstrap_teacher_sft_dataset.jsonl"),
         help="Train SFT JSONL output path.",
     )
     parser.add_argument(
         "--eval-output",
-        default=str(Path("data") / "sft" / "eval_teacher_sft_dataset.jsonl"),
+        default=str(Path("data") / "sft" / "eval_bootstrap_teacher_sft_dataset.jsonl"),
         help="Eval SFT JSONL output path.",
     )
     parser.add_argument(
         "--train-parquet-output",
-        default=str(Path("data") / "sft" / "train_teacher_sft_dataset.parquet"),
+        default=str(Path("data") / "sft" / "train_bootstrap_teacher_sft_dataset.parquet"),
         help="Train SFT Parquet output path.",
     )
     parser.add_argument(
         "--eval-parquet-output",
-        default=str(Path("data") / "sft" / "eval_teacher_sft_dataset.parquet"),
+        default=str(Path("data") / "sft" / "eval_bootstrap_teacher_sft_dataset.parquet"),
         help="Eval SFT Parquet output path.",
     )
     parser.add_argument("--train-rows", type=int, default=50_000, help="Target number of train rows.")

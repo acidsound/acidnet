@@ -20,12 +20,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Prepare and optionally launch the Qwen3.5-4B baseline Unsloth run.")
     parser.add_argument(
         "--train-dataset",
-        default=str(Path("data") / "sft" / "train_teacher_sft_dataset.jsonl"),
+        default=str(Path("data") / "sft" / "train_bootstrap_teacher_sft_dataset.jsonl"),
         help="Train SFT JSONL path.",
     )
     parser.add_argument(
         "--eval-dataset",
-        default=str(Path("data") / "sft" / "eval_teacher_sft_dataset.jsonl"),
+        default=str(Path("data") / "sft" / "eval_bootstrap_teacher_sft_dataset.jsonl"),
         help="Eval SFT JSONL path.",
     )
     parser.add_argument(

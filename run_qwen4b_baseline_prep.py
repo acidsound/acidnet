@@ -23,12 +23,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Prepare the first Qwen3.5-4B baseline fine-tune run artifacts.")
     parser.add_argument(
         "--train-dataset",
-        default=str(Path("data") / "sft" / "train_teacher_sft_dataset.jsonl"),
+        default=str(Path("data") / "sft" / "train_bootstrap_teacher_sft_dataset.jsonl"),
         help="Merged SFT train dataset JSONL.",
     )
     parser.add_argument(
         "--eval-dataset",
-        default=str(Path("data") / "sft" / "eval_teacher_sft_dataset.jsonl"),
+        default=str(Path("data") / "sft" / "eval_bootstrap_teacher_sft_dataset.jsonl"),
         help="Merged SFT eval dataset JSONL.",
     )
     parser.add_argument(

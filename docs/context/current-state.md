@@ -76,6 +76,7 @@ If they compete for the next thin slice, this file decides.
 - bootstrap teacher trade guidance now handles food-buy requests to no-food vendors by refusing plainly and redirecting instead of naming unrelated stock
 - bootstrap dialogue data now also rotates fact-grounded vendor hard cases for exact quotes, sellable stock, accepted offers, counteroffers, negative offers, debt requests, and free-food requests, and those samples can now carry server-authored `trade_fact` into the runtime dialogue prompt
 - runtime-aligned SFT export now also emits parser-side trade-intent examples for quote, stock, and offer cases, so the `openai_compat` model-assisted trade parser can be tuned against the same canonical trade facts as the phrasing path
+- the canonical bootstrap prompt pack plus runtime-dialogue train/eval and maintained bench splits were refreshed after the trade-parser hard-case expansion, so the next WSL smoke/full refresh consumes the current `bootstrap_teacher` artifacts by default
 - shared dialogue output cleanup and sentence-limit enforcement now run through one post-processing path across `heuristic`, `openai_compat`, and `local_peft`
 - shared dialogue cleanup now also unwraps common code-fenced or JSON-wrapped replies before sentence limiting, reducing backend-specific formatting drift from runtime and eval servers
 - prompt-only evaluation now reaches wrapped `openai_compat` and `local_peft` adapters with `temperature=0.0`, and model-gate fallback accounting now treats `local_peft` the same way as `openai_compat`
@@ -108,10 +109,16 @@ If they compete for the next thin slice, this file decides.
 
 ## Immediate Queue
 
+### Promotion Quality: Dialogue Refresh
+
+1. Keep the regenerated `bootstrap_teacher` prompt-pack, train/eval split, and maintained bench split as the canonical runtime-dialogue dataset inputs for the next smoke/full refresh.
+2. Re-run the WSL Unsloth smoke lane and then the full lane against those refreshed artifacts before the next promotion decision, so trade-parser hard cases are exercised in a fresh adapter instead of only in teacher data and runtime regression.
+3. Keep model-gate, prompt-only, and promoted `llama-server` checks aligned with the refreshed adapter and GGUF export path before calling the new dialogue refresh promoted.
+
 ### Track A: Structural Boundary
 
 1. Keep repo split prep on the structural verification gate: public `acidnet.simulator` sub-surfaces only, no deep-internal imports in live code, no simulator back-imports into frontend/eval/training, and stable entrypoint targets.
-2. Run the deeper frontend audit only after that split-verification gate stays green, so browser assumptions are checked against the stabilized structure instead of a moving boundary.
+2. Run the deeper frontend audit only after the promotion-quality refresh closes and the split-verification gate stays green, so browser assumptions are checked against a stable runtime boundary.
 3. Queue the realtime-transition refactor after the split verification and frontend audit: separate command resolution from world time progression so the simulator owns the clock and frontends remain request/response clients only.
 
 ### Track B: Live Simulation and World Loop

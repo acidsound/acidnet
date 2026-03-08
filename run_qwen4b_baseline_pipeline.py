@@ -21,7 +21,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Prepare merged SFT, split datasets, and baseline run artifacts in one pass.")
     parser.add_argument(
         "--prompt-pack",
-        default=str(Path("data") / "prompt_packs" / "teacher_requests.jsonl"),
+        default=str(Path("data") / "prompt_packs" / "bootstrap_teacher_requests.jsonl"),
         help="Teacher prompt pack JSONL path.",
     )
     parser.add_argument(
@@ -31,32 +31,32 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--merged-jsonl-output",
-        default=str(Path("data") / "sft" / "teacher_sft_dataset.jsonl"),
+        default=str(Path("data") / "sft" / "bootstrap_teacher_sft_dataset.jsonl"),
         help="Merged SFT JSONL output path.",
     )
     parser.add_argument(
         "--merged-parquet-output",
-        default=str(Path("data") / "sft" / "teacher_sft_dataset.parquet"),
+        default=str(Path("data") / "sft" / "bootstrap_teacher_sft_dataset.parquet"),
         help="Merged SFT Parquet output path.",
     )
     parser.add_argument(
         "--train-jsonl-output",
-        default=str(Path("data") / "sft" / "train_teacher_sft_dataset.jsonl"),
+        default=str(Path("data") / "sft" / "train_bootstrap_teacher_sft_dataset.jsonl"),
         help="Train SFT JSONL output path.",
     )
     parser.add_argument(
         "--train-parquet-output",
-        default=str(Path("data") / "sft" / "train_teacher_sft_dataset.parquet"),
+        default=str(Path("data") / "sft" / "train_bootstrap_teacher_sft_dataset.parquet"),
         help="Train SFT Parquet output path.",
     )
     parser.add_argument(
         "--eval-jsonl-output",
-        default=str(Path("data") / "sft" / "eval_teacher_sft_dataset.jsonl"),
+        default=str(Path("data") / "sft" / "eval_bootstrap_teacher_sft_dataset.jsonl"),
         help="Eval SFT JSONL output path.",
     )
     parser.add_argument(
         "--eval-parquet-output",
-        default=str(Path("data") / "sft" / "eval_teacher_sft_dataset.parquet"),
+        default=str(Path("data") / "sft" / "eval_bootstrap_teacher_sft_dataset.parquet"),
         help="Eval SFT Parquet output path.",
     )
     parser.add_argument(

@@ -68,8 +68,8 @@ python run_finetune_manifest_export.py --vram 24 --train-rows 50000 --eval-rows 
 data/training/finetune_manifest.json
 data/prompt_packs/openai_batch_requests.jsonl
 data/prompt_packs/teacher_outputs.jsonl
-data/sft/train_teacher_sft_dataset.jsonl
-data/sft/eval_teacher_sft_dataset.jsonl
+data/sft/train_bootstrap_teacher_sft_dataset.jsonl
+data/sft/eval_bootstrap_teacher_sft_dataset.jsonl
 data/training/qwen3_5_4b_baseline_run_spec.json
 data/training/train_qwen3_5_4b_baseline.py
 data/training/qwen3_5_4b_baseline_pipeline.json
@@ -88,7 +88,7 @@ Normalize downloaded OpenAI batch output into teacher-output JSONL:
 ```bash
 python run_openai_teacher_batch_normalize.py ^
   --batch-output data/prompt_packs/openai_batch_output.jsonl ^
-  --output data/prompt_packs/teacher_outputs.jsonl
+  --output data/prompt_packs/bootstrap_teacher_outputs.jsonl
 ```
 
 Split the merged SFT dataset into deterministic train/eval artifacts:
@@ -113,7 +113,7 @@ Prepare merged SFT, split artifacts, and the 4B run in one pass:
 
 ```bash
 python run_qwen4b_baseline_pipeline.py ^
-  --teacher-output data/prompt_packs/teacher_outputs.jsonl ^
+  --teacher-output data/prompt_packs/bootstrap_teacher_outputs.jsonl ^
   --format both
 ```
 
