@@ -45,9 +45,12 @@ powershell -ExecutionPolicy Bypass -File run_wsl_qwen_training.ps1 -Mode setup
 - `peft`
 - `accelerate`
 - `bitsandbytes`
+- `flash-attn`
 - `flash-linear-attention`
 - `causal-conv1d`
 - 프로젝트 training extras
+
+이제 setup 경로는 extension build가 `nvcc`를 보도록 `CUDA_HOME=/usr/local/cuda`를 export하고 `/usr/local/cuda/bin`을 `PATH` 앞에 추가한다.
 
 이전 known-good 기준과 비교하거나 버전별 이슈를 분리해야 할 때만 `-PythonVersion 3.11`을 사용한다.
 
@@ -214,7 +217,8 @@ python run_publish_hf_artifacts.py `
 
 기본 WSL smoke 경로는 Python 3.12 기준으로 다시 검증됐다.
 
-- 기본 `.venv-wsl` setup probe 결과는 `Python 3.12.10`, `unsloth 2026.3.3`, `fla 0.4.1`, `causal_conv1d 1.6.0`
+- 기본 `.venv-wsl` setup probe 결과는 `Python 3.12.10`, `unsloth 2026.3.3`, `flash_attn 2.8.3`, `fla 0.4.1`, `causal_conv1d 1.6.0`
+- 유지 중인 RTX 4090 WSL probe는 이제 Unsloth startup banner에 `FA2 = True`가 보이는 것을 기준으로 삼는다
 - 표준 smoke artifact:
   - `data/logs/qwen3_5_4b_runtime_dialogue_unsloth_wsl_smoke.log`
   - `data/training/qwen3_5_4b_runtime_dialogue_unsloth_wsl_smoke_adapter/`

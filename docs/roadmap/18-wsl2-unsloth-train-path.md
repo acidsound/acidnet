@@ -44,9 +44,12 @@ This now creates `.venv-wsl` inside the project root with Python 3.12 by default
 - `peft`
 - `accelerate`
 - `bitsandbytes`
+- `flash-attn`
 - `flash-linear-attention`
 - `causal-conv1d`
 - project training extras
+
+The setup path now also exports `CUDA_HOME=/usr/local/cuda` and prepends `/usr/local/cuda/bin` so extension builds can see `nvcc`.
 
 Use `-PythonVersion 3.11` only when you explicitly need to compare against the older known-good baseline or isolate a version-specific issue.
 
@@ -213,7 +216,8 @@ python run_publish_hf_artifacts.py `
 
 The default WSL smoke path is now revalidated on Python 3.12.
 
-- default setup probe in `.venv-wsl` reports `Python 3.12.10`, `unsloth 2026.3.3`, `fla 0.4.1`, and `causal_conv1d 1.6.0`
+- default setup probe in `.venv-wsl` reports `Python 3.12.10`, `unsloth 2026.3.3`, `flash_attn 2.8.3`, `fla 0.4.1`, and `causal_conv1d 1.6.0`
+- the maintained RTX 4090 WSL probe now expects the Unsloth startup banner to show `FA2 = True`
 - standard smoke artifacts:
   - `data/logs/qwen3_5_4b_runtime_dialogue_unsloth_wsl_smoke.log`
   - `data/training/qwen3_5_4b_runtime_dialogue_unsloth_wsl_smoke_adapter/`

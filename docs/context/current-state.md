@@ -62,6 +62,7 @@ If they compete for the next thin slice, this file decides.
 - prompt-only evaluation now scores `origin_direct`, `identity_direct`, and `hunger_direct` separately
 - a WSL Unsloth hungerfix smoke run is complete at `data/training/qwen3_5_4b_runtime_dialogue_unsloth_wsl_hungerfix_smoke_adapter`
 - the default WSL Unsloth setup path now targets Python 3.12 in `.venv-wsl`, and the maintained bench smoke split `data/sft/bench_train_1024.jsonl` / `data/sft/bench_eval_128.jsonl` now completes in `169 s` without the earlier launcher-side `trl`-before-`unsloth` warning
+- the maintained WSL setup path now also installs `flash-attn`, exports `CUDA_HOME=/usr/local/cuda`, and rechecks the Unsloth startup banner so the RTX 4090 path reports `FA2 = True`
 - current prompt-refresh reports are:
   - `data/eval/prompt_only_runtime_dialogue_unsloth_wsl_hungerfix_smoke_report.json`
   - `data/eval/model_gate_runtime_dialogue_unsloth_wsl_hungerfix_smoke_report.json`

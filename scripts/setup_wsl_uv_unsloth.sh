@@ -7,6 +7,10 @@ export PYTHONNOUSERSITE=1
 export UV_LINK_MODE=copy
 PYTHON_VERSION="${ACIDNET_WSL_PYTHON_VERSION:-3.12}"
 ENV_DIR="${ACIDNET_WSL_ENV_DIR:-.venv-wsl}"
+export CUDA_HOME="${CUDA_HOME:-/usr/local/cuda}"
+if [[ -d "$CUDA_HOME/bin" ]]; then
+  export PATH="$CUDA_HOME/bin:$PATH"
+fi
 
 cd "$ROOT"
 
@@ -25,6 +29,7 @@ uv pip install --upgrade pip setuptools wheel
 uv pip install --index-url https://download.pytorch.org/whl/cu128 torch torchvision torchaudio
 uv pip install unsloth datasets trl peft accelerate bitsandbytes sentencepiece protobuf pyarrow
 uv pip install flash-linear-attention causal-conv1d
+MAX_JOBS="${MAX_JOBS:-4}" uv pip install flash-attn --no-build-isolation
 uv pip install -e ".[training]"
 
 python - <<'PY'
@@ -39,7 +44,7 @@ print("[acidnet] cuda_available", torch.cuda.is_available())
 if torch.cuda.is_available():
     print("[acidnet] gpu", torch.cuda.get_device_name(0))
 
-for module_name in ("unsloth", "fla", "causal_conv1d"):
+for module_name in ("unsloth", "flash_attn", "fla", "causal_conv1d"):
     try:
         module = importlib.import_module(module_name)
         print(f"[acidnet] {module_name} ok", getattr(module, "__version__", ""))
