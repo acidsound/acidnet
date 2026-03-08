@@ -85,6 +85,7 @@ powershell -ExecutionPolicy Bypass -File run_wsl_qwen_training.ps1 -Mode full
 - log: `data/logs/qwen3_5_4b_runtime_dialogue_unsloth_wsl_full.log`
 - adapter dir: `data/training/qwen3_5_4b_runtime_dialogue_unsloth_wsl_full_adapter`
 - run spec: `data/training/qwen3_5_4b_runtime_dialogue_unsloth_wsl_full_run_spec.json`
+- maintained full checkpoint cadence: `save_steps = 250`
 
 ## Hugging Face 복원 구조
 

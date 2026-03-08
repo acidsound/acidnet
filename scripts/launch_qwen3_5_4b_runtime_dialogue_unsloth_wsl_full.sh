@@ -44,7 +44,7 @@ LOG_PATH="data/logs/${RUN_NAME}.log"
     --trainer-backend unsloth \
     --epochs 1 \
     --eval-steps 1000 \
-    --save-steps 1000 \
+    --save-steps 250 \
     --max-seq-length 1024 \
     --batch-size 2 \
     --grad-accum 8 \

@@ -84,6 +84,7 @@ Artifacts:
 - log: `data/logs/qwen3_5_4b_runtime_dialogue_unsloth_wsl_full.log`
 - adapter dir: `data/training/qwen3_5_4b_runtime_dialogue_unsloth_wsl_full_adapter`
 - run spec: `data/training/qwen3_5_4b_runtime_dialogue_unsloth_wsl_full_run_spec.json`
+- maintained full checkpoint cadence: `save_steps = 250`
 
 ## Hugging Face Restore Layout
 
