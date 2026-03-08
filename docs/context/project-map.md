@@ -39,6 +39,16 @@ The goal is to show where the live contracts actually sit in code and tests.
 - If a tool or editor hides `data/`, check whether it respects `.gitignore`; the directory is usually present or creatable even though it is not tracked.
 - The maintained runtime-dialogue training defaults now use `data/prompt_packs/bootstrap_teacher_requests.*`, `data/sft/train_bootstrap_teacher_sft_dataset.*`, `data/sft/eval_bootstrap_teacher_sft_dataset.*`, and the refreshed bench subset `data/sft/bench_{train_1024,eval_128}.jsonl`.
 
+## Source And Artifact Workflow
+
+- GitHub is the source-of-truth registry for code and docs.
+- Hugging Face is the source-of-truth registry for generated training datasets, adapters, GGUF exports, and publish manifests.
+- The preferred development loop is:
+  - edit, test, commit, and push from the Windows worktree
+  - pull that exact commit into a WSL-native clone such as `/home/<user>/work/acidnet`
+  - run smoke, full training, gate, export, and publish from the WSL-native clone
+- Avoid running longer training loops from `/mnt/...` mounted Windows paths when a WSL-native clone is available.
+
 ## Main Entrypoints
 
 - `run_acidnet.py`: terminal and raw-command runtime

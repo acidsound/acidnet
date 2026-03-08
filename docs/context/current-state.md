@@ -5,7 +5,7 @@
 This is the short rolling status file for new conversations.
 Keep it brief and update it when the active slice changes.
 
-Updated: 2026-03-08
+Updated: 2026-03-09
 
 ## Priority Rule
 
@@ -61,8 +61,9 @@ If they compete for the next thin slice, this file decides.
 - bootstrap dialogue data now always includes a hunger-direct case and adds extra no-food hunger prompts for actors without edible goods
 - prompt-only evaluation now scores `origin_direct`, `identity_direct`, and `hunger_direct` separately
 - a WSL Unsloth hungerfix smoke run is complete at `data/training/qwen3_5_4b_runtime_dialogue_unsloth_wsl_hungerfix_smoke_adapter`
-- the default WSL Unsloth setup path now targets Python 3.12 in `.venv-wsl`, and the maintained bench smoke split `data/sft/bench_train_1024.jsonl` / `data/sft/bench_eval_128.jsonl` now completes in `169 s` without the earlier launcher-side `trl`-before-`unsloth` warning
-- the maintained WSL setup path now also installs `flash-attn`, exports `CUDA_HOME=/usr/local/cuda`, and rechecks the Unsloth startup banner so the RTX 4090 path reports `FA2 = True`
+- the maintained WSL training loop now runs from a WSL-native clone such as `/home/<user>/work/acidnet` instead of `/mnt/...`; code changes are committed and pushed from the Windows worktree, then pulled into the WSL clone before smoke/full/gate/export/publish runs
+- Hugging Face remains the artifact registry for datasets and model outputs, while GitHub is now the source registry for code and docs
+- the recovered WSL `.venv-wsl` baseline now reports `flash_attn 2.8.3`, `causal_conv1d 1.6.0`, and `FA2 = True` on the RTX 4090 path
 - current prompt-refresh reports are:
   - `data/eval/prompt_only_runtime_dialogue_unsloth_wsl_hungerfix_smoke_report.json`
   - `data/eval/model_gate_runtime_dialogue_unsloth_wsl_hungerfix_smoke_report.json`
@@ -113,8 +114,9 @@ If they compete for the next thin slice, this file decides.
 ### Promotion Quality: Dialogue Refresh
 
 1. Keep the regenerated `bootstrap_teacher` prompt-pack, train/eval split, and maintained bench split as the canonical runtime-dialogue dataset inputs for the next smoke/full refresh.
-2. Re-run the WSL Unsloth smoke lane and then the full lane against those refreshed artifacts before the next promotion decision, so trade-parser hard cases are exercised in a fresh adapter instead of only in teacher data and runtime regression.
-3. Keep model-gate, prompt-only, and promoted `llama-server` checks aligned with the refreshed adapter and GGUF export path before calling the new dialogue refresh promoted.
+2. Keep the Windows `commit/push -> WSL pull -> smoke/full/gate` operating loop explicit, so training always runs against a clean GitHub-backed source snapshot instead of an ad hoc `/mnt/...` worktree.
+3. Re-run the WSL Unsloth full lane against the refreshed artifacts after the current WSL-native smoke validation, so trade-parser hard cases are exercised in a fresh adapter instead of only in teacher data and runtime regression.
+4. Keep model-gate, prompt-only, and promoted `llama-server` checks aligned with the refreshed adapter and GGUF export path before calling the new dialogue refresh promoted.
 
 ### Track A: Structural Boundary
 

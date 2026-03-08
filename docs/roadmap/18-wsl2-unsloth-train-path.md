@@ -27,6 +27,16 @@ WSL2 gives a cleaner Linux package path for Unsloth and related CUDA kernels.
 - `run_export_gguf.py`
 - `run_publish_hf_artifacts.py`
 
+## Operating Model
+
+- GitHub is the source registry for code and docs.
+- Hugging Face is the artifact registry for published datasets, adapters, GGUF outputs, and portable manifests.
+- The maintained loop is:
+  1. edit, test, commit, and push from the Windows worktree
+  2. pull the latest source into a WSL-native clone such as `/home/<user>/work/acidnet`
+  3. run setup, smoke, full, gate, export, and publish from that WSL-native clone
+- Avoid long training runs from `/mnt/...` mounted Windows paths when a WSL-native clone is available.
+
 ## Setup
 
 Create the WSL-specific `uv` environment:
@@ -216,15 +226,16 @@ python run_publish_hf_artifacts.py `
 
 The default WSL smoke path is now revalidated on Python 3.12.
 
-- default setup probe in `.venv-wsl` reports `Python 3.12.10`, `unsloth 2026.3.3`, `flash_attn 2.8.3`, `fla 0.4.1`, and `causal_conv1d 1.6.0`
-- the maintained RTX 4090 WSL probe now expects the Unsloth startup banner to show `FA2 = True`
+- the maintained WSL-native clone now uses the recovered `.venv-wsl` baseline under `/home/<user>/work/acidnet`
+- that baseline reports `Python 3.12.10`, `unsloth 2026.3.3`, `flash_attn 2.8.3`, `fla 0.4.1`, and `causal_conv1d 1.6.0`
+- the maintained RTX 4090 WSL probe now reports `FA2 = True` in the Unsloth startup banner
 - standard smoke artifacts:
   - `data/logs/qwen3_5_4b_runtime_dialogue_unsloth_wsl_smoke.log`
   - `data/training/qwen3_5_4b_runtime_dialogue_unsloth_wsl_smoke_adapter/`
   - `data/training/qwen3_5_4b_runtime_dialogue_unsloth_wsl_smoke_run_spec.json`
-- current maintained `1024 / 128` bench smoke runtime: `train_runtime = 169 s`
-- current maintained `1024 / 128` bench smoke throughput: `train_samples_per_second = 6.06`, `train_steps_per_second = 0.379`
-- the standard smoke log shows `Fast Qwen3_5 patching` and `FA [Xformers = 0.0.35. FA2 = False]`
+- current maintained WSL-native `1024 / 128` bench smoke runtime: `train_runtime = 133.1 s`
+- current maintained WSL-native `1024 / 128` bench smoke throughput: `train_samples_per_second = 7.694`, `train_steps_per_second = 0.481`
+- the maintained WSL-native smoke log now shows `Fast Qwen3_5 patching` and `FA [Xformers = 0.0.35. FA2 = True]`
 - the launcher-side dependency check now imports `unsloth` before `trl`, so the earlier warning about reversed import order no longer appears during standard launches
 
 The first full WSL candidate is also complete.

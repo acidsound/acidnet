@@ -28,6 +28,16 @@ WSL2는 Unsloth와 관련 CUDA 커널을 더 안정적으로 다룰 수 있는 L
 - `run_export_gguf.py`
 - `run_publish_hf_artifacts.py`
 
+## 운영 모델
+
+- GitHub는 코드와 문서의 source registry다.
+- Hugging Face는 publish된 dataset, adapter, GGUF output, portable manifest의 artifact registry다.
+- 유지 중인 루프는 다음과 같다.
+  1. Windows 작업 트리에서 수정, 테스트, 커밋, push
+  2. WSL-native clone 예시인 `/home/<user>/work/acidnet`으로 최신 소스를 pull
+  3. setup, smoke, full, gate, export, publish를 그 WSL-native clone에서 실행
+- WSL-native clone이 있는 경우 장시간 학습을 `/mnt/...` mounted Windows 경로에서 돌리지 않는다.
+
 ## 설정
 
 WSL 전용 `uv` 환경을 만든다.
@@ -217,15 +227,16 @@ python run_publish_hf_artifacts.py `
 
 기본 WSL smoke 경로는 Python 3.12 기준으로 다시 검증됐다.
 
-- 기본 `.venv-wsl` setup probe 결과는 `Python 3.12.10`, `unsloth 2026.3.3`, `flash_attn 2.8.3`, `fla 0.4.1`, `causal_conv1d 1.6.0`
-- 유지 중인 RTX 4090 WSL probe는 이제 Unsloth startup banner에 `FA2 = True`가 보이는 것을 기준으로 삼는다
+- 유지 중인 WSL-native clone은 이제 `/home/<user>/work/acidnet` 아래의 복구된 `.venv-wsl` baseline을 사용한다
+- 이 baseline은 `Python 3.12.10`, `unsloth 2026.3.3`, `flash_attn 2.8.3`, `fla 0.4.1`, `causal_conv1d 1.6.0`을 보고한다
+- 유지 중인 RTX 4090 WSL probe는 이제 Unsloth startup banner에서 `FA2 = True`를 보고한다
 - 표준 smoke artifact:
   - `data/logs/qwen3_5_4b_runtime_dialogue_unsloth_wsl_smoke.log`
   - `data/training/qwen3_5_4b_runtime_dialogue_unsloth_wsl_smoke_adapter/`
   - `data/training/qwen3_5_4b_runtime_dialogue_unsloth_wsl_smoke_run_spec.json`
-- 현재 유지 중인 `1024 / 128` bench smoke 학습 시간: `train_runtime = 169 s`
-- 현재 유지 중인 `1024 / 128` bench smoke 처리량: `train_samples_per_second = 6.06`, `train_steps_per_second = 0.379`
-- 표준 smoke 로그에는 `Fast Qwen3_5 patching`, `FA [Xformers = 0.0.35. FA2 = False]`가 확인된다
+- 현재 유지 중인 WSL-native `1024 / 128` bench smoke 학습 시간: `train_runtime = 133.1 s`
+- 현재 유지 중인 WSL-native `1024 / 128` bench smoke 처리량: `train_samples_per_second = 7.694`, `train_steps_per_second = 0.481`
+- 유지 중인 WSL-native smoke 로그에는 `Fast Qwen3_5 patching`, `FA [Xformers = 0.0.35. FA2 = True]`가 확인된다
 - launcher-side dependency check는 이제 `unsloth`를 `trl`보다 먼저 import하므로 예전 import-order warning이 다시 나오지 않는다
 
 첫 full WSL candidate도 완료되어 있다.
