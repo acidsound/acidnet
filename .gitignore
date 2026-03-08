@@ -2,6 +2,7 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .venv-wsl/
+.env
 src/*.egg-info/
 unsloth_compiled_cache/
 

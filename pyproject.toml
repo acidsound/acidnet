@@ -13,6 +13,7 @@ dependencies = [
 
 [project.optional-dependencies]
 training = [
+    "huggingface_hub>=0.31,<1.0",
     "pyarrow>=17,<20",
 ]
 

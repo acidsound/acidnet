@@ -24,17 +24,54 @@ The goal is to show where the live contracts actually sit in code and tests.
 - Some directories such as `src/acidnet/actions`, `src/acidnet/api`, `src/acidnet/economy`, `src/acidnet/memory`, `src/acidnet/npc`, and `src/acidnet/social` are placeholders or future boundaries.
 - Do not infer runtime ownership from directory names alone.
 - Confirm the active code path before editing.
+- `data/` is gitignored on purpose. It is a generated artifact root, not a committed source tree.
+
+## Generated Artifact Roots
+
+- `data/acidnet.sqlite`: default single-user runtime SQLite store
+- `data/logs/`: web/runtime logs, event logs, and training logs created on demand
+- `data/prompt_packs/`: generated bootstrap prompt-pack inputs and teacher outputs
+- `data/sft/`: merged and split SFT datasets used by baseline and WSL training runs
+- `data/training/`: generated run specs, exported trainer scripts, LoRA adapter outputs, and local Hugging Face publish manifests
+- `data/eval/`: prompt-only, model-gate, and related evaluation reports
+- `data/test_artifacts/`: temporary fixtures and small benchmark subsets created by tests and smoke paths
+- If a tool or editor hides `data/`, check whether it respects `.gitignore`; the directory is usually present or creatable even though it is not tracked.
 
 ## Main Entrypoints
 
 - `run_acidnet.py`: terminal and raw-command runtime
 - `run_acidnet_web.py`: shareable web runtime
+- `run_publish_hf_artifacts.py`: `.env`-driven Hugging Face publish tool for LoRA/GGUF model artifacts and runtime-dialogue datasets
+  - local and uploaded `publish_manifest.json` files are intended to stay portable: they record repo-relative source paths plus Hub `runs/<run-name>/...` targets instead of machine-specific absolute paths
+  - the publish step also refreshes the repo-root `README.md` cards in both HF repos so the restore layout is visible from the Hub UI
 - `run_local_adapter_server.py`: local OpenAI-compatible adapter server for dev/eval, not the promoted deployment runtime
 - `run_local_adapter_dev_loop.ps1`: optional Windows helper that now launches the local adapter server, model gate, and web runtime together for dev/eval observation
 - `run_*pipeline*.py`, `run_*train*.py`, `run_*eval*.py`: training and evaluation entrypoints
 - `run_wsl_qwen_training.ps1`: WSL `uv` wrapper; the default `.venv-wsl` baseline now targets Python 3.12
 - `scripts/launch_qwen3_5_4b_runtime_dialogue_unsloth_wsl_*.sh`: preferred WSL Unsloth training launchers for fast dialogue refresh loops; the standard smoke launcher now benchmarks against `data/sft/bench_train_1024.jsonl` and `data/sft/bench_eval_128.jsonl`
 - `data/sft/bench_train_1024.jsonl` and `data/sft/bench_eval_128.jsonl`: maintained runtime-dialogue bench split for WSL fast-path smoke checks
+
+## Hugging Face Artifact Registry
+
+- Hugging Face is the portability registry for generated artifacts. AcidNet does not train from or serve from HF directly.
+- Training, evaluation, and runtime still read local files under `data/` and `models/`.
+- The default dataset repo is `acidsound/acidnet_dataset`.
+  - each published run now uses stable subpaths such as `runs/<run-name>/prompt_packs/`, `runs/<run-name>/sft/`, `runs/<run-name>/preferences/`, and `runs/<run-name>/manifests/`
+  - restore prompt-pack provenance into `data/prompt_packs/`
+  - restore train/eval and bench splits into `data/sft/`
+  - restore optional RL precursor preference data into `data/preferences/`
+  - restore pipeline manifests and run specs into `data/training/`
+  - restore gate reports into `data/eval/`
+- The default model repo is `acidsound/acidnet_model`.
+  - each published run now uses stable subpaths such as `runs/<run-name>/adapter/`, `runs/<run-name>/gguf/`, and `runs/<run-name>/manifests/`
+  - restore the final PEFT adapter bundle into `data/training/<run-name>_adapter/` for `local_peft` dev/eval use
+  - restore the LoRA GGUF into `data/gguf/` for `llama-server` deployment
+- The base quantized model is still separate.
+  - `acidnet_model` stores the fine-tuned adapter and adapter GGUF, not the base `Q4_K_M` model itself
+  - the promoted runtime still expects the base GGUF in a local path such as `models/`
+- If a new machine should reuse an existing run, either:
+  - regenerate the canonical dataset locally with `run_bootstrap_qwen4b_pipeline.py`, or
+  - restore the published dataset files back into the same repo-relative `data/...` paths before launching WSL training or local evaluation
 
 ## Core Runtime Files
 
