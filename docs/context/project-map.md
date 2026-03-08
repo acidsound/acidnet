@@ -44,10 +44,11 @@ The goal is to show where the live contracts actually sit in code and tests.
 - GitHub is the source-of-truth registry for code and docs.
 - Hugging Face is the source-of-truth registry for generated training datasets, adapters, GGUF exports, and publish manifests.
 - The preferred development loop is:
-  - edit, test, commit, and push from the Windows worktree
+  - edit, test, commit, and push from the main development worktree on Windows or macOS
   - pull that exact commit into a WSL-native clone such as `/home/<user>/work/acidnet`
   - run smoke, full training, gate, export, and publish from the WSL-native clone
 - Avoid running longer training loops from `/mnt/...` mounted Windows paths when a WSL-native clone is available.
+- The WSL-native clone is the promoted training execution environment, not the canonical editing environment.
 
 ## Main Entrypoints
 

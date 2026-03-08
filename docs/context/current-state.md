@@ -63,7 +63,7 @@ If they compete for the next thin slice, this file decides.
 - bootstrap dialogue data now always includes a hunger-direct case and adds extra no-food hunger prompts for actors without edible goods
 - prompt-only evaluation now scores `origin_direct`, `identity_direct`, and `hunger_direct` separately
 - a WSL Unsloth hungerfix smoke run is complete at `data/training/qwen3_5_4b_runtime_dialogue_unsloth_wsl_hungerfix_smoke_adapter`
-- the maintained WSL training loop now runs from a WSL-native clone such as `/home/<user>/work/acidnet` instead of `/mnt/...`; code changes are committed and pushed from the Windows worktree, then pulled into the WSL clone before smoke/full/gate/export/publish runs
+- the maintained WSL training loop now runs from a WSL-native clone such as `/home/<user>/work/acidnet` instead of `/mnt/...`; code changes are committed and pushed from the main development worktree, then pulled into the WSL clone before smoke/full/gate/export/publish runs
 - Hugging Face remains the artifact registry for datasets and model outputs, while GitHub is now the source registry for code and docs
 - the recovered WSL `.venv-wsl` baseline now reports `flash_attn 2.8.3`, `causal_conv1d 1.6.0`, and `FA2 = True` on the RTX 4090 path
 - current prompt-refresh reports are:
@@ -81,6 +81,7 @@ If they compete for the next thin slice, this file decides.
 - bootstrap dialogue data now also rotates fact-grounded vendor hard cases for exact quotes, sellable stock, accepted offers, counteroffers, negative offers, debt requests, and free-food requests, and those samples can now carry server-authored `trade_fact` into the runtime dialogue prompt
 - runtime-aligned SFT export now also emits parser-side trade-intent examples for quote, stock, and offer cases, so the `openai_compat` model-assisted trade parser can be tuned against the same canonical trade facts as the phrasing path
 - the canonical bootstrap prompt pack plus runtime-dialogue train/eval and maintained bench splits were refreshed after the trade-parser hard-case expansion, so the next WSL smoke/full refresh consumes the current `bootstrap_teacher` artifacts by default
+- the refreshed full WSL dialogue run completed, but the resulting gate report still fails five prompt rows (`origin_direct`, three `trade_request_stock`, and one `rumor_request_known`), so GGUF export and Hugging Face promotion remain blocked behind another prompt-refresh pass
 - shared dialogue output cleanup and sentence-limit enforcement now run through one post-processing path across `heuristic`, `openai_compat`, and `local_peft`
 - shared dialogue cleanup now also unwraps common code-fenced or JSON-wrapped replies before sentence limiting, reducing backend-specific formatting drift from runtime and eval servers
 - prompt-only evaluation now reaches wrapped `openai_compat` and `local_peft` adapters with `temperature=0.0`, and model-gate fallback accounting now treats `local_peft` the same way as `openai_compat`
@@ -118,9 +119,14 @@ If they compete for the next thin slice, this file decides.
 ### Promotion Quality: Dialogue Refresh
 
 1. Keep the regenerated `bootstrap_teacher` prompt-pack, train/eval split, and maintained bench split as the canonical runtime-dialogue dataset inputs for the next smoke/full refresh.
-2. Keep the Windows `commit/push -> WSL pull -> smoke/full/gate` operating loop explicit, so training always runs against a clean GitHub-backed source snapshot instead of an ad hoc `/mnt/...` worktree.
-3. Re-run the WSL Unsloth full lane against the refreshed artifacts after the current WSL-native smoke validation, so trade-parser hard cases are exercised in a fresh adapter instead of only in teacher data and runtime regression.
-4. Keep model-gate, prompt-only, and promoted `llama-server` checks aligned with the refreshed adapter and GGUF export path before calling the new dialogue refresh promoted.
+2. Keep the `commit/push -> WSL pull -> smoke/full/gate` operating loop explicit, so training always runs against a clean GitHub-backed source snapshot instead of an ad hoc `/mnt/...` worktree.
+3. Fix the current fresh-full gate failures directly in teacher/data/prompt shaping before the next export attempt:
+   - `Anik origin_direct`
+   - `Bina trade_request_stock`
+   - `Hobb trade_request_stock`
+   - `Iva rumor_request_known`
+   - `Mara trade_request_stock`
+4. Re-run WSL smoke, then full, then model-gate after those hard-case fixes, and only continue to GGUF export plus Hugging Face publish if that refreshed gate clears.
 
 ### Track A: Structural Boundary
 
