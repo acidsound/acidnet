@@ -101,6 +101,22 @@ def test_demo_prompt_pack_always_includes_hunger_direct_rows() -> None:
     assert any(row.metadata.get("interaction_case") == "hunger_direct" for row in dialogue_rows)
 
 
+def test_demo_prompt_pack_includes_prompt_only_eval_anchor_rows() -> None:
+    rows = generate_demo_prompt_pack(num_turns=1)
+    cases_by_npc = {
+        (row.metadata.get("npc_id"), row.metadata.get("interaction_case"))
+        for row in rows
+        if row.task == "dialogue"
+    }
+
+    assert ("npc.anik", "origin_direct") in cases_by_npc
+    assert ("npc.anik", "identity_direct") in cases_by_npc
+    assert ("npc.bina", "trade_request_stock") in cases_by_npc
+    assert ("npc.hobb", "trade_request_stock") in cases_by_npc
+    assert ("npc.iva", "rumor_request_known") in cases_by_npc
+    assert ("npc.mara", "trade_request_stock") in cases_by_npc
+
+
 def test_demo_prompt_pack_includes_extra_no_food_hunger_rows_for_no_food_vendor() -> None:
     rows = generate_demo_prompt_pack(num_turns=1)
     doran_rows = [row for row in rows if row.task == "dialogue" and row.metadata.get("npc_id") == "npc.doran"]

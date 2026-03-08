@@ -152,8 +152,9 @@ def _evaluate_response(
         _check(max(overlaps, default=0) >= 2, "mentions_known_rumor", passed, failed)
 
     if interaction_mode == "trade_request" and npc.is_vendor:
-        stocked_items = [item for item, qty in npc.inventory.items() if qty > 0]
-        edible_stocked_items = [item for item, qty in npc.inventory.items() if qty > 0 and item in FOOD_TOKENS]
+        buy_options = [option for option in simulation.player_trade_options(npc_id, mode="buy") if option.quantity > 0]
+        stocked_items = [option.item for option in buy_options]
+        edible_stocked_items = [option.item for option in buy_options if option.item in FOOD_TOKENS]
         asks_for_food = any(token in player_prompt.lower() for token in ("food", "hungry", "eat", "meal"))
         claimed_food_items = [item for item in FOOD_TOKENS if item in normalized]
         invented_food_stock = any(

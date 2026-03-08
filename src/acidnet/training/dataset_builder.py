@@ -363,6 +363,12 @@ def _dialogue_interactions(
     interactions: list[tuple[str, dict[str, Any]]] = [("base", _base_interaction_context(simulation, npc_id, rng=rng))]
     seen_prompts = {interactions[0][1]["player_prompt"]}
 
+    for anchor_case_id, anchor_case in _prompt_only_eval_anchor_contexts(simulation, npc_id):
+        if anchor_case["player_prompt"] in seen_prompts:
+            continue
+        interactions.append((anchor_case_id, anchor_case))
+        seen_prompts.add(anchor_case["player_prompt"])
+
     # Always keep one explicit hunger-direct example in the prompt pack so
     # no-food redirects stay present even when the rotating hard case lands elsewhere.
     hunger_case = (
@@ -387,6 +393,54 @@ def _dialogue_interactions(
         interactions.append((extra_case_id, extra_case))
         seen_prompts.add(extra_case["player_prompt"])
     return interactions
+
+
+def _prompt_only_eval_anchor_contexts(
+    simulation: Simulation,
+    npc_id: str,
+) -> list[tuple[str, dict[str, Any]]]:
+    npc = simulation.npcs[npc_id]
+    contexts: list[tuple[str, dict[str, Any]]] = [
+        (
+            "origin_direct",
+            {
+                "player_prompt": "Where did you come from?",
+                "player_goal": "direct_say",
+                "expected_focus": "Answer the origin or usual-place question directly before any extra detail.",
+            },
+        ),
+        (
+            "identity_direct",
+            {
+                "player_prompt": "I do not think we have met. Who are you?",
+                "player_goal": "direct_say",
+                "expected_focus": "Introduce the NPC directly and briefly, without drifting into generic village commentary.",
+            },
+        ),
+    ]
+    if npc.is_vendor:
+        contexts.append(
+            (
+                "trade_request_stock",
+                {
+                    "player_prompt": "I need food. What can you sell me right now?",
+                    "player_goal": "trade_request",
+                    "expected_focus": "Answer from the current sellable food contract or plainly say when no edible sale is available.",
+                },
+            )
+        )
+    if npc.known_rumor_ids:
+        contexts.append(
+            (
+                "rumor_request_known",
+                {
+                    "player_prompt": "Have you heard any useful rumors?",
+                    "player_goal": "rumor_request",
+                    "expected_focus": "Surface a known rumor directly instead of falling back to generic atmosphere.",
+                },
+            )
+        )
+    return contexts
 
 
 def _base_interaction_context(simulation: Simulation, npc_id: str, *, rng: random.Random) -> dict[str, Any]:

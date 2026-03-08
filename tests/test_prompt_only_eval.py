@@ -128,3 +128,23 @@ def test_food_trade_request_accepts_plain_redirect_when_vendor_has_no_edible_goo
     assert "does_not_invent_food_stock" in passed
     assert "answers_food_trade_without_fake_stock" not in failed
     assert "does_not_invent_food_stock" not in failed
+
+
+def test_food_trade_request_uses_live_buy_options_not_raw_inventory() -> None:
+    simulation = Simulation.create_demo()
+    npc = simulation.npcs["npc.hobb"]
+
+    assert npc.inventory.get("bread", 0) > 0
+    assert not simulation.player_trade_options(npc.npc_id, mode="buy")
+
+    passed, failed = _evaluate_response(
+        simulation,
+        npc.npc_id,
+        "trade_request",
+        "trade_request_stock",
+        "I need food. What can you sell me right now?",
+        "I do not have food to sell right now. Try the bakery or the tavern before it gets worse.",
+    )
+
+    assert "answers_food_trade_without_fake_stock" in passed
+    assert "mentions_stocked_food_item" not in failed
