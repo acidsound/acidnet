@@ -116,6 +116,28 @@ def test_openai_compat_generate_includes_live_buy_options_in_user_prompt(monkeyp
     assert "- debt_options: bread x6 @ 6 gold" in user_prompt
 
 
+def test_openai_compat_generate_includes_home_and_workplace_in_user_prompt(monkeypatch) -> None:
+    captured_payload: dict[str, object] = {}
+
+    def fake_urlopen(http_request, timeout: int):  # noqa: ANN001
+        nonlocal captured_payload
+        captured_payload = json.loads(http_request.data.decode("utf-8"))
+        return _FakeResponse({"choices": [{"message": {"content": "I keep close to Market Square."}}]})
+
+    monkeypatch.setattr("acidnet.llm.openai_compat.request.urlopen", fake_urlopen)
+
+    adapter = OpenAICompatDialogueAdapter(
+        model="demo-model",
+        endpoint="http://127.0.0.1:8000/v1/chat/completions",
+    )
+
+    adapter.generate(_build_dialogue_context("Stay grounded. Answer origin questions from home or workplace first."))
+
+    user_prompt = captured_payload["messages"][1]["content"]
+    assert "- home_location:" in user_prompt
+    assert "- workplace:" in user_prompt
+
+
 def test_openai_compat_generate_includes_trade_fact_in_user_prompt(monkeypatch) -> None:
     captured_payload: dict[str, object] = {}
 

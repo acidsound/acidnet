@@ -299,7 +299,13 @@ def _build_world_sample(simulation: Simulation, npc_id: str, *, interaction: dic
         "traits": list(npc.traits),
         "location_id": npc.location_id,
         "home_location_id": npc.home_location_id,
+        "home_location_name": simulation.world.locations[npc.home_location_id].name
+        if npc.home_location_id in simulation.world.locations
+        else None,
         "workplace_id": npc.workplace_id,
+        "workplace_name": simulation.world.locations[npc.workplace_id].name
+        if npc.workplace_id in simulation.world.locations
+        else None,
         "inventory": dict(npc.inventory),
         "money": npc.money,
         "hunger": npc.hunger,

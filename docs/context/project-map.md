@@ -129,6 +129,7 @@ The goal is to show where the live contracts actually sit in code and tests.
 - `src/acidnet/llm/prompt_builder.py`
   - shared dialogue prompt and interaction-mode shaping
   - carries live vendor `buy_options` / `debt_options` into the prompt contract so exact price questions can stay aligned with simulator trade facts
+  - now also surfaces home/work anchors plus stronger direct-answer rules for origin, rumor, and sellable-stock questions in the runtime prompt contract
 - `src/acidnet/llm/rule_based.py`
 - `src/acidnet/llm/openai_compat.py`
   - promoted simulator runtime path against `llama-server` serving the `Q4_K_M` GGUF model line
@@ -141,6 +142,7 @@ The goal is to show where the live contracts actually sit in code and tests.
   - prompt-pack generation and bootstrap teacher shaping for runtime dialogue training
   - mirrors live trade-option context into training samples so future dialogue refreshes do not regress back to raw-market price guesses
   - vendor hard-case samples can now also carry server-authored `trade_fact` plus `ask_options`/`debt_options`, so quote/stock/offer/free-help supervision stays aligned with the live adjudication path
+  - current hard-case shaping now also biases `origin_direct`, `trade_request_stock`, and `rumor_request_known` toward direct first-sentence answers instead of generic atmosphere
 - `src/acidnet/training/sft_dataset.py`
   - runtime-aligned SFT export now emits both in-character dialogue examples and strict trade-parser JSON examples from the same fact-grounded prompt rows when a canonical trade intent is present
 - `src/acidnet/eval/prompt_only.py`

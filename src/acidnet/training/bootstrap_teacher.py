@@ -249,7 +249,7 @@ def _dialogue_response(sample: dict) -> str:
         return direct_response
 
     if interaction_mode == "rumor_request" and rumors:
-        return f"{opening} The clearest thing going around is this: {rumors[0]}"
+        return f"The clearest rumor I know is this: {rumors[0]}"
     if interaction_mode == "trade_request":
         quoted_item = _mentioned_trade_item(sample, normalized_prompt)
         quoted_buy = _find_trade_option(buy_options, quoted_item) if quoted_item else None
@@ -257,7 +257,7 @@ def _dialogue_response(sample: dict) -> str:
             return f'{opening} {quoted_buy["item"].capitalize()} is {quoted_buy["price"]} gold right now.'
         asks_for_food = any(token in normalized_prompt for token in FOOD_REQUEST_TOKENS)
         if asks_for_food and edible_goods:
-            return f"{opening} Right now I can move {', '.join(edible_goods[:3])}, and the weather is already pushing the food line thin."
+            return f"I can sell {', '.join(edible_goods[:3])} right now. The weather is already pushing the food line thin."
         if asks_for_food and not edible_goods:
             return f"{opening} I do not have food to sell from {location['name']} right now. Try the bakery or the tavern before the shelves thin further."
         if any(token in normalized_prompt for token in FREE_REQUEST_TOKENS):
@@ -265,8 +265,8 @@ def _dialogue_response(sample: dict) -> str:
             if free_help is not None:
                 return free_help
         if goods:
-            return f"{opening} Right now I can move {', '.join(goods[:3])}, and the weather is already pushing the market."
-        return f"{opening} Stock is thin right now, so I would not promise more than I have."
+            return f"I can sell {', '.join(goods[:3])} right now. That is all I would promise cleanly."
+        return "I am not selling anything cleanly right now."
     if interaction_mode == "direct_say" and npc["profession"] == "farmer":
         return f"{opening} Around {location['name']}, the {world['weather']} is shaping every harvest decision."
     if interaction_mode == "direct_say" and npc["profession"] == "guard":
@@ -334,6 +334,14 @@ def _direct_dialogue_response(
         return f'I am {npc["name"]}, the village {npc["profession"]}.'
 
     if any(token in normalized_prompt for token in ORIGIN_TOKENS):
+        home_location = str(npc.get("home_location_name") or "").strip()
+        workplace = str(npc.get("workplace_name") or "").strip()
+        if home_location and workplace and home_location != workplace:
+            return f"I am from {home_location}. Most days my work keeps me close to {workplace}."
+        if workplace:
+            return f"My work keeps me close to {workplace} most days."
+        if home_location:
+            return f"I am from {home_location}. I do not range much farther than that."
         return f'I keep close to {location["name"]} most days. Nothing farther than the village has me right now.'
 
     if any(token in normalized_prompt for token in HUNGER_TOKENS):
@@ -345,8 +353,8 @@ def _direct_dialogue_response(
 
     if any(token in normalized_prompt for token in STOCK_TOKENS):
         if goods:
-            return f'What I can point to right now is {", ".join(goods[:3])}. I will not promise more than that.'
-        return "Not much. What is visible is all I would trust myself to promise."
+            return f'I can sell {", ".join(goods[:3])} right now. I will not promise more than that.'
+        return "I am not selling anything cleanly right now."
 
     if npc["profession"] == "guard" and any(token in normalized_prompt for token in SAFETY_TOKENS):
         if world["weather"] == "storm_front":
@@ -359,7 +367,7 @@ def _direct_dialogue_response(
         return f"It can recover, but not for free. Right now the {world['weather']} is still deciding how much the field will give back."
 
     if rumors and "rumor" in normalized_prompt:
-        return f'The cleanest answer I can give is this: {rumors[0]}'
+        return f'The cleanest rumor I can give is this: {rumors[0]}'
 
     if "?" in normalized_prompt:
         return f'Around {location["name"]}, I can only answer from what is in front of me right now.'

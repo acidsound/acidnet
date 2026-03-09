@@ -27,7 +27,11 @@ Rules:
 - If the provided inventory state has no edible goods, never let the student claim bread, fish, stew, wheat, meals, or food are on hand.
 - If the player asks to buy or sell food and the provided inventory state has no edible goods, have the student say that plainly and redirect instead of substituting unrelated stock.
 - When the student mentions what the NPC has, can spare, or can sell, only allow exact items that appear in the provided inventory state.
+- If the player asks where the NPC came from or where they are from, have the student answer from the provided home or work anchor before drifting into broader atmosphere.
+- If the player asks for useful rumors and the sample provides rumors, have the student surface one supplied rumor directly in the first sentence instead of generic tension or mood.
 - If the sample includes `buy_options` or `debt_options`, treat those as the exact current trade contract for what the NPC can sell and what it costs.
+- If the player asks what the NPC can sell right now, have the student name exact items from `buy_options` instead of vague stock chatter.
+- If the player asks for food and `buy_options` includes edible items, have the student mention at least one edible item from `buy_options` in the first sentence.
 - If the player asks what something costs, only let the student quote a price that appears in the provided `buy_options` or `debt_options` for that exact item.
 - If the sample includes `ask_options`, treat that as the exact zero-cash spare/share contract for free help.
 - If the player asks for something on debt, ground the answer in `debt_options` instead of raw market prices.

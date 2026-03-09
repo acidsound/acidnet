@@ -69,7 +69,12 @@ If the NPC has no edible food in the supplied state, say that plainly and redire
 If available_goods lists no edible items, never claim bread, fish, stew, wheat, meals, or food are on hand.
 If the player asks to buy or sell food and available_goods has no edible items, say that plainly and redirect instead of substituting unrelated stock.
 When mentioning what the NPC has on hand, can spare, or can sell, only name exact items that appear in available_goods.
+If the player asks where the NPC came from or where they are from, answer from the supplied home_location or workplace before drifting into broader atmosphere.
+If the player asks for useful rumors and Rumors is not empty, surface one supplied rumor directly in the first sentence with concrete rumor details.
 When the player asks what the NPC can sell right now or what an item costs, ground the answer in buy_options or debt_options instead of raw market_prices.
+If the player asks what the NPC can sell right now, answer with exact items from buy_options instead of vague stock chatter.
+If the player asks for food and buy_options includes edible items, mention at least one edible item from buy_options in the first sentence.
+If the player asks for food and buy_options includes no edible items, say that plainly in the first sentence and redirect instead of softening it into generic scarcity talk.
 Only quote an exact current price when that item appears in buy_options or debt_options, and use the listed price for that item.
 If trade_fact is present, treat it as the server-authored trade adjudication for the current player request.
 Do not change any quantity, price, debt price, accepted total, counter offer, or error meaning that appears in trade_fact.
@@ -162,6 +167,12 @@ def build_user_prompt(context: DialogueContext) -> str:
             "npc": {
                 "name": context.npc.name,
                 "profession": context.npc.profession,
+                "home_location_name": context.world.locations[context.npc.home_location_id].name
+                if context.npc.home_location_id in context.world.locations
+                else None,
+                "workplace_name": context.world.locations[context.npc.workplace_id].name
+                if context.npc.workplace_id in context.world.locations
+                else None,
                 "traits": list(context.persona.traits),
                 "hunger": context.npc.hunger,
                 "inventory": dict(context.npc.inventory),
@@ -284,6 +295,8 @@ def build_user_prompt_from_sample(sample: dict[str, Any]) -> str:
     return f"""NPC:
 - name: {npc["name"]}
 - profession: {npc["profession"]}
+- home_location: {_sample_location_hint(npc, "home_location_name", "home_location_id")}
+- workplace: {_sample_location_hint(npc, "workplace_name", "workplace_id")}
 - traits: {", ".join(persona.get("traits", npc.get("traits", []))) or "none"}
 - speech_style: {", ".join(persona.get("speech_style", [])) or "none"}
 - values: {", ".join(persona.get("values", [])) or "none"}
@@ -417,6 +430,14 @@ def _format_trade_options(options: list[Any]) -> str:
 def _format_inventory_hint(inventory: dict[str, int]) -> str:
     visible = [f"{item} x{qty}" for item, qty in sorted(inventory.items()) if qty > 0]
     return ", ".join(visible[:6]) if visible else "none"
+
+
+def _sample_location_hint(npc: dict[str, Any], name_key: str, id_key: str) -> str:
+    name = str(npc.get(name_key) or "").strip()
+    if name:
+        return name
+    location_id = str(npc.get(id_key) or "").strip()
+    return location_id or "unknown"
 
 
 def _format_trade_fact(trade_fact: Any) -> str:

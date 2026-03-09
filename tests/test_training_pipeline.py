@@ -427,6 +427,8 @@ def test_bootstrap_teacher_answers_origin_question_directly() -> None:
             "profession": "baker",
             "traits": ["warm"],
             "hunger": 20.0,
+            "home_location_name": "Warm Crust Bakery",
+            "workplace_name": "Warm Crust Bakery",
             "inventory": {"bread": 3},
             "known_rumors": [],
             "is_vendor": True,
@@ -456,7 +458,101 @@ def test_bootstrap_teacher_answers_origin_question_directly() -> None:
 
     assert len(rows) == 1
     response = rows[0].assistant_json["response"].lower()
-    assert "warm crust bakery" in response or "keep close" in response or "nothing farther" in response
+    assert "warm crust bakery" in response
+
+
+def test_bootstrap_teacher_surfaces_known_rumor_directly() -> None:
+    sample = {
+        "world": {"day": 1, "tick": 0, "weather": "clear", "scarcity_index": 0.4, "market_prices": {"bread": 4}},
+        "location": {"name": "Market Square"},
+        "player": {"hunger": 12.0},
+        "npc": {
+            "npc_id": "npc.iva",
+            "name": "Iva",
+            "profession": "guard",
+            "traits": ["stern"],
+            "hunger": 20.0,
+            "inventory": {"bread": 1},
+            "known_rumors": ["Traders are snapping at each other in the square before dusk."],
+            "is_vendor": False,
+        },
+        "persona": {"speech_style": ["plain"], "values": ["order"]},
+        "interaction_context": {
+            "player_prompt": "Have you heard any useful rumors?",
+            "player_goal": "rumor_request",
+            "expected_focus": "Surface a known rumor directly instead of falling back to generic atmosphere.",
+        },
+        "beliefs": [],
+        "recent_memories": [],
+        "visible_rumors": ["Traders are snapping at each other in the square before dusk."],
+        "relationship_score": 0.0,
+    }
+    prompt_rows = [
+        {
+            "custom_id": "dialogue.demo.0.npc.iva.rumor_request_known",
+            "task": "dialogue",
+            "system_prompt": teacher_system_prompt(TeacherConfig()),
+            "user_prompt": dialogue_user_prompt(sample),
+            "metadata": {"npc_id": "npc.iva", "scenario_id": "scenario_0000"},
+        }
+    ]
+
+    rows = build_bootstrap_teacher_outputs(prompt_rows, tasks=("dialogue",))
+
+    assert len(rows) == 1
+    assert "traders are snapping at each other" in rows[0].assistant_json["response"].lower()
+
+
+def test_bootstrap_teacher_food_trade_stock_mentions_sellable_food() -> None:
+    sample = {
+        "world": {"day": 1, "tick": 0, "weather": "clear", "scarcity_index": 0.4, "market_prices": {"bread": 5, "fish": 4}},
+        "location": {"name": "Market Square"},
+        "player": {"hunger": 42.0},
+        "npc": {
+            "npc_id": "npc.mara",
+            "name": "Mara",
+            "profession": "merchant",
+            "traits": ["quick"],
+            "hunger": 18.0,
+            "inventory": {"bread": 6, "fish": 2},
+            "buy_options": [
+                {"item": "bread", "quantity": 6, "price": 6},
+                {"item": "fish", "quantity": 2, "price": 5},
+            ],
+            "sell_options": [],
+            "ask_options": [],
+            "give_options": [],
+            "debt_options": [{"item": "bread", "quantity": 3, "price": 6}],
+            "known_rumors": [],
+            "is_vendor": True,
+        },
+        "persona": {"speech_style": ["plain"], "values": ["trade"]},
+        "interaction_context": {
+            "player_prompt": "I need food. What can you sell me right now?",
+            "player_goal": "trade_request",
+            "expected_focus": "Answer from the current sellable food contract or plainly say when no edible sale is available.",
+        },
+        "beliefs": [],
+        "recent_memories": [],
+        "visible_rumors": [],
+        "relationship_score": 0.0,
+    }
+    prompt_rows = [
+        {
+            "custom_id": "dialogue.demo.0.npc.mara.trade_request_stock",
+            "task": "dialogue",
+            "system_prompt": teacher_system_prompt(TeacherConfig()),
+            "user_prompt": dialogue_user_prompt(sample),
+            "metadata": {"npc_id": "npc.mara", "scenario_id": "scenario_0000"},
+        }
+    ]
+
+    rows = build_bootstrap_teacher_outputs(prompt_rows, tasks=("dialogue",))
+
+    assert len(rows) == 1
+    response = rows[0].assistant_json["response"].lower()
+    assert "bread" in response
+    assert "fish" in response
 
 
 def test_bootstrap_teacher_redirects_hunger_when_npc_has_no_food() -> None:
