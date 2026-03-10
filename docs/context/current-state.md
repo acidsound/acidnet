@@ -5,7 +5,7 @@
 This is the short rolling status file for new conversations.
 Keep it brief and update it when the active slice changes.
 
-Updated: 2026-03-09
+Updated: 2026-03-10
 
 ## Priority Rule
 
@@ -81,7 +81,7 @@ If they compete for the next thin slice, this file decides.
 - bootstrap dialogue data now also rotates fact-grounded vendor hard cases for exact quotes, sellable stock, accepted offers, counteroffers, negative offers, debt requests, and free-food requests, and those samples can now carry server-authored `trade_fact` into the runtime dialogue prompt
 - runtime-aligned SFT export now also emits parser-side trade-intent examples for quote, stock, and offer cases, so the `openai_compat` model-assisted trade parser can be tuned against the same canonical trade facts as the phrasing path
 - the canonical bootstrap prompt pack plus runtime-dialogue train/eval and maintained bench splits were refreshed after the trade-parser hard-case expansion, so the next WSL smoke/full refresh consumes the current `bootstrap_teacher` artifacts by default
-- the refreshed full WSL dialogue run completed, but the resulting gate report still fails five prompt rows (`origin_direct`, three `trade_request_stock`, and one `rumor_request_known`), so GGUF export and Hugging Face promotion remain blocked behind another prompt-refresh pass
+- the refreshed `gatefix_20260310` full WSL dialogue run completed, but the resulting gate report still fails four prompt rows (`Bina trade_request_stock`, `Doran trade_request_stock`, `Hobb trade_request_stock`, and `Mara hunger_direct`), so GGUF export and Hugging Face promotion remain blocked behind another prompt-refresh pass
 - teacher shaping and runtime prompt rules now push `origin_direct` toward home/work anchors, force food-stock answers to name current sellable food instead of vague stock chatter, and force known-rumor answers to surface an actual rumor in the first sentence
 - shared dialogue output cleanup and sentence-limit enforcement now run through one post-processing path across `heuristic`, `openai_compat`, and `local_peft`
 - shared dialogue cleanup now also unwraps common code-fenced or JSON-wrapped replies before sentence limiting, reducing backend-specific formatting drift from runtime and eval servers
@@ -122,12 +122,12 @@ If they compete for the next thin slice, this file decides.
 1. Keep the regenerated `bootstrap_teacher` prompt-pack, train/eval split, and maintained bench split as the canonical runtime-dialogue dataset inputs for the next smoke/full refresh.
 2. Keep the `commit/push -> WSL pull -> smoke/full/gate` operating loop explicit, so training always runs against a clean GitHub-backed source snapshot instead of an ad hoc `/mnt/...` worktree.
 3. Fix the current fresh-full gate failures directly in teacher/data/prompt shaping before the next export attempt:
-   - `Anik origin_direct`
    - `Bina trade_request_stock`
+   - `Doran trade_request_stock`
    - `Hobb trade_request_stock`
-   - `Iva rumor_request_known`
-   - `Mara trade_request_stock`
-4. Re-run WSL smoke, then full, then model-gate after those hard-case fixes, and only continue to GGUF export plus Hugging Face publish if that refreshed gate clears.
+   - `Mara hunger_direct`
+4. The latest `gatefix_20260310` run now measures `prompt_avg=0.979`, `prompt_fail_rows=4`, `prompt_latency_ms=2444.8`, `circulation=0.807`, and `starving=0`; use that report as the current promotion baseline until the next refresh lands.
+5. Re-run WSL smoke, then full, then model-gate after those hard-case fixes, and only continue to GGUF export plus Hugging Face publish if that refreshed gate clears.
 
 ### Track A: Structural Boundary
 
