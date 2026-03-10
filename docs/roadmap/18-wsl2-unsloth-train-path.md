@@ -130,6 +130,13 @@ Model repo layout:
 - `runs/<run-name>/gguf/adapter_manifest.json`
 - `runs/<run-name>/manifests/publish_manifest.json`
 
+Portable model publish rule:
+
+- the raw trainer output directory `data/training/<run-name>_adapter/` can contain `checkpoint-*` resume state
+- `run_publish_hf_artifacts.py` now stages a clean sibling bundle at `data/training/<run-name>_adapter_publish/` whenever the raw adapter directory still contains checkpoints
+- only that clean publish bundle should be uploaded to Hugging Face model storage
+- after a run is complete and no longer needs resume support, local `checkpoint-*` directories may be deleted without affecting inference, GGUF export, or the clean publish bundle
+
 The Hub repos are a registry only.
 Training and runtime still read local files under `data/` and `models/`.
 
@@ -205,7 +212,7 @@ python run_export_gguf.py `
 ```powershell
 python run_publish_hf_artifacts.py `
   --run-name <run-name> `
-  --adapter-dir data/training/<run-name>_adapter_publish `
+  --adapter-dir data/training/<run-name>_adapter `
   --gguf-path data/gguf/<run-name>_adapter-f16.gguf `
   --gguf-path data/gguf/<run-name>_adapter_manifest.json `
   --dataset-file data/prompt_packs/bootstrap_teacher_requests.parquet `
@@ -221,6 +228,8 @@ python run_publish_hf_artifacts.py `
   --dataset-file data/eval/model_gate_<run-name>_report.json `
   --base-model Qwen/Qwen3.5-4B
 ```
+
+The publisher now materializes `data/training/<run-name>_adapter_publish/` automatically when the raw adapter directory still contains `checkpoint-*`.
 
 ## Current Measured Result
 

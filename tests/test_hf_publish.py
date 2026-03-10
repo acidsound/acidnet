@@ -178,6 +178,7 @@ def test_publish_artifacts_uploads_model_dataset_and_manifest(tmp_path: Path) ->
         model_repo_id="acidsound/acidnet_model",
         dataset_repo_id="acidsound/acidnet_dataset",
         private=True,
+        adapter_source_dir=adapter_dir,
         adapter_dir=adapter_dir,
         gguf_paths=(gguf_path,),
         dataset_files=(train_path, eval_path),
@@ -320,11 +321,13 @@ def test_manifest_uses_relative_paths_and_records_remote_targets(tmp_path: Path)
         model_repo_id="acidsound/acidnet_model",
         dataset_repo_id="acidsound/acidnet_dataset",
         private=True,
+        adapter_source_dir=adapter_dir,
         adapter_dir=adapter_dir,
         gguf_paths=(gguf_path,),
         dataset_files=(dataset_path,),
         manifest_path=manifest_path,
         metadata={
+            "adapter_source_dir": hf_publish.portable_repo_path(adapter_dir),
             "adapter_dir": hf_publish.portable_repo_path(adapter_dir),
             "gguf_paths": [hf_publish.portable_repo_path(gguf_path)],
             "dataset_files": [hf_publish.portable_repo_path(dataset_path)],
@@ -350,6 +353,7 @@ def test_manifest_uses_relative_paths_and_records_remote_targets(tmp_path: Path)
     payload = json.loads(written.read_text(encoding="utf-8"))
 
     assert payload["adapter_dir"] == "data/test_artifacts/hf_publish_adapter"
+    assert payload["adapter_source_dir"] == "data/test_artifacts/hf_publish_adapter"
     assert payload["gguf_paths"] == ["data/test_artifacts/hf_publish.gguf"]
     assert payload["dataset_files"] == ["data/test_artifacts/hf_publish_dataset.jsonl"]
     assert payload["manifest_path"] == "data/test_artifacts/hf_publish_manifest.json"
@@ -398,3 +402,101 @@ def test_build_publish_plan_adds_promoted_alias_when_requested(tmp_path: Path) -
         "publish_manifest": "promoted/latest/manifests/publish_manifest.json",
         "dataset_files": ["promoted/latest/extras/train.jsonl"],
     }
+
+
+def test_build_publish_plan_uses_clean_publish_bundle_for_checkpointed_adapter(tmp_path: Path) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text("HF_TOKEN=hf_token\n", encoding="utf-8")
+    adapter_dir = tmp_path / "runtime_adapter"
+    adapter_dir.mkdir()
+    (adapter_dir / "adapter_config.json").write_text("{}", encoding="utf-8")
+    (adapter_dir / "checkpoint-250").mkdir()
+
+    args = hf_publish.build_parser().parse_args(
+        [
+            "--env-file",
+            str(env_path),
+            "--run-name",
+            "checkpointed-run",
+            "--adapter-dir",
+            str(adapter_dir),
+            "--skip-dataset",
+        ]
+    )
+
+    _, plan = hf_publish.build_publish_plan(args, process_env={})
+
+    assert plan.adapter_source_dir == adapter_dir
+    assert plan.adapter_dir == adapter_dir.with_name("runtime_adapter_publish")
+    assert plan.metadata["adapter_source_dir"] == hf_publish.portable_repo_path(adapter_dir)
+    assert plan.metadata["adapter_dir"] == hf_publish.portable_repo_path(adapter_dir.with_name("runtime_adapter_publish"))
+
+
+def test_publish_artifacts_materializes_clean_adapter_bundle(tmp_path: Path) -> None:
+    source_adapter_dir = tmp_path / "runtime_adapter"
+    source_adapter_dir.mkdir()
+    (source_adapter_dir / "adapter_config.json").write_text("{}", encoding="utf-8")
+    (source_adapter_dir / "adapter_model.safetensors").write_bytes(b"SAFE")
+    checkpoint_dir = source_adapter_dir / "checkpoint-250"
+    checkpoint_dir.mkdir()
+    (checkpoint_dir / "optimizer.pt").write_bytes(b"OPT")
+
+    publish_adapter_dir = tmp_path / "runtime_adapter_publish"
+    manifest_path = tmp_path / "publish_manifest.json"
+
+    plan = hf_publish.HFPublishPlan(
+        run_name="clean-bundle-run",
+        dataset_name="clean-bundle-run",
+        model_repo_id="acidsound/acidnet_model",
+        dataset_repo_id="acidsound/acidnet_dataset",
+        private=True,
+        adapter_source_dir=source_adapter_dir,
+        adapter_dir=publish_adapter_dir,
+        gguf_paths=tuple(),
+        dataset_files=tuple(),
+        manifest_path=manifest_path,
+        metadata={
+            "adapter_source_dir": str(source_adapter_dir),
+            "adapter_dir": str(publish_adapter_dir),
+            "gguf_paths": [],
+            "dataset_files": [],
+            "manifest_path": str(manifest_path),
+            "promotion_status": "candidate",
+            "promote_latest": False,
+            "gate_summary": None,
+            "model_repo_paths": {
+                "readme": "README.md",
+                "publish_manifest": "runs/clean-bundle-run/manifests/publish_manifest.json",
+                "adapter_dir": "runs/clean-bundle-run/adapter",
+            },
+            "dataset_repo_paths": {
+                "readme": "README.md",
+                "publish_manifest": "runs/clean-bundle-run/manifests/publish_manifest.json",
+            },
+        },
+    )
+    settings = hf_publish.HFPublishSettings(
+        token="hf_token",
+        namespace="acidsound",
+        model_repo="acidnet_model",
+        dataset_repo="acidnet_dataset",
+        private=True,
+    )
+    api = FakeUploadApi()
+
+    hf_publish.publish_artifacts(settings, plan, api=api)
+
+    assert publish_adapter_dir.exists()
+    assert (publish_adapter_dir / "adapter_config.json").exists()
+    assert (publish_adapter_dir / "adapter_model.safetensors").exists()
+    assert not (publish_adapter_dir / "checkpoint-250").exists()
+    assert (
+        "upload_folder",
+        {
+            "folder_path": str(publish_adapter_dir),
+            "path_in_repo": "runs/clean-bundle-run/adapter",
+            "repo_id": "acidsound/acidnet_model",
+            "repo_type": "model",
+            "commit_message": "Upload adapter for clean-bundle-run",
+        },
+    ) in api.calls

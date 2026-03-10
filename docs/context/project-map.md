@@ -59,6 +59,7 @@ The goal is to show where the live contracts actually sit in code and tests.
   - local and uploaded `publish_manifest.json` files are intended to stay portable: they record repo-relative source paths plus Hub `runs/<run-name>/...` targets instead of machine-specific absolute paths
   - the publish step also refreshes the repo-root `README.md` cards in both HF repos so the restore layout is visible from the Hub UI
   - failed or candidate runs can still be uploaded under `runs/<run-name>/...`; only explicitly promoted runs should refresh the optional `promoted/latest/...` alias
+  - when `--adapter-dir` points at a raw trainer output directory that still contains `checkpoint-*`, the publisher now stages a clean sibling bundle at `data/training/<run-name>_adapter_publish/` and uploads that portable bundle instead of the raw checkpoint tree
 - `acidnet_qwen3.5_4b_gguf_lora.ipynb`: standalone Google Colab notebook that restores a published AcidNet dataset run from Hugging Face, fine-tunes a fresh Unsloth LoRA adapter, and can optionally export/upload the adapter GGUF back to the Hub
 - `acidnet_qwen3.5_4b_unsloth_t4_colab.ipynb`: alternate Google Colab notebook tuned for the official free-T4 Unsloth install matrix; it defaults to a smoke run and is meant as a compatibility probe before attempting longer Colab training
 - `run_local_adapter_server.py`: local OpenAI-compatible adapter server for dev/eval, not the promoted deployment runtime
@@ -87,6 +88,7 @@ The goal is to show where the live contracts actually sit in code and tests.
   - only promoted runs should also refresh `promoted/latest/...`; failed-gate runs should keep their adapter-only upload under `runs/<run-name>/...`
   - restore the final PEFT adapter bundle into `data/training/<run-name>_adapter/` for `local_peft` dev/eval use
   - restore the LoRA GGUF into `data/gguf/` for `llama-server` deployment
+  - `checkpoint-*` directories are resume-only trainer state and are not part of the portable model bundle; once a run is definitively finished and no longer needs resume support, those checkpoint directories can be deleted locally without affecting inference, gate replay, GGUF export, or the clean publish bundle
 - The base quantized model is still separate.
   - `acidnet_model` stores the fine-tuned adapter and adapter GGUF, not the base `Q4_K_M` model itself
   - the promoted runtime expects the base GGUF at `models/Qwen3.5-4B-Q4_K_M.gguf`

@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -69,6 +70,7 @@ class HFPublishPlan:
     model_repo_id: str
     dataset_repo_id: str
     private: bool
+    adapter_source_dir: Path | None
     adapter_dir: Path | None
     gguf_paths: tuple[Path, ...]
     dataset_files: tuple[Path, ...]
@@ -201,7 +203,12 @@ def build_publish_plan(args: argparse.Namespace, process_env: dict[str, str] | N
         raise ValueError("--run-name must not be empty.")
     dataset_name = args.dataset_name.strip() or run_name
 
-    adapter_dir = None if args.skip_model or not args.adapter_dir else resolve_repo_path(args.adapter_dir)
+    adapter_source_dir = None if args.skip_model or not args.adapter_dir else resolve_repo_path(args.adapter_dir)
+    adapter_dir = (
+        None
+        if adapter_source_dir is None
+        else resolve_publish_adapter_dir(adapter_source_dir)
+    )
     gguf_paths = tuple() if args.skip_model else tuple(resolve_repo_path(path) for path in args.gguf_path)
     dataset_paths = (
         tuple()
@@ -225,7 +232,7 @@ def build_publish_plan(args: argparse.Namespace, process_env: dict[str, str] | N
     if args.promote_latest and args.promotion_status != "promoted":
         raise ValueError("--promote-latest may only be used with --promotion-status promoted.")
 
-    validate_model_inputs(adapter_dir=adapter_dir, gguf_paths=gguf_paths, skip_model=args.skip_model)
+    validate_model_inputs(adapter_dir=adapter_source_dir, gguf_paths=gguf_paths, skip_model=args.skip_model)
     validate_dataset_inputs(dataset_paths=dataset_paths, skip_dataset=args.skip_dataset)
 
     model_repo_paths = build_model_repo_paths(run_name=run_name, adapter_dir=adapter_dir, gguf_paths=gguf_paths)
@@ -246,6 +253,7 @@ def build_publish_plan(args: argparse.Namespace, process_env: dict[str, str] | N
         "model_repo_id": f"{settings.namespace}/{settings.model_repo}",
         "dataset_repo_id": f"{settings.namespace}/{settings.dataset_repo}",
         "private": settings.private,
+        "adapter_source_dir": portable_repo_path(adapter_source_dir) if adapter_source_dir else None,
         "adapter_dir": portable_repo_path(adapter_dir) if adapter_dir else None,
         "gguf_paths": [portable_repo_path(path) for path in gguf_paths],
         "dataset_files": [portable_repo_path(path) for path in dataset_paths],
@@ -264,6 +272,7 @@ def build_publish_plan(args: argparse.Namespace, process_env: dict[str, str] | N
         model_repo_id=f"{settings.namespace}/{settings.model_repo}",
         dataset_repo_id=f"{settings.namespace}/{settings.dataset_repo}",
         private=settings.private,
+        adapter_source_dir=adapter_source_dir,
         adapter_dir=adapter_dir,
         gguf_paths=gguf_paths,
         dataset_files=dataset_paths,
@@ -292,6 +301,33 @@ def portable_repo_path(path: Path) -> str:
         return path.resolve(strict=False).relative_to(ROOT.resolve()).as_posix()
     except ValueError:
         return str(path)
+
+
+def resolve_publish_adapter_dir(adapter_dir: Path) -> Path:
+    if adapter_dir.name.endswith("_publish"):
+        return adapter_dir
+    if adapter_dir_contains_checkpoints(adapter_dir):
+        return adapter_dir.with_name(f"{adapter_dir.name}_publish")
+    return adapter_dir
+
+
+def adapter_dir_contains_checkpoints(adapter_dir: Path) -> bool:
+    if not adapter_dir.exists() or not adapter_dir.is_dir():
+        return False
+    return any(child.is_dir() and child.name.startswith("checkpoint-") for child in adapter_dir.iterdir())
+
+
+def materialize_adapter_publish_bundle(*, source_dir: Path, publish_dir: Path) -> Path:
+    publish_dir.parent.mkdir(parents=True, exist_ok=True)
+    if publish_dir.exists():
+        shutil.rmtree(publish_dir)
+    publish_dir.mkdir(parents=True, exist_ok=True)
+
+    for child in source_dir.iterdir():
+        if child.is_dir():
+            continue
+        shutil.copy2(child, publish_dir / child.name)
+    return publish_dir
 
 
 def build_model_repo_paths(
@@ -483,6 +519,8 @@ def publish_artifacts(settings: HFPublishSettings, plan: HFPublishPlan, *, api: 
         api = build_hf_api(settings.token)
 
     if plan.adapter_dir is not None or plan.gguf_paths:
+        if plan.adapter_source_dir is not None and plan.adapter_dir is not None and plan.adapter_source_dir != plan.adapter_dir:
+            materialize_adapter_publish_bundle(source_dir=plan.adapter_source_dir, publish_dir=plan.adapter_dir)
         api.create_repo(repo_id=plan.model_repo_id, repo_type="model", private=plan.private, exist_ok=True)
         upload_repo_readme(api, plan, repo_type="model")
         upload_model_artifacts(api, plan)
