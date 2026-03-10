@@ -404,6 +404,45 @@ def test_build_publish_plan_adds_promoted_alias_when_requested(tmp_path: Path) -
     }
 
 
+def test_build_dataset_repo_readme_adds_preview_config_for_bench_files(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "publish_manifest.json"
+    plan = hf_publish.HFPublishPlan(
+        run_name="viewer-run",
+        dataset_name="viewer-run",
+        model_repo_id="acidsound/acidnet_model",
+        dataset_repo_id="acidsound/acidnet_dataset",
+        private=True,
+        adapter_source_dir=None,
+        adapter_dir=None,
+        gguf_paths=tuple(),
+        dataset_files=tuple(),
+        manifest_path=manifest_path,
+        metadata={
+            "promotion_status": "candidate",
+            "promote_latest": False,
+            "gate_summary": None,
+            "dataset_repo_paths": {
+                "readme": "README.md",
+                "publish_manifest": "runs/viewer-run/manifests/publish_manifest.json",
+                "dataset_files": [
+                    "runs/viewer-run/sft/train.jsonl",
+                    "runs/viewer-run/sft/eval.jsonl",
+                    "runs/viewer-run/sft/bench_train_1024.jsonl",
+                    "runs/viewer-run/sft/bench_eval_128.jsonl",
+                ],
+            },
+            "dataset_files": [],
+        },
+    )
+
+    content = hf_publish.build_dataset_repo_readme(plan)
+
+    assert "configs:" in content
+    assert "config_name: latest_preview" in content
+    assert "path: runs/viewer-run/sft/bench_train_1024.jsonl" in content
+    assert "path: runs/viewer-run/sft/bench_eval_128.jsonl" in content
+
+
 def test_build_publish_plan_uses_clean_publish_bundle_for_checkpointed_adapter(tmp_path: Path) -> None:
     env_path = tmp_path / ".env"
     env_path.write_text("HF_TOKEN=hf_token\n", encoding="utf-8")

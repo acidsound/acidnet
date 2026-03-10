@@ -58,6 +58,7 @@ The goal is to show where the live contracts actually sit in code and tests.
 - `run_publish_hf_artifacts.py`: `.env`-driven Hugging Face publish tool for LoRA/GGUF model artifacts and runtime-dialogue datasets
   - local and uploaded `publish_manifest.json` files are intended to stay portable: they record repo-relative source paths plus Hub `runs/<run-name>/...` targets instead of machine-specific absolute paths
   - the publish step also refreshes the repo-root `README.md` cards in both HF repos so the restore layout is visible from the Hub UI
+  - dataset repo cards now also pin the Hub viewer to the latest run's maintained bench split so the default page reads a small preview dataset instead of trying to open the full artifact registry payload
   - failed or candidate runs can still be uploaded under `runs/<run-name>/...`; only explicitly promoted runs should refresh the optional `promoted/latest/...` alias
   - when `--adapter-dir` points at a raw trainer output directory that still contains `checkpoint-*`, the publisher now stages a clean sibling bundle at `data/training/<run-name>_adapter_publish/` and uploads that portable bundle instead of the raw checkpoint tree
 - `acidnet_qwen3.5_4b_gguf_lora.ipynb`: standalone Google Colab notebook that restores a published AcidNet dataset run from Hugging Face, fine-tunes a fresh Unsloth LoRA adapter, and can optionally export/upload the adapter GGUF back to the Hub

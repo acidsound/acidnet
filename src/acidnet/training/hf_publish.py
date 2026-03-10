@@ -713,6 +713,7 @@ def build_dataset_repo_readme(plan: HFPublishPlan) -> str:
     promoted_paths = repo_paths.get("promoted_latest", {})
     promotion_status = plan.metadata.get("promotion_status", "candidate")
     gate_summary = plan.metadata.get("gate_summary") or {}
+    yaml_front_matter = build_dataset_viewer_front_matter(repo_paths)
     dataset_lines = "\n".join(
         f"- `{local_path}` -> `{remote_path}`"
         for local_path, remote_path in zip(
@@ -722,14 +723,8 @@ def build_dataset_repo_readme(plan: HFPublishPlan) -> str:
         )
     ) or "- none"
     return (
-        "---\n"
-        "tags:\n"
-        "- acidnet\n"
-        "- generated\n"
-        "- dialogue\n"
-        "task_categories:\n"
-        "- text-generation\n"
-        "---\n\n"
+        yaml_front_matter
+        +
         "# AcidNet Runtime Dialogue Datasets\n\n"
         "This repo stores generated AcidNet dialogue datasets and provenance bundles.\n\n"
         "It is a portability registry. Training still reads local files under `data/`, so restore published files back into the same repo-relative paths before rerunning WSL training or local evaluation.\n\n"
@@ -769,6 +764,34 @@ def build_dataset_repo_readme(plan: HFPublishPlan) -> str:
         "## Published Files\n\n"
         f"{dataset_lines}\n"
     )
+
+
+def build_dataset_viewer_front_matter(repo_paths: dict[str, object]) -> str:
+    dataset_files = [str(path) for path in repo_paths.get("dataset_files", [])]
+    bench_train = next((path for path in dataset_files if path.endswith("/sft/bench_train_1024.jsonl")), "")
+    bench_eval = next((path for path in dataset_files if path.endswith("/sft/bench_eval_128.jsonl")), "")
+
+    lines = [
+        "---",
+        "tags:",
+        "- acidnet",
+        "- generated",
+        "- dialogue",
+        "task_categories:",
+        "- text-generation",
+    ]
+    if bench_train and bench_eval:
+        lines.extend(
+            [
+                "configs:",
+                "- config_name: latest_preview",
+                "  data_files:",
+                f"  - split: train\n    path: {bench_train}",
+                f"  - split: validation\n    path: {bench_eval}",
+            ]
+        )
+    lines.append("---\n")
+    return "\n".join(lines)
 
 
 def build_hf_api(token: str) -> UploadApi:
