@@ -148,6 +148,8 @@ def test_build_publish_plan_uses_default_dataset_targets(tmp_path: Path, monkeyp
         hf_publish.portable_repo_path(eval_path),
     ]
     assert plan.metadata["manifest_path"] == "data/training/runtime-dialogue-smoke_hf_publish_manifest.json"
+    assert plan.metadata["promotion_status"] == "candidate"
+    assert plan.metadata["promote_latest"] is False
     assert plan.metadata["dataset_repo_paths"] == {
         "readme": "README.md",
         "publish_manifest": "runs/runtime-dialogue-smoke/manifests/publish_manifest.json",
@@ -182,6 +184,17 @@ def test_publish_artifacts_uploads_model_dataset_and_manifest(tmp_path: Path) ->
         manifest_path=manifest_path,
         metadata={
             "run_name": "runtime-dialogue-full",
+            "promotion_status": "failed_gate",
+            "promote_latest": False,
+            "gate_summary": {
+                "report_path": "data/eval/model_gate_runtime_dialogue_full_report.json",
+                "gate_passed": False,
+                "prompt_average_score": 0.979,
+                "prompt_rows_with_failures": 4,
+                "prompt_average_latency_ms": 2444.8,
+                "circulation_score": 0.807,
+                "starving_npc_count": 0,
+            },
             "model_repo_paths": {
                 "readme": "README.md",
                 "publish_manifest": "runs/runtime-dialogue-full/manifests/publish_manifest.json",
@@ -316,6 +329,9 @@ def test_manifest_uses_relative_paths_and_records_remote_targets(tmp_path: Path)
             "gguf_paths": [hf_publish.portable_repo_path(gguf_path)],
             "dataset_files": [hf_publish.portable_repo_path(dataset_path)],
             "manifest_path": hf_publish.portable_repo_path(manifest_path),
+            "promotion_status": "candidate",
+            "promote_latest": False,
+            "gate_summary": None,
             "model_repo_paths": {
                 "readme": "README.md",
                 "publish_manifest": "runs/portable-run/manifests/publish_manifest.json",
@@ -337,7 +353,48 @@ def test_manifest_uses_relative_paths_and_records_remote_targets(tmp_path: Path)
     assert payload["gguf_paths"] == ["data/test_artifacts/hf_publish.gguf"]
     assert payload["dataset_files"] == ["data/test_artifacts/hf_publish_dataset.jsonl"]
     assert payload["manifest_path"] == "data/test_artifacts/hf_publish_manifest.json"
+    assert payload["promotion_status"] == "candidate"
+    assert payload["promote_latest"] is False
     assert payload["model_repo_paths"]["readme"] == "README.md"
     assert payload["model_repo_paths"]["adapter_dir"] == "runs/portable-run/adapter"
     assert payload["dataset_repo_paths"]["readme"] == "README.md"
     assert payload["dataset_repo_paths"]["dataset_files"] == ["runs/portable-run/extras/hf_publish_dataset.jsonl"]
+
+
+def test_build_publish_plan_adds_promoted_alias_when_requested(tmp_path: Path) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text("HF_TOKEN=hf_token\n", encoding="utf-8")
+    adapter_dir = tmp_path / "adapter"
+    adapter_dir.mkdir()
+    (adapter_dir / "adapter_config.json").write_text("{}", encoding="utf-8")
+    dataset_path = tmp_path / "train.jsonl"
+    dataset_path.write_text('{"messages":[]}\n', encoding="utf-8")
+
+    args = hf_publish.build_parser().parse_args(
+        [
+            "--env-file",
+            str(env_path),
+            "--run-name",
+            "promoted-run",
+            "--adapter-dir",
+            str(adapter_dir),
+            "--dataset-file",
+            str(dataset_path),
+            "--promotion-status",
+            "promoted",
+            "--promote-latest",
+        ]
+    )
+
+    _, plan = hf_publish.build_publish_plan(args, process_env={})
+
+    assert plan.metadata["promotion_status"] == "promoted"
+    assert plan.metadata["promote_latest"] is True
+    assert plan.metadata["model_repo_paths"]["promoted_latest"] == {
+        "publish_manifest": "promoted/latest/manifests/publish_manifest.json",
+        "adapter_dir": "promoted/latest/adapter",
+    }
+    assert plan.metadata["dataset_repo_paths"]["promoted_latest"] == {
+        "publish_manifest": "promoted/latest/manifests/publish_manifest.json",
+        "dataset_files": ["promoted/latest/extras/train.jsonl"],
+    }

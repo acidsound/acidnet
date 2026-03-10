@@ -58,6 +58,7 @@ The goal is to show where the live contracts actually sit in code and tests.
 - `run_publish_hf_artifacts.py`: `.env`-driven Hugging Face publish tool for LoRA/GGUF model artifacts and runtime-dialogue datasets
   - local and uploaded `publish_manifest.json` files are intended to stay portable: they record repo-relative source paths plus Hub `runs/<run-name>/...` targets instead of machine-specific absolute paths
   - the publish step also refreshes the repo-root `README.md` cards in both HF repos so the restore layout is visible from the Hub UI
+  - failed or candidate runs can still be uploaded under `runs/<run-name>/...`; only explicitly promoted runs should refresh the optional `promoted/latest/...` alias
 - `acidnet_qwen3.5_4b_gguf_lora.ipynb`: standalone Google Colab notebook that restores a published AcidNet dataset run from Hugging Face, fine-tunes a fresh Unsloth LoRA adapter, and can optionally export/upload the adapter GGUF back to the Hub
 - `acidnet_qwen3.5_4b_unsloth_t4_colab.ipynb`: alternate Google Colab notebook tuned for the official free-T4 Unsloth install matrix; it defaults to a smoke run and is meant as a compatibility probe before attempting longer Colab training
 - `run_local_adapter_server.py`: local OpenAI-compatible adapter server for dev/eval, not the promoted deployment runtime
@@ -73,6 +74,8 @@ The goal is to show where the live contracts actually sit in code and tests.
 - Training, evaluation, and runtime still read local files under `data/` and `models/`.
 - The default dataset repo is `acidsound/acidnet_dataset`.
   - each published run now uses stable subpaths such as `runs/<run-name>/prompt_packs/`, `runs/<run-name>/sft/`, `runs/<run-name>/preferences/`, and `runs/<run-name>/manifests/`
+  - upload status is recorded in the run manifest as `candidate`, `failed_gate`, or `promoted`
+  - only promoted runs should also refresh `promoted/latest/...`; failed-gate runs should remain under their immutable `runs/<run-name>/...` prefix for comparison and sharing
   - restore prompt-pack provenance into `data/prompt_packs/`
   - restore train/eval and bench splits into `data/sft/`
   - restore optional RL precursor preference data into `data/preferences/`
@@ -80,6 +83,8 @@ The goal is to show where the live contracts actually sit in code and tests.
   - restore gate reports into `data/eval/`
 - The default model repo is `acidsound/acidnet_model`.
   - each published run now uses stable subpaths such as `runs/<run-name>/adapter/`, `runs/<run-name>/gguf/`, and `runs/<run-name>/manifests/`
+  - upload status is recorded in the run manifest as `candidate`, `failed_gate`, or `promoted`
+  - only promoted runs should also refresh `promoted/latest/...`; failed-gate runs should keep their adapter-only upload under `runs/<run-name>/...`
   - restore the final PEFT adapter bundle into `data/training/<run-name>_adapter/` for `local_peft` dev/eval use
   - restore the LoRA GGUF into `data/gguf/` for `llama-server` deployment
 - The base quantized model is still separate.

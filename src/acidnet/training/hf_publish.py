@@ -119,6 +119,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional base model identifier for metadata.",
     )
     parser.add_argument(
+        "--promotion-status",
+        choices=("candidate", "failed_gate", "promoted"),
+        default="candidate",
+        help="Promotion state recorded in the publish manifest and Hub README cards.",
+    )
+    parser.add_argument(
+        "--promote-latest",
+        action="store_true",
+        help="Also refresh promoted/latest aliases in the Hub repos. Use only for gate-passing promoted runs.",
+    )
+    parser.add_argument(
         "--skip-model",
         action="store_true",
         help="Skip publishing LoRA/GGUF artifacts.",
@@ -211,12 +222,21 @@ def build_publish_plan(args: argparse.Namespace, process_env: dict[str, str] | N
         raise ValueError("At least one of model or dataset publishing must stay enabled.")
     if not args.skip_model and adapter_dir is None and not gguf_paths:
         raise ValueError("Model publishing requires --adapter-dir or at least one --gguf-path.")
+    if args.promote_latest and args.promotion_status != "promoted":
+        raise ValueError("--promote-latest may only be used with --promotion-status promoted.")
 
     validate_model_inputs(adapter_dir=adapter_dir, gguf_paths=gguf_paths, skip_model=args.skip_model)
     validate_dataset_inputs(dataset_paths=dataset_paths, skip_dataset=args.skip_dataset)
 
     model_repo_paths = build_model_repo_paths(run_name=run_name, adapter_dir=adapter_dir, gguf_paths=gguf_paths)
     dataset_repo_paths = build_dataset_repo_paths(dataset_name=dataset_name, dataset_paths=dataset_paths)
+    gate_summary = extract_gate_summary(dataset_paths)
+    if args.promote_latest:
+        model_repo_paths["promoted_latest"] = build_promoted_model_repo_paths(
+            adapter_dir=adapter_dir,
+            gguf_paths=gguf_paths,
+        )
+        dataset_repo_paths["promoted_latest"] = build_promoted_dataset_repo_paths(dataset_paths=dataset_paths)
 
     metadata = {
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -234,6 +254,9 @@ def build_publish_plan(args: argparse.Namespace, process_env: dict[str, str] | N
         "dataset_repo_paths": dataset_repo_paths,
         "code_commit": current_git_commit(ROOT),
         "base_model": args.base_model or None,
+        "promotion_status": args.promotion_status,
+        "promote_latest": bool(args.promote_latest),
+        "gate_summary": gate_summary,
     }
     plan = HFPublishPlan(
         run_name=run_name,
@@ -288,6 +311,21 @@ def build_model_repo_paths(
     return payload
 
 
+def build_promoted_model_repo_paths(
+    *,
+    adapter_dir: Path | None,
+    gguf_paths: tuple[Path, ...],
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "publish_manifest": "promoted/latest/manifests/publish_manifest.json",
+    }
+    if adapter_dir is not None:
+        payload["adapter_dir"] = "promoted/latest/adapter"
+    if gguf_paths:
+        payload["gguf_paths"] = [model_repo_path_for_root(path, root_prefix="promoted/latest/gguf") for path in gguf_paths]
+    return payload
+
+
 def build_dataset_repo_paths(*, dataset_name: str, dataset_paths: tuple[Path, ...]) -> dict[str, object]:
     payload: dict[str, object] = {
         "readme": "README.md",
@@ -298,14 +336,27 @@ def build_dataset_repo_paths(*, dataset_name: str, dataset_paths: tuple[Path, ..
     return payload
 
 
+def build_promoted_dataset_repo_paths(*, dataset_paths: tuple[Path, ...]) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "publish_manifest": "promoted/latest/manifests/publish_manifest.json",
+    }
+    if dataset_paths:
+        payload["dataset_files"] = [dataset_repo_path_for_root(path, root_prefix="promoted/latest") for path in dataset_paths]
+    return payload
+
+
 def model_repo_path_for_file(path: Path, *, run_name: str) -> str:
+    return model_repo_path_for_root(path, root_prefix=f"runs/{run_name}/gguf")
+
+
+def model_repo_path_for_root(path: Path, *, root_prefix: str) -> str:
     name = path.name
     if name.endswith(".gguf"):
         normalized = normalize_gguf_name(name)
-        return f"runs/{run_name}/gguf/{normalized}"
+        return f"{root_prefix}/{normalized}"
     if name.endswith(".json") and "manifest" in name.lower():
-        return f"runs/{run_name}/gguf/adapter_manifest.json"
-    return f"runs/{run_name}/gguf/{name}"
+        return f"{root_prefix}/adapter_manifest.json"
+    return f"{root_prefix}/{name}"
 
 
 def normalize_gguf_name(name: str) -> str:
@@ -316,9 +367,13 @@ def normalize_gguf_name(name: str) -> str:
 
 
 def dataset_repo_path_for_file(path: Path, *, dataset_name: str) -> str:
+    return dataset_repo_path_for_root(path, root_prefix=f"runs/{dataset_name}")
+
+
+def dataset_repo_path_for_root(path: Path, *, root_prefix: str) -> str:
     relative = portable_repo_path(path)
     mapped_name = map_dataset_relative_path(relative)
-    return f"runs/{dataset_name}/{mapped_name}"
+    return f"{root_prefix}/{mapped_name}"
 
 
 def map_dataset_relative_path(relative_path: str) -> str:
@@ -394,6 +449,28 @@ def current_git_commit(root: Path) -> str | None:
     return completed.stdout.strip() or None
 
 
+def extract_gate_summary(dataset_paths: tuple[Path, ...]) -> dict[str, Any] | None:
+    for path in dataset_paths:
+        relative = portable_repo_path(path)
+        if not (relative.startswith("data/eval/") and "model_gate" in relative and path.suffix == ".json"):
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        circulation = payload.get("circulation") or {}
+        return {
+            "report_path": relative,
+            "gate_passed": payload.get("gate_passed"),
+            "prompt_average_score": payload.get("prompt_average_score"),
+            "prompt_rows_with_failures": payload.get("prompt_rows_with_failures"),
+            "prompt_average_latency_ms": payload.get("prompt_average_latency_ms"),
+            "circulation_score": circulation.get("circulation_score"),
+            "starving_npc_count": circulation.get("starving_npc_count"),
+        }
+    return None
+
+
 def write_manifest(plan: HFPublishPlan) -> Path:
     plan.manifest_path.parent.mkdir(parents=True, exist_ok=True)
     plan.manifest_path.write_text(json.dumps(plan.metadata, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -416,6 +493,16 @@ def publish_artifacts(settings: HFPublishSettings, plan: HFPublishPlan, *, api: 
             repo_type="model",
             commit_message=f"Add publish manifest for {plan.run_name}",
         )
+        promoted_paths = plan.metadata["model_repo_paths"].get("promoted_latest")
+        if promoted_paths:
+            upload_model_artifacts(api, plan, repo_paths=promoted_paths)
+            api.upload_file(
+                path_or_fileobj=str(plan.manifest_path),
+                path_in_repo=str(promoted_paths["publish_manifest"]),
+                repo_id=plan.model_repo_id,
+                repo_type="model",
+                commit_message=f"Refresh promoted latest manifest for {plan.run_name}",
+            )
 
     if plan.dataset_files:
         api.create_repo(repo_id=plan.dataset_repo_id, repo_type="dataset", private=plan.private, exist_ok=True)
@@ -428,25 +515,38 @@ def publish_artifacts(settings: HFPublishSettings, plan: HFPublishPlan, *, api: 
             repo_type="dataset",
             commit_message=f"Add publish manifest for {plan.dataset_name}",
         )
+        promoted_paths = plan.metadata["dataset_repo_paths"].get("promoted_latest")
+        if promoted_paths:
+            upload_dataset_artifacts(api, plan, repo_paths=promoted_paths)
+            api.upload_file(
+                path_or_fileobj=str(plan.manifest_path),
+                path_in_repo=str(promoted_paths["publish_manifest"]),
+                repo_id=plan.dataset_repo_id,
+                repo_type="dataset",
+                commit_message=f"Refresh promoted latest manifest for {plan.dataset_name}",
+            )
 
     return plan.manifest_path
 
 
-def upload_model_artifacts(api: UploadApi, plan: HFPublishPlan) -> None:
+def upload_model_artifacts(api: UploadApi, plan: HFPublishPlan, *, repo_paths: dict[str, object] | None = None) -> None:
+    resolved_repo_paths = repo_paths or plan.metadata["model_repo_paths"]
     if plan.adapter_dir is not None:
         api.upload_folder(
             folder_path=str(plan.adapter_dir),
-            path_in_repo=str(plan.metadata["model_repo_paths"]["adapter_dir"]),
+            path_in_repo=str(resolved_repo_paths["adapter_dir"]),
             repo_id=plan.model_repo_id,
             repo_type="model",
             commit_message=f"Upload adapter for {plan.run_name}",
         )
 
-    for gguf_path in plan.gguf_paths:
+    gguf_repo_paths = list(resolved_repo_paths.get("gguf_paths", []))
+    for index, gguf_path in enumerate(plan.gguf_paths):
+        target_path = gguf_repo_paths[index] if index < len(gguf_repo_paths) else model_repo_path_for_file(gguf_path, run_name=plan.run_name)
         if gguf_path.is_dir():
             api.upload_folder(
                 folder_path=str(gguf_path),
-                path_in_repo=model_repo_path_for_file(gguf_path, run_name=plan.run_name),
+                path_in_repo=target_path,
                 repo_id=plan.model_repo_id,
                 repo_type="model",
                 commit_message=f"Upload GGUF directory for {plan.run_name}",
@@ -454,18 +554,25 @@ def upload_model_artifacts(api: UploadApi, plan: HFPublishPlan) -> None:
             continue
         api.upload_file(
             path_or_fileobj=str(gguf_path),
-            path_in_repo=model_repo_path_for_file(gguf_path, run_name=plan.run_name),
+            path_in_repo=target_path,
             repo_id=plan.model_repo_id,
             repo_type="model",
             commit_message=f"Upload GGUF file for {plan.run_name}",
         )
 
 
-def upload_dataset_artifacts(api: UploadApi, plan: HFPublishPlan) -> None:
-    for dataset_path in plan.dataset_files:
+def upload_dataset_artifacts(api: UploadApi, plan: HFPublishPlan, *, repo_paths: dict[str, object] | None = None) -> None:
+    resolved_repo_paths = repo_paths or plan.metadata["dataset_repo_paths"]
+    dataset_repo_files = list(resolved_repo_paths.get("dataset_files", []))
+    for index, dataset_path in enumerate(plan.dataset_files):
+        target_path = (
+            dataset_repo_files[index]
+            if index < len(dataset_repo_files)
+            else dataset_repo_path_for_file(dataset_path, dataset_name=plan.dataset_name)
+        )
         api.upload_file(
             path_or_fileobj=str(dataset_path),
-            path_in_repo=dataset_repo_path_for_file(dataset_path, dataset_name=plan.dataset_name),
+            path_in_repo=target_path,
             repo_id=plan.dataset_repo_id,
             repo_type="dataset",
             commit_message=f"Upload dataset file for {plan.dataset_name}",
@@ -503,6 +610,9 @@ def build_repo_readme(plan: HFPublishPlan, *, repo_type: str) -> str:
 
 def build_model_repo_readme(plan: HFPublishPlan) -> str:
     repo_paths = plan.metadata.get("model_repo_paths", {})
+    promoted_paths = repo_paths.get("promoted_latest", {})
+    promotion_status = plan.metadata.get("promotion_status", "candidate")
+    gate_summary = plan.metadata.get("gate_summary") or {}
     gguf_lines = "\n".join(
         f"- `{local_path}` -> `{remote_path}`"
         for local_path, remote_path in zip(
@@ -523,12 +633,34 @@ def build_model_repo_readme(plan: HFPublishPlan) -> str:
         "# AcidNet Model Artifacts\n\n"
         "This repo stores portable AcidNet model artifacts.\n\n"
         "It is a registry, not the live runtime mount. AcidNet still serves and evaluates local files after you restore them into the repo working tree.\n\n"
-        "## Latest Published Run\n\n"
+        "## Latest Uploaded Run\n\n"
         f"- run: `{plan.run_name}`\n"
+        f"- promotion status: `{promotion_status}`\n"
         f"- base model: `{plan.metadata.get('base_model') or 'unspecified'}`\n"
         f"- adapter repo path: `{repo_paths.get('adapter_dir', '(not published)')}`\n"
         f"- publish manifest: `{repo_paths.get('publish_manifest', '(missing)')}`\n"
         f"- repo card: `{repo_paths.get('readme', 'README.md')}`\n\n"
+        "## Promoted Alias\n\n"
+        + (
+            f"- updated by this publish: `promoted/latest`\n"
+            f"- adapter repo path: `{promoted_paths.get('adapter_dir', '(not published)')}`\n"
+            f"- publish manifest: `{promoted_paths.get('publish_manifest', '(missing)')}`\n\n"
+            if promoted_paths
+            else "- not updated by this publish\n\n"
+        )
+        + (
+            "## Gate Summary\n\n"
+            f"- gate passed: `{gate_summary.get('gate_passed')}`\n"
+            f"- prompt average score: `{gate_summary.get('prompt_average_score')}`\n"
+            f"- prompt rows with failures: `{gate_summary.get('prompt_rows_with_failures')}`\n"
+            f"- prompt average latency ms: `{gate_summary.get('prompt_average_latency_ms')}`\n"
+            f"- circulation score: `{gate_summary.get('circulation_score')}`\n"
+            f"- starving npc count: `{gate_summary.get('starving_npc_count')}`\n"
+            f"- source report: `{gate_summary.get('report_path')}`\n\n"
+            if gate_summary
+            else ""
+        )
+        +
         "## Restore Map\n\n"
         f"- restore `{repo_paths.get('adapter_dir', '(not published)')}` into a local directory such as `data/training/{plan.run_name}_adapter/` for `local_peft` dev/eval parity\n"
         "- restore the GGUF files below into `data/gguf/` for `llama-server`\n"
@@ -540,6 +672,9 @@ def build_model_repo_readme(plan: HFPublishPlan) -> str:
 
 def build_dataset_repo_readme(plan: HFPublishPlan) -> str:
     repo_paths = plan.metadata.get("dataset_repo_paths", {})
+    promoted_paths = repo_paths.get("promoted_latest", {})
+    promotion_status = plan.metadata.get("promotion_status", "candidate")
+    gate_summary = plan.metadata.get("gate_summary") or {}
     dataset_lines = "\n".join(
         f"- `{local_path}` -> `{remote_path}`"
         for local_path, remote_path in zip(
@@ -560,10 +695,31 @@ def build_dataset_repo_readme(plan: HFPublishPlan) -> str:
         "# AcidNet Runtime Dialogue Datasets\n\n"
         "This repo stores generated AcidNet dialogue datasets and provenance bundles.\n\n"
         "It is a portability registry. Training still reads local files under `data/`, so restore published files back into the same repo-relative paths before rerunning WSL training or local evaluation.\n\n"
-        "## Latest Published Run\n\n"
+        "## Latest Uploaded Run\n\n"
         f"- run: `{plan.dataset_name}`\n"
+        f"- promotion status: `{promotion_status}`\n"
         f"- publish manifest: `{repo_paths.get('publish_manifest', '(missing)')}`\n"
         f"- repo card: `{repo_paths.get('readme', 'README.md')}`\n\n"
+        "## Promoted Alias\n\n"
+        + (
+            f"- updated by this publish: `promoted/latest`\n"
+            f"- publish manifest: `{promoted_paths.get('publish_manifest', '(missing)')}`\n\n"
+            if promoted_paths
+            else "- not updated by this publish\n\n"
+        )
+        + (
+            "## Gate Summary\n\n"
+            f"- gate passed: `{gate_summary.get('gate_passed')}`\n"
+            f"- prompt average score: `{gate_summary.get('prompt_average_score')}`\n"
+            f"- prompt rows with failures: `{gate_summary.get('prompt_rows_with_failures')}`\n"
+            f"- prompt average latency ms: `{gate_summary.get('prompt_average_latency_ms')}`\n"
+            f"- circulation score: `{gate_summary.get('circulation_score')}`\n"
+            f"- starving npc count: `{gate_summary.get('starving_npc_count')}`\n"
+            f"- source report: `{gate_summary.get('report_path')}`\n\n"
+            if gate_summary
+            else ""
+        )
+        +
         "## Restore Map\n\n"
         "- restore prompt-pack provenance into `data/prompt_packs/`\n"
         "- restore train/eval and bench splits into `data/sft/`\n"
