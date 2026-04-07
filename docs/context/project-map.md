@@ -12,6 +12,7 @@ The goal is to show where the live contracts actually sit in code and tests.
 
 - `AGENTS.md`: project rules and read order
 - `docs/context/current-state.md`: rolling current priorities and risks
+- `docs/context/qwen35-lora-runbook.md`: one-page operator guide for Qwen3.5-4B LoRA refresh, gate, export, and HF publish
 - `docs/roadmap/00-execution-checklist.md`: top-level goal and promotion baseline
 - `docs/context/frontend-api-handoff.md`: frontend-only summary of queryable and controllable HTTP contract
 - `docs/roadmap/20-spatial-time-exchange-model.md`: world-model direction
