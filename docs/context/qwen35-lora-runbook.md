@@ -1,123 +1,153 @@
 # Qwen3.5-4B LoRA Runbook
 
-One-page operator guide for refreshing the AcidNet dialogue LoRA on another machine without rediscovering the workflow.
+Linux-first one-page guide for refreshing the AcidNet dialogue LoRA on a new machine.
 
-## Scope
+## Target Shape
 
+- GPU: single 24 GB class card such as RTX 4090
+- OS: native Linux
 - base model: `Qwen/Qwen3.5-4B`
-- training path: WSL-native or native Linux
 - source registry: GitHub
-- artifact registry: Hugging Face
+- artifact registry:
   - dataset repo: `acidsound/acidnet_dataset`
   - model repo: `acidsound/acidnet_model`
 
-## Ground Rules
+## Non-Negotiables
 
-- Edit and test from the main worktree on Windows or macOS.
-- Train only from a WSL-native clone such as `/home/<user>/work/acidnet`.
-- Do not run long training loops from `/mnt/...`.
-- The canonical dataset is regenerated locally, not trained directly from HF.
-- Gate first. Export GGUF and promote only after gate passes.
+- Train from a native Linux filesystem, not a mounted network or host path.
+- Regenerate the canonical dataset locally; do not train directly from Hugging Face files in place.
+- Use one clean git commit as the source snapshot for each training run.
+- Treat gate as the promotion boundary.
+- Upload every run to Hugging Face if it is useful for comparison, but refresh `promoted/latest` only after gate passes.
 
-## Restore Once On A New Machine
+## Local Layout
 
-1. Clone the repo and create a WSL-native training clone.
-2. Restore `.env`.
-3. Restore the base GGUF to `models/Qwen3.5-4B-Q4_K_M.gguf`.
-4. If you need an older candidate for comparison, restore prior runs from HF back into `data/...`.
+Keep these repo-relative paths stable:
 
-## Setup
+- `data/prompt_packs/`: prompt-pack inputs and teacher outputs
+- `data/sft/`: train/eval and bench splits
+- `data/training/`: run specs, adapters, publish manifests
+- `data/eval/`: gate reports
+- `data/gguf/`: exported adapter GGUF
+- `models/Qwen3.5-4B-Q4_K_M.gguf`: local base GGUF for runtime serving
 
-Use the maintained wrapper:
+## Environment
 
-```powershell
-powershell -ExecutionPolicy Bypass -File run_wsl_qwen_training.ps1 -Mode setup
-```
+Build an isolated Python 3.12 environment and install a Linux-native Unsloth stack that can reach the fast Qwen path.
+The healthy target is:
 
-This creates `.venv-wsl` and installs the maintained Unsloth stack. The known-good accelerated path is the recovered WSL baseline with `FA2 = True`.
+- CUDA torch installed
+- `unsloth`, `trl`, `peft`, `datasets`, `accelerate`, `bitsandbytes`
+- `flash-attn`, `flash-linear-attention`, `causal-conv1d`
+- startup banner shows `Fast Qwen3_5 patching`
+- startup banner shows `FA2 = True`
 
-## The Loop
+If `FA2 = False` or the runtime falls back to a degraded path, fix the environment before trusting long runs.
 
-1. Regenerate the canonical bootstrap dataset.
+## Data Refresh
 
-```powershell
-python run_bootstrap_qwen4b_pipeline.py
-```
+Before every real training cycle:
 
-2. Run smoke first.
+1. regenerate the canonical bootstrap prompt-pack
+2. regenerate the merged runtime-dialogue SFT dataset
+3. regenerate the maintained bench split
 
-```powershell
-powershell -ExecutionPolicy Bypass -File run_wsl_qwen_training.ps1 -Mode smoke
-```
+The canonical outputs to refresh are:
 
-3. If smoke is clean, run full.
+- `data/prompt_packs/bootstrap_teacher_requests.parquet`
+- `data/prompt_packs/bootstrap_teacher_outputs.jsonl`
+- `data/sft/train_bootstrap_teacher_sft_dataset.jsonl`
+- `data/sft/eval_bootstrap_teacher_sft_dataset.jsonl`
+- `data/sft/bench_train_1024.jsonl`
+- `data/sft/bench_eval_128.jsonl`
+- `data/training/bootstrap_qwen4b_pipeline.json`
 
-```powershell
-powershell -ExecutionPolicy Bypass -File run_wsl_qwen_training.ps1 -Mode full
-```
+## Training Loop
 
-4. Gate the fresh adapter.
+Run the loop in this order:
 
-```powershell
-python run_model_gate.py `
-  --dialogue-backend local_peft `
-  --dialogue-model Qwen/Qwen3.5-4B `
-  --dialogue-adapter-path data/training/<run-name>_adapter `
-  --turns 120 `
-  --output data/eval/model_gate_<run-name>_report.json
-```
+1. smoke
+2. full
+3. gate
+4. export GGUF only if gate passes
+5. publish model and dataset artifacts
 
-## Promotion Rule
+### Smoke
 
-- If gate fails:
-  - upload as `candidate` or `failed_gate` under `runs/<run-name>/...`
-  - do not refresh `promoted/latest/...`
-- If gate passes:
+Use the maintained bench split:
+
+- train: `data/sft/bench_train_1024.jsonl`
+- eval: `data/sft/bench_eval_128.jsonl`
+
+Smoke exists to verify:
+
+- the environment is still accelerated
+- the dataset shape is still valid
+- the trainer starts and saves correctly
+
+### Full
+
+Use the maintained full split:
+
+- train rows: `50000`
+- eval rows: `4000`
+
+Keep checkpoint cadence reasonably tight. `save_steps = 250` is the maintained baseline for long runs because it reduces restart cost without creating unmanageable churn.
+
+## Gate Rule
+
+A run is only promotable if the fresh adapter clears the combined gate.
+The gate report under `data/eval/` is the source of truth.
+
+- gate fail:
+  - keep the run for analysis
+  - upload as `candidate` or `failed_gate`
+  - do not refresh `promoted/latest`
+- gate pass:
   - export GGUF
-  - publish model and dataset artifacts
-  - then refresh `promoted/latest/...`
+  - upload model and dataset artifacts
+  - refresh `promoted/latest`
 
-## Export And Publish
+## Publish Rule
 
-```powershell
-python run_export_gguf.py `
-  --mode adapter `
-  --adapter-path data/training/<run-name>_adapter `
-  --base-model Qwen/Qwen3.5-4B `
-  --llama-cpp-dir data/vendor/llama.cpp `
-  --output data/gguf/<run-name>_adapter-f16.gguf `
-  --manifest-output data/gguf/<run-name>_adapter_manifest.json
-```
+Publish both dataset and model artifacts so another machine can reproduce or inspect the run.
 
-```powershell
-python run_publish_hf_artifacts.py `
-  --run-name <run-name> `
-  --adapter-dir data/training/<run-name>_adapter `
-  --gguf-path data/gguf/<run-name>_adapter-f16.gguf `
-  --gguf-path data/gguf/<run-name>_adapter_manifest.json `
-  --dataset-file data/prompt_packs/bootstrap_teacher_requests.parquet `
-  --dataset-file data/prompt_packs/bootstrap_teacher_outputs.jsonl `
-  --dataset-file data/sft/train_bootstrap_teacher_sft_dataset.jsonl `
-  --dataset-file data/sft/eval_bootstrap_teacher_sft_dataset.jsonl `
-  --dataset-file data/sft/bench_train_1024.jsonl `
-  --dataset-file data/sft/bench_eval_128.jsonl `
-  --dataset-file data/preferences/bootstrap_dialogue_preferences.parquet `
-  --dataset-file data/preferences/bootstrap_dialogue_preferences_manifest.json `
-  --dataset-file data/training/bootstrap_qwen4b_pipeline.json `
-  --dataset-file data/training/<run-name>_run_spec.json `
-  --dataset-file data/eval/model_gate_<run-name>_report.json `
-  --base-model Qwen/Qwen3.5-4B
-```
+Dataset side should include:
 
-## Practical Notes
+- prompt-pack provenance
+- train/eval split
+- bench split
+- optional preference bundle if present
+- pipeline manifest
+- run spec
+- gate report
+- publish manifest
 
-- `checkpoint-*` directories are resume-only state. Once a run is complete and no longer needs resume support, they can be deleted locally.
-- The publish tool automatically stages `data/training/<run-name>_adapter_publish/` if the raw adapter directory still contains checkpoints.
-- HF dataset cards now point the default viewer at the bench split, not the full artifact payload.
-- For runtime serving, keep Qwen thinking disabled on the `llama-server` path.
+Model side should include:
 
-## When In Doubt
+- final adapter bundle
+- adapter GGUF
+- GGUF manifest
+- publish manifest
 
-- Read `docs/context/current-state.md`.
-- Read `docs/context/project-map.md`.
-- Treat the latest gate report as the truth for whether a run is promotable.
+## Checkpoints
+
+`checkpoint-*` directories are resume-only trainer state.
+
+- keep them during an active run
+- keep them if you may resume
+- once a run is definitively finished and no longer needs resume support, they can be deleted locally
+
+Do not publish raw checkpoint trees as the portable model artifact.
+The portable upload should contain only the clean adapter bundle.
+
+## Runtime Notes
+
+For local serving with `llama-server`, keep Qwen thinking disabled.
+On this small-model path, hidden reasoning is treated as a deployment error because it can move output out of `message.content` and silently trigger fallback behavior.
+
+## Working Memory
+
+If you only remember one thing, remember this loop:
+
+`clean commit -> regenerate dataset -> smoke -> full -> gate -> export/publish only on pass`
