@@ -22,14 +22,17 @@ Linux-first one-page guide for refreshing the AcidNet dialogue LoRA on a new mac
 
 ## Local Layout
 
-Keep these repo-relative paths stable:
+Keep these artifact groups stable and easy to find:
 
-- `data/prompt_packs/`: prompt-pack inputs and teacher outputs
-- `data/sft/`: train/eval and bench splits
-- `data/training/`: run specs, adapters, publish manifests
-- `data/eval/`: gate reports
-- `data/gguf/`: exported adapter GGUF
-- `models/Qwen3.5-4B-Q4_K_M.gguf`: local base GGUF for runtime serving
+- prompt-pack provenance
+- merged training and evaluation split
+- maintained smoke or bench split
+- training run spec and training log
+- fresh adapter output
+- gate report
+- exported GGUF and its manifest
+- publish manifest
+- local base GGUF for runtime serving
 
 ## Environment
 
@@ -54,13 +57,13 @@ Before every real training cycle:
 
 The canonical outputs to refresh are:
 
-- `data/prompt_packs/bootstrap_teacher_requests.parquet`
-- `data/prompt_packs/bootstrap_teacher_outputs.jsonl`
-- `data/sft/train_bootstrap_teacher_sft_dataset.jsonl`
-- `data/sft/eval_bootstrap_teacher_sft_dataset.jsonl`
-- `data/sft/bench_train_1024.jsonl`
-- `data/sft/bench_eval_128.jsonl`
-- `data/training/bootstrap_qwen4b_pipeline.json`
+- prompt-pack inputs
+- teacher outputs
+- merged train split
+- merged eval split
+- maintained smoke or bench train split
+- maintained smoke or bench eval split
+- pipeline manifest
 
 ## Training Loop
 
@@ -84,6 +87,7 @@ Smoke exists to verify:
 - the environment is still accelerated
 - the dataset shape is still valid
 - the trainer starts and saves correctly
+- the maintained small benchmark subset still gives a sane latency and throughput signal
 
 ### Full
 
@@ -120,6 +124,7 @@ Dataset side should include:
 - optional preference bundle if present
 - pipeline manifest
 - run spec
+- training status or promotion status
 - gate report
 - publish manifest
 
@@ -128,6 +133,7 @@ Model side should include:
 - final adapter bundle
 - adapter GGUF
 - GGUF manifest
+- run status or promotion status
 - publish manifest
 
 ## Checkpoints
@@ -143,8 +149,8 @@ The portable upload should contain only the clean adapter bundle.
 
 ## Runtime Notes
 
-For local serving with `llama-server`, keep Qwen thinking disabled.
-On this small-model path, hidden reasoning is treated as a deployment error because it can move output out of `message.content` and silently trigger fallback behavior.
+For local serving, keep Qwen thinking disabled.
+On this small-model path, hidden reasoning is treated as a deployment error because it can move output out of the normal reply channel and silently trigger fallback behavior.
 
 ## Working Memory
 
